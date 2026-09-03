@@ -71,7 +71,7 @@ export const SLOPE_PULL = 0.5;
  * worth. Off the tarmac you get a fraction of it, which is why the grass ends
  * your corner rather than widening it.
  */
-export const GRIP = 32;
+export const GRIP = 27;
 export const GRIP_VERGE = 0.62;
 export const GRIP_ROUGH = 0.24;
 /** Speed scrubbed off per unit of grip you asked for and did not have. */
@@ -114,14 +114,20 @@ export const SPIN_TIME = 105;
 export const SPIN_KEEP = 0.12;
 
 /**
- * The barrier, in metres from the centreline.
+ * The barrier, in metres from the centreline, and what is left of you after it.
  *
- * Eight metres of run-off between the kerb and it. That is enough that a corner
- * you got slightly wrong is a moment on the grass and a lost second, and not
- * enough that one you got properly wrong is anything other than over.
+ * Eight metres of run-off between the kerb and it: enough that a corner you got
+ * slightly wrong is a moment on the grass and a lost second, and not enough that
+ * one you got properly wrong is anything other than over.
+ *
+ * The number that matters is the second one. At four tenths it was cheaper to
+ * drive at the scenery than to brake - a lap driven flat out with the wheel held
+ * against the barrier was five seconds quicker than a lap driven properly, which
+ * is not a difficulty problem, it is the game telling you to do the wrong thing.
+ * At a fifth, an accident costs you the next two corners.
  */
 export const WALL_AT = 15;
-export const WALL_KEEP = 0.42;
+export const WALL_KEEP = 0.2;
 
 // --- The field ---------------------------------------------------------------
 

@@ -70,6 +70,22 @@ wide, and backwards, as speed scrubbed off the tyres. That is the entire driving
 model. It is four lines in `sim.js` and everything that feels like driving comes
 out of it.
 
+**A corner is something you do, not something that happens.** A third of what the
+corner is asking for arrives as a push at the outside of it, all the way round,
+and the wheel is what you hold against it. This is the difference between a
+driving game and a game about a car: before it existed the car followed the road
+on its own and the wheel only moved you across it — a lap driven flat out with no
+brakes at all, leaning on the barrier for a quarter of it, was **five seconds
+quicker** than a lap driven properly. There was no reason to slow down, because
+slowing down bought you nothing. Now the same experiment is fifteen seconds
+slower, and the test suite runs it every time.
+
+**The keys move a wheel, not a car.** A keyboard has two positions and a corner
+needs all the ones in between, so a tap is a small correction and a held key
+winds on more lock. Without it the only way to hold a line against the push above
+would be to tap the key thirty times a corner, which is not driving, it is morse
+code.
+
 The consequence you feel first is that at the limit **the wheel stops
 answering**. That is not the corner being unfair, it is the corner telling you to
 brake earlier. The consequence you feel later is that lifting in the middle of
@@ -87,7 +103,9 @@ behind them, which is what makes the last third of a straight interesting instea
 of a formality.
 
 **The kerbs are yours; the grass is not.** Two wheels on the red and white costs
-you very little. Four wheels on the green costs three quarters of your grip.
+you very little. Four wheels on the green costs three quarters of your grip, and
+the barrier costs you four fifths of your speed — which is the number that stops
+driving at the scenery being a racing line.
 
 **There is a map in the corner.** It is the one thing the view out of the cockpit
 cannot give you: where the next corner but one goes, and where the other seven
@@ -202,12 +220,18 @@ four things that cost nothing and are worth more than another fifty would be:
 - **Marker posts every twenty-four metres, both sides, all the way round.** Two
   polygons each. At 350 they arrive eight times a second in your peripheral
   vision. Take them out and the car feels like it has lost fifty km/h.
-- **Kerb stripes every six metres**, so there is something ticking past even on
-  a straight with nothing beside it.
+- **Kerb stripes every six metres and a broken white line down the middle**, so
+  there is something ticking past even on a straight with nothing beside it.
+- **Landmarks you go round three times.** A red bridge over the track, a big
+  wheel turning on the infield, two balloons and a helicopter holding station
+  over turn four. The second time you see the wheel you know where you are on the
+  lap without reading anything, which is the whole job of it.
 
 There were streaks up the sides of the screen for a while as well. They came out
 again: an artefact that does not belong to the world reads as a fault in the
 renderer, whatever it was meant to suggest.
+
+![The big wheel on the infield](docs/screenshots/landmark.png)
 
 ![The sea front](docs/screenshots/coast.png)
 
@@ -289,8 +313,9 @@ Three things, none of which need a browser:
   drives each of them with the game's own reference driver and asks the questions
   a bug would answer wrongly: is anybody outside the barriers, did the field race,
   did the laps count, is somebody still within ninety metres of you for most of
-  the race — and the one that is about the game rather than the code, **is
-  braking later still quicker**. It runs the same
+  the race — and the two that are about the game rather than the code: **is
+  braking later still quicker**, and **is driving properly still quicker than
+  driving flat out at the barriers**. It runs the same
   driver at three levels of commitment and fails if it is not. A driving model
   that gets that wrong is broken however finite its numbers are, and nothing else
   here would notice.

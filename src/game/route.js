@@ -240,20 +240,19 @@ export function turn(from, to) {
  * circuit be both, and is why the grand circuit can climb out of the hills and
  * arrive at the coast without a line across the world where it changes its mind.
  */
-function ground(y, curve, warm, wob, infield) {
-  const lean = Math.max(-1, Math.min(1, curve * 22));
+function ground(y, lean, warm, wob, infield) {
   // The outside: hillside, or water.
-  const mL = [y + 0.6 + wob(0.7) * 1.4, y + 6 * (1 + lean) + wob(0.3) * 8,
-    y + 30 * (1 + lean) + wob(0.11) * 34];
-  const mFarL = y + 58 + wob(0.05) * 74;
+  const mL = [y + 0.6 + wob(9) * 1.4, y + 6 * (1 + lean) + wob(5) * 8,
+    y + 30 * (1 + lean) + wob(3) * 30];
+  const mFarL = y + 58 + wob(2) * 62;
   const cL = [SEA, SEA, SEA];
 
   // The infield: down off the verge and then flat, wherever the track happens to
   // be at the time.
   const r = [
-    y + 0.5 + wob(0.9) * 1.1,
-    lerp(y, infield, 0.55) + wob(0.37) * 2.4,
-    infield + wob(0.13) * 3,
+    y + 0.5 + wob(11) * 1.1,
+    lerp(y, infield, 0.55) + wob(6) * 2.4,
+    infield + wob(4) * 3,
   ];
 
   const mix3 = (a, b) => [lerp(a[0], b[0], warm), lerp(a[1], b[1], warm), lerp(a[2], b[2], warm)];
@@ -341,13 +340,40 @@ export function buildRoute(key) {
   for (let i = 0; i < count; i++) mean += height[i];
   const infield = mean / count - 9;
 
+  // Which way the hill leans, from the curvature averaged over eighty metres.
+  //
+  // Averaged, because it multiplies a thirty metre hillside and the raw
+  // curvature goes from a corner to a straight in a handful of nodes: at full
+  // strength that swung the ground sixty metres between one node and the next,
+  // and two ground quads that far apart do not meet, they cross. A hillside is a
+  // feature of a stretch of road, not of a node on it.
+  const lean = new Float64Array(count);
+  const span = 7;
+  for (let i = 0; i < count; i++) {
+    let sum = 0;
+    for (let k = -span; k <= span; k++) {
+      const j = ((i + k) % count + count) % count;
+      sum += turn(heading[j], heading[(j + 1) % count]);
+    }
+    lean[i] = Math.max(-0.8, Math.min(0.8, (sum / (span * 2 + 1)) * 14));
+  }
+
   const nodes = [];
   for (let i = 0; i < count; i++) {
     const t = i / count;
     const warm = plan.warm(t);
     const curve = turn(heading[i], heading[(i + 1) % count]);
     const y = height[i];
-    const wob = (freq) => wobble((t * count * freq) % 1);
+    // Cycles per lap, not a frequency per node.
+    //
+    // This used to be `wobble((i * freq) % 1)`, which looks like sampling noise
+    // along the track and is not: `wobble` is periodic over one lap, so the
+    // modulo threw it back to the start every twenty nodes and the hillsides
+    // arrived as a sawtooth with a cliff in it every hundred metres. Whole
+    // numbers of cycles round the lap keep it periodic, which is the property
+    // the whole file is built on, and low ones keep the features hundreds of
+    // metres long, which is what a hillside is.
+    const wob = (cycles) => wobble(t * cycles);
     nodes.push({
       i,
       x: at(i).x,
@@ -363,7 +389,7 @@ export function buildRoute(key) {
       // Banking, into the corner. Small: this is a circuit, not a bowl.
       bank: -curve * 3.2,
       warm,
-      g: ground(y, curve, warm, wob, infield),
+      g: ground(y, lean[i], warm, wob, infield),
     });
   }
 
@@ -401,7 +427,10 @@ function scatter(nodes, rnd) {
   const out = nodes.map(() => null);
   const count = nodes.length;
   const add = (i, prop) => {
-    const at = ((i % count) + count) % count;
+    // Rounded, because a prop placed on node 355.5 is stored under a key the
+    // renderer never asks for and is simply never drawn - which is a silent
+    // failure and took a helicopter going missing to notice.
+    const at = ((Math.round(i) % count) + count) % count;
     (out[at] ||= []).push(prop);
   };
 
@@ -469,6 +498,29 @@ function scatter(nodes, rnd) {
     add(i, { kind: 'stand', side: -1, off: 24, s: 1, r: 0, align: true });
     add(i, { kind: 'stand', side: 1, off: 24, s: 1, r: Math.PI, align: true });
   }
+
+  // Flair: the things you look at rather than drive past.
+  //
+  // A landmark is worth a great deal on a circuit you go round three times. The
+  // second time you see the big wheel you know where you are on the lap without
+  // reading anything, which is the whole job of it - and the balloon and the
+  // helicopter are there because a sky with nothing in it is a colour rather
+  // than a place.
+  const third = Math.floor(count / 3);
+  for (let k = 0; k < 3; k++) {
+    // The red bridges, spaced round the lap and kept off the gantries.
+    add(third * k + Math.floor(third / 2), {
+      kind: 'bridge', side: 0, off: 0, s: 1, r: 0, align: true,
+    });
+  }
+  // All of them on the infield side and close in. Out on the hillside a big
+  // wheel is behind the hillside and a balloon a hundred and fifty metres off
+  // the track is a dot: the infield is flat, it is what you look across for half
+  // the lap, and it is where anything worth seeing has to stand.
+  add(40, { kind: 'wheel', side: 1, off: 44, s: 1, r: 0, align: true });
+  add(third + 40, { kind: 'balloon', side: 1, off: 80, s: 1, r: 0.7, lift: 42 });
+  add(third * 2 + 90, { kind: 'balloon', side: 1, off: 120, s: 0.8, r: 2.1, lift: 58 });
+  add(Math.floor(third * 1.5), { kind: 'chopper', side: 1, off: 30, s: 1, r: 0, lift: 32, align: true });
 
   // The gantry is the checkpoint. It is placed on the node the clock is actually
   // reading, not near it, because a gate you go under half a second before the

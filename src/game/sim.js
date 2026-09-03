@@ -35,6 +35,33 @@ import {
 import { nextRandom, randRange } from '../util.js';
 import { makeState, nodeAt, nodeStep, player, racing, surfaceOf } from './state.js';
 
+/**
+ * How much of a corner arrives as a push at the outside of it.
+ *
+ * The single most important number in the file for whether this is a driving
+ * game. Below the grip limit the car used to follow the road for nothing and the
+ * wheel only moved you across it - which is why a lap driven flat out with no
+ * brakes at all was five seconds quicker than a lap driven properly, with the
+ * car leaning on the barrier for a quarter of it. There was no reason to slow
+ * down because slowing down bought you nothing.
+ *
+ * Now a third of what the corner is asking for arrives as v-squared-times-
+ * curvature of sideways acceleration, and the wheel is what you hold against it.
+ * A corner is a thing you are doing rather than a thing that is happening.
+ */
+const CORNER_PUSH = 0.44;
+
+/**
+ * How quickly the wheel goes from straight to full lock.
+ *
+ * The keyboard has two positions and a corner needs all of the ones in between,
+ * so the key moves a wheel rather than a car: a tap is a small correction, a
+ * held key winds on more lock. Without it the only way to hold a line against
+ * the push above is to tap the key thirty times a corner, which is not driving,
+ * it is morse code.
+ */
+const WHEEL_RATE = 5.2;
+
 /** Ticks before the same pair of cars can be charged for touching again. */
 const BUMP_COOL = 20;
 /** How far past the racing line a rival will run when it makes a mistake. */
@@ -179,18 +206,20 @@ function drive(state, car) {
   const kappa = node.curve / SEG;
   const need = car.speed * car.speed * Math.abs(kappa);
   car.slide = Math.max(0, need - grip);
-  if (car.slide > 0) {
-    // Out it goes, and the tyres pay for it.
-    car.vx -= Math.sign(kappa) * car.slide * DT;
-    acc -= car.slide * SCRUB;
-  }
+  if (car.slide > 0) acc -= car.slide * SCRUB;
   car.speed = Math.max(0, car.speed + acc * DT);
+
+  // And out it goes: a share of the corner all of the time, and all of the
+  // excess on top when there is any. The first term is what makes holding a line
+  // work; the second is what makes getting it wrong cost you the corner.
+  car.vx -= Math.sign(kappa) * (need * CORNER_PUSH + car.slide) * DT;
 
   // Whatever the corner did not take is what the driver has. At the limit the
   // wheel stops doing anything, which is the moment you learn to brake earlier.
   const spare = Math.max(0, 1 - need / Math.max(1, grip));
   const bite = Math.min(1, car.speed / STEER_FLOOR) * Math.sqrt(spare) * hold;
-  const want = ctl.steer * STEER_SPEED * bite;
+  car.wheel += (ctl.steer - car.wheel) * WHEEL_RATE * DT;
+  const want = car.wheel * STEER_SPEED * bite;
   car.vx += (want - car.vx) * STEER_RATE * DT;
   car.x += car.vx * DT;
 
@@ -210,7 +239,8 @@ function drive(state, car) {
   // Which way the car is pointed, for drawing. It follows where the car is
   // actually going rather than where it is asked to go, so a car running wide is
   // visibly pointing at the apex it is not going to make.
-  const to = Math.max(-0.45, Math.min(0.45, car.vx * 0.028 - Math.sign(kappa) * Math.min(0.3, car.slide * 0.02)));
+  const to = Math.max(-0.45, Math.min(0.45,
+    car.vx * 0.028 + car.wheel * 0.16 - Math.sign(kappa) * Math.min(0.3, car.slide * 0.02)));
   car.yaw += (to - car.yaw) * 0.25;
   car.roll = -Math.sign(kappa) * Math.min(0.045, (need / Math.max(1, grip)) * 0.045);
 
@@ -402,7 +432,7 @@ function think(state, car) {
   car.ctl = {
     throttle: car.speed < want,
     brake: car.speed > want * 1.02 + 0.5,
-    steer: Math.max(-1, Math.min(1, off * 0.42)),
+    steer: Math.max(-1, Math.min(1, off * 0.7)),
   };
 }
 
@@ -468,9 +498,11 @@ export function driveLine(state, share = 0.95) {
 
   let mask = p.speed < limit ? BTN.UP : 0;
   if (p.speed > limit * 1.02 + 0.5) mask |= BTN.DOWN;
-  const off = line - p.x;
-  if (off > 0.5) mask |= BTN.RIGHT;
-  if (off < -0.5) mask |= BTN.LEFT;
+  // Steering against where the car is going as well as where it is, or it
+  // arrives at the line already travelling across it and sails past.
+  const off = (line - p.x) - p.vx * 0.34;
+  if (off > 0.25) mask |= BTN.RIGHT;
+  if (off < -0.25) mask |= BTN.LEFT;
   return mask;
 }
 

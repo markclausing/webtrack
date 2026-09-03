@@ -268,6 +268,20 @@ export class Renderer {
         );
       }
 
+      // A broken line down the middle: three nodes of paint and three of
+      // nothing, which at three hundred and fifty is eight dashes a second
+      // arriving at the centre of the screen. The edge lines tell you where the
+      // track is; this one tells you how fast you are crossing it.
+      if ((((i % 6) + 6) % 6) < 3 && away < 520) {
+        rt.quad(
+          a.x - a.nx * 0.28, roadY(a, 0) + 0.04, a.z - a.nz * 0.28,
+          a.x + a.nx * 0.28, roadY(a, 0) + 0.04, a.z + a.nz * 0.28,
+          b.x + b.nx * 0.28, roadY(b, 0) + 0.04, b.z + b.nz * 0.28,
+          b.x - b.nx * 0.28, roadY(b, 0) + 0.04, b.z - b.nz * 0.28,
+          tint(C.kerbB),
+        );
+      }
+
       // The white line down each edge of the tarmac, lifted a few centimetres so
       // it is not fighting the road it is painted on.
       for (const side of [-1, 1]) {
@@ -337,15 +351,18 @@ export class Renderer {
       this.startLine(state, a.i, a, b, tint);
 
       const props = route.props[a.i];
-      if (props && away < 760) {
+      if (props && away < 900) {
         for (const prop of props) {
           const off = prop.side * prop.off;
           // Anything that belongs to the track is turned to face along it. A
           // gantry is a wall across the road if it is left pointing at world
           // north, and the track only points at world north twice a lap.
+          // `lift` is for the things that are not standing on anything.
           drawProp(rt, prop,
-            a.x + a.nx * off, groundY(a, Math.sign(off) || 1, Math.abs(off)), a.z + a.nz * off,
-            tint, local, prop.align ? a.a : 0);
+            a.x + a.nx * off,
+            groundY(a, Math.sign(off) || 1, Math.abs(off)) + (prop.lift || 0),
+            a.z + a.nz * off,
+            tint, local, prop.align ? a.a : 0, state.tick);
         }
       }
     }

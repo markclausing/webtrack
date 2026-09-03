@@ -69,7 +69,7 @@ globalThis.document = { createElement: () => fakeCanvas() };
 
 const { Renderer } = await import('../src/render/renderer.js');
 const { driveLine, makeRace, step } = await import('../src/game/sim.js');
-const { player } = await import('../src/game/state.js');
+const { nodeAt, player } = await import('../src/game/state.js');
 const { SEG } = await import('../src/constants.js');
 
 // --- Riding to the interesting bit ---------------------------------------------
@@ -101,6 +101,11 @@ if (route === 'docs') {
     // driver asking for more grip than there is.
     ['corner', (s) => player(s).slide > 2 && player(s).speed > 55, 'pass', 'gp', 1.35],
     ['coast', (s) => player(s).s > 2500 && player(s).speed > 82, 'coast', 'gp'],
+    // Coming up on the big wheel, which stands on the infield beside turn one.
+    ['landmark', (s) => {
+      const at = nodeAt(s.route, player(s).s).i;
+      return at > 10 && at < 22 && player(s).speed > 45 && player(s).lap >= 0;
+    }, 'pass', 'gp'],
     ['qualifying', (s) => player(s).best > 0 && player(s).speed > 70, 'coast', 'qual'],
     ['grand', (s) => {
       const at = player(s).s % s.route.metres;

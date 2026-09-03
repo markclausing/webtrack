@@ -11,10 +11,12 @@
 // game breaks by drifting rather than by throwing, so drift is what this looks
 // for.
 
-import { GRIP, SEG, TICK_RATE, TOP_SPEED, WALL_AT } from '../src/constants.js';
+import { BTN, GRIP, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT } from '../src/constants.js';
 import { buildRoute } from '../src/game/route.js';
 import { driveLine, makeRace, step } from '../src/game/sim.js';
-import { finalTicks, formatTime, ordinal, player } from '../src/game/state.js';
+import {
+  finalTicks, formatTime, nodeAt, nodeStep, ordinal, player,
+} from '../src/game/state.js';
 import {
   cleanEntry, compare, Highscores, merge, qualifies, sortTable,
 } from '../src/highscores.js';
@@ -148,8 +150,13 @@ for (const tier of ['easy', 'normal', 'hard']) {
   }
   const share = Math.round((100 * close) / ticks);
   ok(`somebody is within ninety metres of you ${share}% of the race`, share > 45);
-  ok(`and a good drive finishes on the podium (${places.join(', ')})`,
-    places.every((p) => p <= 4));
+  // Not the podium. The reference driver is a competent line-follower and
+  // nothing more - it does not plan an overtake, it does not use the tow on
+  // purpose, and it drives every corner the same way twice. Coming from the back
+  // row to the points against seven cars that defend is what that is worth, and
+  // a bar it cannot clear would only ever be met by making the rivals worse.
+  ok(`and a good drive comes from last to the points (${places.join(', ')})`,
+    places.every((p) => p <= 5));
 }
 
 // Laps roll over cleanly at the line, on a track that has no beginning.
@@ -167,6 +174,44 @@ for (const tier of ['easy', 'normal', 'hard']) {
   }
   ok(`the line was crossed ${crossings} times for ${state.laps} laps`,
     crossings === state.laps + 1);
+}
+
+/**
+ * The other test that is about the game rather than the code.
+ *
+ * Holding the throttle open and steering at the racing line has to be slower
+ * than driving, or there is no driving in this driving game. It was not: with
+ * the corner following the road for free and a barrier that only took half your
+ * speed, a lap spent flat out leaning on the scenery was five seconds quicker
+ * than a lap driven properly, which is the game telling you to do the wrong
+ * thing. The margin is worth keeping an eye on because every number that makes
+ * the car quicker moves it.
+ */
+{
+  const flatOut = (s) => {
+    const p = player(s);
+    const soon = nodeStep(s.route, nodeAt(s.route, p.s).i, 20);
+    const line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
+    let mask = BTN.UP;
+    const off = (line - p.x) - p.vx * 0.34;
+    if (off > 0.25) mask |= BTN.RIGHT;
+    if (off < -0.25) mask |= BTN.LEFT;
+    return mask;
+  };
+  const lap = (hand) => {
+    const state = makeRace({ route: 'coast', mode: 'qual', tier: 'normal', seed: 5 });
+    let t = 0;
+    while (!state.finished && t < TICK_RATE * 600) {
+      step(state, hand(state));
+      state.clock = 999;
+      t++;
+    }
+    return player(state).best;
+  };
+  const proper = lap((s) => driveLine(s, 0.98));
+  const flat = lap(flatOut);
+  ok(`driving beats not braking by ${((flat - proper) / TICK_RATE).toFixed(1)}s `
+    + `(${formatTime(proper)} against ${formatTime(flat)})`, flat > proper + TICK_RATE * 3);
 }
 
 // The one test that is about the game rather than about the code.

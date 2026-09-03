@@ -61,6 +61,8 @@ export function makeCar(kind, slot, s, x, extra = {}) {
     speed: 0,
     /** How far the car is pointed away from the track, in radians. */
     yaw: 0,
+    /** Where the wheel is, from -1 to 1. The keys move this, not the car. */
+    wheel: 0,
     slide: 0,        // grip it is asking for and not getting
     tow: 0,          // how much of another car's hole in the air it is sitting in
     spinT: 0,

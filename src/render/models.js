@@ -79,7 +79,7 @@ function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
 
 // --- Scenery -----------------------------------------------------------------
 
-export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0) {
+export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0) {
   const s = prop.s || 1;
   // Trees and rocks are turned any old way and that is the point of them. A
   // gantry, a grandstand and a marker post belong to the track and are handed
@@ -163,6 +163,102 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0) {
       put.face(rt, tint(C.kerbA), [0, 1.5, 0, -0.5, 0, 0.5, 0.5, 0, 0.5]);
       put.face(rt, tint(shade(C.kerbA, 0.7)), [0, 1.5, 0, 0.5, 0, 0.5, 0, 0, -0.6]);
       break;
+    case 'bridge': {
+      // The red bridge, which is the one piece of scenery in this whole file
+      // that exists because of another game. A crossing over the track with a
+      // deck you go under and a truss you can see the sky through: at this size
+      // it is a red band and two legs, and that is all it ever needs to be.
+      const red = tint(C.kerbA);
+      const dark = tint(shade(C.kerbA, 0.62));
+      box(rt, tint, C.kerbA, -23, -18, 0, 9.5, -1.6, 1.6);
+      box(rt, tint, C.kerbA, 18, 23, 0, 9.5, -1.6, 1.6);
+      put.face(rt, red, [-23, 9.5, -1.6, 23, 9.5, -1.6, 23, 12.2, -1.6, -23, 12.2, -1.6]);
+      put.face(rt, dark, [23, 9.5, 1.6, -23, 9.5, 1.6, -23, 12.2, 1.6, 23, 12.2, 1.6]);
+      put.face(rt, tint(shade(C.kerbA, 0.8)), [-23, 12.2, -1.6, 23, 12.2, -1.6,
+        23, 12.2, 1.6, -23, 12.2, 1.6]);
+      // The truss: five diagonals, which is what makes it a bridge rather than a
+      // wall with a hole under it.
+      for (let k = -4; k <= 4; k += 2) {
+        const at = k * 5;
+        put.face(rt, dark, [at - 0.5, 9.6, -1.7, at + 4.5, 12.1, -1.7,
+          at + 5.5, 12.1, -1.7, at + 0.5, 9.6, -1.7]);
+      }
+      break;
+    }
+    case 'balloon': {
+      // Two flat six-sided outlines crossed at right angles, a basket, and two
+      // ropes. From any direction one of them is face on and the other is edge
+      // on, which is the same trick the pine trees use and works just as well
+      // for something round.
+      const hot = [C.kerbA, C.hot, C.kerbB];
+      for (const [turnBy, shadeBy] of [[0, 1], [Math.PI / 2, 0.78]]) {
+        put.set(x, y, z, facing + turnBy, 0, prop.s || 1);
+        for (let band = 0; band < 3; band++) {
+          const top = 12 - band * 3.4;
+          const bot = 12 - (band + 1) * 3.4;
+          const wide = (h) => 4.6 * Math.sin(Math.max(0.12, Math.min(Math.PI - 0.12,
+            ((h - 1.6) / 10.8) * Math.PI)));
+          const wt = wide(top);
+          const wb = wide(bot);
+          put.face(rt, tint(shade(hot[band % 3], shadeBy)),
+            [-wb, bot, 0, wb, bot, 0, wt, top, 0, -wt, top, 0]);
+        }
+      }
+      put.set(x, y, z, facing, 0, prop.s || 1);
+      put.face(rt, tint(C.trunk || C.tyre), [-1, 0, 0, 1, 0, 0, 1, 1.6, 0, -1, 1.6, 0]);
+      put.face(rt, tint(C.metal), [-1.3, 1.6, 0, -1.1, 1.6, 0, -0.7, 4.2, 0, -0.9, 4.2, 0]);
+      put.face(rt, tint(C.metal), [1.1, 1.6, 0, 1.3, 1.6, 0, 0.9, 4.2, 0, 0.7, 4.2, 0]);
+      break;
+    }
+    case 'chopper': {
+      // Hanging over the circuit with a camera in it. The rotor is two thin
+      // quads turning, which at sixty frames a second is a blur of exactly the
+      // right kind.
+      box(rt, tint, C.kerbB, -1.1, 1.1, -0.9, 0.9, -1.6, 1.8);
+      put.face(rt, tint(C.glass), [-0.9, -0.6, 1.85, 0.9, -0.6, 1.85,
+        0.7, 0.7, 1.5, -0.7, 0.7, 1.5]);
+      put.face(rt, tint(C.metal), [-0.22, -0.1, -1.6, 0.22, -0.1, -1.6,
+        0.22, 0.35, -5.4, -0.22, 0.35, -5.4]);
+      put.face(rt, tint(C.kerbA), [-0.1, 0.35, -5.4, 0.1, 0.35, -5.4,
+        0.1, 1.6, -5.0, -0.1, 1.6, -5.0]);
+      for (const off of [0, Math.PI / 2]) {
+        put.set(x, y + 1.1 * (prop.s || 1), z, facing + time * 0.55 + off, 0, prop.s || 1);
+        put.face(rt, tint(C.metal), [-0.18, 0, -5.6, 0.18, 0, -5.6,
+          0.18, 0, 5.6, -0.18, 0, 5.6]);
+      }
+      break;
+    }
+    case 'wheel': {
+      // The big wheel. Twelve spokes, twelve cabins and a rim in twelve
+      // straight pieces, turning slowly - which is the only thing in the world
+      // that moves without a car in it, and is worth the thirty-six polygons for
+      // that alone.
+      const R = 11;
+      const spin = time * 0.006 + (prop.r || 0);
+      const rim = tint(C.metal);
+      const leg = tint(shade(C.metal, 0.72));
+      const hub = 12;
+      put.face(rt, leg, [-3.4, 0, 0.6, -0.5, hub, 0.6, 0.5, hub, 0.6, 3.4, 0, 0.6]);
+      put.face(rt, shade(leg, 0.8), [-3.4, 0, -0.6, -0.5, hub, -0.6, 0.5, hub, -0.6, 3.4, 0, -0.6]);
+      for (let k = 0; k < 12; k++) {
+        const a0 = spin + (k / 12) * Math.PI * 2;
+        const a1 = spin + ((k + 1) / 12) * Math.PI * 2;
+        const x0 = Math.cos(a0) * R;
+        const y0 = Math.sin(a0) * R + hub;
+        const x1 = Math.cos(a1) * R;
+        const y1 = Math.sin(a1) * R + hub;
+        put.face(rt, rim, [x0, y0, -0.25, x1, y1, -0.25, x1, y1, 0.25, x0, y0, 0.25]);
+        put.face(rt, leg, [0, hub, 0, x0 * 0.06, y0 * 0.06 + hub * 0.94, 0.12,
+          x0, y0, 0.12, x0, y0, -0.12]);
+        // A cabin, hanging the right way up however far round it has gone.
+        const cab = tint(TEAM_COLOURS[k % TEAM_COLOURS.length].body);
+        put.face(rt, cab, [x0 - 0.8, y0 - 1.7, -0.8, x0 + 0.8, y0 - 1.7, -0.8,
+          x0 + 0.8, y0 - 0.3, -0.8, x0 - 0.8, y0 - 0.3, -0.8]);
+        put.face(rt, shade(cab, 0.75), [x0 + 0.8, y0 - 1.7, 0.8, x0 - 0.8, y0 - 1.7, 0.8,
+          x0 - 0.8, y0 - 0.3, 0.8, x0 + 0.8, y0 - 0.3, 0.8]);
+      }
+      break;
+    }
     case 'arch': {
       box(rt, tint, C.metal, -17, -15.6, 0, 7.6, -0.4, 0.4);
       box(rt, tint, C.metal, 15.6, 17, 0, 7.6, -0.4, 0.4);

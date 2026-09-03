@@ -27,6 +27,7 @@ export const C = {
   glass: md(96, 150, 176),
   metal: md(120, 124, 132),
   helmet: md(236, 236, 240),
+  hot: md(250, 190, 40),
   crowd: md(160, 120, 150),
   armco: md(206, 210, 214),
 };
