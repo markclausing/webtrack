@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>WebTrack</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- A browser asks for /favicon.ico whether you have one or not, and a 404 on
+       every page load is a poor first impression. These are drawn by
+       tools/make-icons.js, in the game's own colours. -->
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a0908">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+  <div id="app">
+    <canvas id="screen" tabindex="0"></canvas>
+
+    <div id="touch" class="hidden">
+      <div id="stick" aria-label="Ride"><div id="knob"></div></div>
+      <button id="btnPause" type="button" aria-label="Pause">II</button>
+      <div id="touchButtons">
+        <button id="btnFire" type="button">HIT</button>
+        <button id="btnPod" type="button">KICK</button>
+      </div>
+    </div>
+
+    <div id="menu" class="overlay">
+      <div class="panel">
+        <h1>WEB<span>TRACK</span></h1>
+        <p class="tag">HTML / JavaScript &middot; one road, and everybody on it wants you off it</p>
+
+        <div class="row">
+          <label>Route</label>
+          <div class="btns">
+            <button data-route="pass" class="active">The pass</button>
+            <button data-route="coast">The boulevard</button>
+            <button data-route="grand">Grand run</button>
+          </div>
+        </div>
+        <p id="routeBlurb" class="fineprint"></p>
+
+        <div class="row" id="skillRow">
+          <label>Skill</label>
+          <div class="btns">
+            <button data-skill="easy">Easy</button>
+            <button data-skill="normal" class="active">Normal</button>
+            <button data-skill="hard">Hard</button>
+          </div>
+        </div>
+        <p id="skillBlurb" class="fineprint"></p>
+
+        <div class="row">
+          <label>Sound</label>
+          <div class="btns">
+            <button data-sound="on" class="active">On</button>
+            <button data-sound="off">Off</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>Voice</label>
+          <div class="btns">
+            <button data-talk="on" class="active">On</button>
+            <button data-talk="off">Off</button>
+          </div>
+        </div>
+
+        <details id="controlsBox">
+          <summary>Controls</summary>
+          <table class="keys" id="keysTable">
+            <thead>
+              <tr><th></th><th>Rider</th></tr>
+            </thead>
+            <tbody id="keysBody"></tbody>
+            <tfoot>
+              <tr>
+                <td>Presets</td>
+                <td><select data-preset="0" class="preset"></select></td>
+              </tr>
+            </tfoot>
+          </table>
+          <p id="bindHint" class="status">Click a key to change it.</p>
+          <ul class="hints">
+            <li><b>The clock is the game.</b> You start with seventy-five
+              seconds and the gantry over the road every thirteen hundred metres
+              puts forty-eight more back. Nothing else ends a run early except
+              the police, and your elapsed time is what goes on the board.</li>
+            <li><b>Hit the side you are leaning towards.</b> Steer into somebody
+              and swing, and the fist goes their way. Let go of the bars and it
+              goes at whoever is nearest, which is what you want ninety times out
+              of a hundred.</li>
+            <li><b>A kick hits half again as hard and costs you the corner.</b>
+              It shoves them three times as far and takes twice as long to get
+              your hands back, and a third of a second is a long way at two
+              hundred.</li>
+            <li><b>Whatever they drop is yours.</b> Put a rider down carrying a
+              club and it lies in the road; ride over it and it is in your hand.
+              A club is twice a fist.</li>
+            <li><b>Everybody you knock down takes seconds off your time</b> - a
+              rival three, a gang member four, a policeman eight. That is why
+              fighting is faster than riding, right up until it is not.</li>
+            <li><b>The law counts.</b> Fight where they can see you and the stars
+              go up; at three there is a helicopter, and going down with a
+              patrol on top of you ends the run there and then.</li>
+          </ul>
+        </details>
+
+        <details id="scoresBox">
+          <summary>Score board <span id="scoresLevel" class="shape"></span></summary>
+          <table class="scores"><tbody id="scoresBody"></tbody></table>
+          <p id="scoresNote" class="fineprint"></p>
+        </details>
+
+        <div class="panelFooter">
+          <button id="start" class="primary">RIDE</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="hiscore" class="overlay hidden">
+      <div class="panel small">
+        <h2>NEW TIME</h2>
+        <p id="hiscoreLine" class="status"></p>
+        <div class="picker">
+          <div id="hiscoreUp" class="letterRow"></div>
+          <div id="hiscoreLetters" class="letters"></div>
+          <div id="hiscoreDown" class="letterRow"></div>
+        </div>
+        <button id="hiscoreOk" class="primary">OK</button>
+        <p class="fineprint">
+          Tap the arrows, or use the stick: up and down for the letter, left and
+          right to move along, hit to confirm. Typing works too.
+        </p>
+      </div>
+    </div>
+
+    <div id="pause" class="overlay hidden">
+      <div class="panel small">
+        <h2>PAUSED</h2>
+        <p class="status">Esc to carry on, or press resume.</p>
+        <button id="resume" class="primary">RESUME</button>
+        <button id="quit">BACK TO THE MENU</button>
+      </div>
+    </div>
+
+    <div id="gameover" class="overlay hidden">
+      <div class="panel small">
+        <h2 id="overTitle">RUN OVER</h2>
+        <p id="overText" class="status"></p>
+        <button id="overBack" class="primary">BACK TO THE MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
