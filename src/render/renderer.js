@@ -32,7 +32,7 @@
 import {
   CAM_AHEAD, CAM_BACK, CAM_BACK_FAST, CAM_HIGH, CAM_HIGH_FAST, CAM_LAG, CHECKPOINT_TIME,
   DRAW_AHEAD, DRAW_BEHIND, FOCAL, FOCAL_FAST, gearAt, GRID_GAP, GRID_OFF, LIGHTS,
-  ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TOP_SPEED, WALL_AT,
+  PIT_EDGE, ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TOP_SPEED, WALL_AT,
 } from '../constants.js';
 import { RINGS } from '../game/route.js';
 import {
@@ -40,7 +40,7 @@ import {
   progress, racing, worldOf,
 } from '../game/state.js';
 import { drawProp, drawRacer, drawShadow, drawSmoke } from './models.js';
-import { C, THEMES } from './palette.js';
+import { C, TEAM_COLOURS, THEMES } from './palette.js';
 import { md, mix, Raster, shade } from './raster.js';
 
 /** Where the haze starts biting, and where nothing is left of the colour. */
@@ -62,6 +62,10 @@ const BANDS = [
   [RINGS[1], RINGS[2], 'mid', 2],
   [RINGS[2], RINGS[3], 'far', 4],
 ];
+
+/** The little map, in pixels. Small enough to ignore, big enough to read. */
+const MAP_W = 62;
+const MAP_H = 52;
 
 const HUD_BACK = md(12, 12, 24);
 const HUD_EDGE = md(80, 84, 110);
@@ -252,16 +256,43 @@ export class Renderer {
       );
       rt.dither = 0;
 
+      // The pit lane: the infield run-off, in tarmac, with a solid white line
+      // between it and the track instead of a kerb. It is drawn before the kerbs
+      // so the line can be laid over the top of it.
+      if (a.pit) {
+        rt.quad(
+          a.x + a.nx * edge, roadY(a, edge), a.z + a.nz * edge,
+          a.x + a.nx * PIT_EDGE, groundY(a, 1, PIT_EDGE), a.z + a.nz * PIT_EDGE,
+          b.x + b.nx * PIT_EDGE, groundY(b, 1, PIT_EDGE), b.z + b.nz * PIT_EDGE,
+          b.x + b.nx * edge, roadY(b, edge), b.z + b.nz * edge,
+          tint(shade(C.road, 1.08)),
+        );
+        // The box, in the team's own paint, so you can see where to aim from a
+        // long way down the lane.
+        if (a.pitBox || nodeStep(route, i, -1).pitBox) {
+          rt.quad(
+            a.x + a.nx * 9.4, roadY(a, 9.4) + 0.04, a.z + a.nz * 9.4,
+            a.x + a.nx * 13.8, groundY(a, 1, 13.8) + 0.04, a.z + a.nz * 13.8,
+            b.x + b.nx * 13.8, groundY(b, 1, 13.8) + 0.04, b.z + b.nz * 13.8,
+            b.x + b.nx * 9.4, roadY(b, 9.4) + 0.04, b.z + b.nz * 9.4,
+            tint(TEAM_COLOURS[0].body),
+          );
+        }
+      }
+
       // Kerbs. Red and white, one node each, which at three hundred and fifty is
-      // sixteen stripes a second going past at the edge of the screen.
+      // sixteen stripes a second going past at the edge of the screen. Down the
+      // pit straight the inside one is a solid white line instead: that is what
+      // separates a lane from a track, and a kerb there would say "drive on me".
       const kerb = tint((i % 2) < 1 ? C.kerbA : C.kerbB);
       for (const side of [-1, 1]) {
+        const paint = a.pit && side > 0 ? tint(C.kerbB) : kerb;
         rt.quad(
           a.x + a.nx * side * ROAD_HALF, roadY(a, side * ROAD_HALF), a.z + a.nz * side * ROAD_HALF,
           a.x + a.nx * side * edge, roadY(a, side * edge), a.z + a.nz * side * edge,
           b.x + b.nx * side * edge, roadY(b, side * edge), b.z + b.nz * side * edge,
           b.x + b.nx * side * ROAD_HALF, roadY(b, side * ROAD_HALF), b.z + b.nz * side * ROAD_HALF,
-          kerb,
+          paint,
         );
       }
 
@@ -337,9 +368,12 @@ export class Renderer {
       if (props && away < 760) {
         for (const prop of props) {
           const off = prop.side * prop.off;
+          // Anything that belongs to the track is turned to face along it. A
+          // gantry is a wall across the road if it is left pointing at world
+          // north, and the track only points at world north twice a lap.
           drawProp(rt, prop,
             a.x + a.nx * off, groundY(a, Math.sign(off) || 1, Math.abs(off)), a.z + a.nz * off,
-            tint, local);
+            tint, local, prop.align ? a.a : 0);
         }
       }
     }
@@ -395,6 +429,11 @@ export class Renderer {
       const away = car.s - p.s;
       if (away < -60 || away > 780) continue;
       const at = worldOf(route, car.s, car.x);
+      // A car right on the camera fills a quarter of the screen with one dark
+      // polygon and reads as a fault in the renderer. It is also almost entirely
+      // behind you: the camera sits eight metres back, so anything this close is
+      // a car you are about to be overtaken by and cannot see anyway.
+      if (Math.hypot(at.x - this.cam.x, at.z - this.cam.z) < 5.4) continue;
       const tint = this.tinter(theme, Math.abs(away));
       const yaw = at.a + car.yaw;
       drawShadow(rt, at.x, at.y, at.z, yaw, 1.15, 2.5, tint);
@@ -405,6 +444,65 @@ export class Renderer {
         drawSmoke(rt, car, at.x, at.y, at.z, yaw, tint, rough, state.tick + car.slot * 7);
       }
     }
+  }
+
+  /**
+   * The circuit, from above, worked out once and kept.
+   *
+   * A hundred points round the lap, scaled to fit the box, stored as pixel
+   * offsets. It is not drawn from the nodes every frame because it never
+   * changes: the shape of the track is decided before the lights go out and the
+   * only thing that moves on it is the cars.
+   *
+   * This is also the only place in the game that looks at the circuit as a
+   * shape rather than as a distance, which is the whole reason it is worth
+   * having on the screen - it is the one thing the view out of the cockpit
+   * cannot tell you.
+   */
+  map(route) {
+    if (this.mapOf === route.key) return this.mapPts;
+    const nodes = route.nodes;
+    // Enough points that the outline is a line rather than a dotted one: about
+    // one per pixel of its perimeter, which for a box this size is under two
+    // hundred of them and costs nothing because it is worked out once.
+    const step = Math.max(1, Math.floor(nodes.length / 190));
+    let minX = Infinity; let maxX = -Infinity; let minZ = Infinity; let maxZ = -Infinity;
+    for (let i = 0; i < nodes.length; i += step) {
+      minX = Math.min(minX, nodes[i].x); maxX = Math.max(maxX, nodes[i].x);
+      minZ = Math.min(minZ, nodes[i].z); maxZ = Math.max(maxZ, nodes[i].z);
+    }
+    const scale = Math.min((MAP_W - 5) / Math.max(1, maxX - minX),
+      (MAP_H - 5) / Math.max(1, maxZ - minZ));
+    const place = (x, z) => [
+      Math.round(2 + (x - minX) * scale + (MAP_W - 4 - (maxX - minX) * scale) / 2),
+      Math.round(2 + (z - minZ) * scale + (MAP_H - 4 - (maxZ - minZ) * scale) / 2),
+    ];
+    const pts = [];
+    for (let i = 0; i < nodes.length; i += step) pts.push(place(nodes[i].x, nodes[i].z));
+    this.mapOf = route.key;
+    this.mapPts = { pts, place, start: place(nodes[0].x, nodes[0].z) };
+    return this.mapPts;
+  }
+
+  /** The map, the field on it, and you. */
+  drawMap(state, p, x, y) {
+    const rt = this.rt;
+    const { pts, place, start } = this.map(state.route);
+    rt.panel(x, y, MAP_W, MAP_H, HUD_BACK, HUD_EDGE);
+    for (const [px, py] of pts) rt.rect(x + px, y + py, 1, 1, HUD_DIM);
+    rt.rect(x + start[0] - 1, y + start[1] - 1, 3, 3, HUD_TEXT);
+    // Everybody else first, so you are never underneath one of them.
+    for (const car of state.cars) {
+      if (car === p) continue;
+      const at = worldOf(state.route, car.s, car.x);
+      const [px, py] = place(at.x, at.z);
+      rt.rect(x + px - 1, y + py - 1, 2, 2, TEAM_COLOURS[car.team % 8].body);
+    }
+    const me = worldOf(state.route, p.s, p.x);
+    const [px, py] = place(me.x, me.z);
+    // Blinking, because on a map this size a stationary dot among seven others
+    // is a dot you have to hunt for and this one you have to find at a glance.
+    rt.rect(x + px - 1, y + py - 1, 3, 3, (state.tick % 40) < 26 ? WARN : HUD_TEXT);
   }
 
   /** A fog function for one distance, made once and handed to a model. */
@@ -438,19 +536,16 @@ export class Renderer {
     rt.textMid(formatClock(state.clock), W / 2, 7, clockColour, 2);
 
     // The lap you are on and how long you have been on it, top left.
-    rt.panel(4, 3, 92, 24, HUD_BACK, HUD_EDGE);
+    rt.panel(4, 3, 92, 20, HUD_BACK, HUD_EDGE);
     rt.text('LAP', 8, 6, HUD_DIM);
     rt.text(`${Math.min(state.laps, lapOf(p) + 1)}/${state.laps}`, 28, 6, HUD_TEXT);
     rt.text(formatTime(state.elapsed - p.lapFrom), 50, 6, HUD_TEXT);
     rt.rect(8, 16, 84, 2, shade(HUD_EDGE, 0.6));
     rt.rect(8, 16, Math.round(84 * progress(state)), 2, GOOD);
-    // What is left of the tyres, under it, and only when there is wear to show.
-    if (state.rules.wear) {
-      rt.text('TYRE', 8, 20, HUD_DIM);
-      rt.rect(30, 21, 62, 4, shade(HUD_EDGE, 0.5));
-      rt.rect(30, 21, Math.round(62 * p.tyre), 4,
-        p.tyre > 0.55 ? GOOD : p.tyre > 0.25 ? WARN : BAD);
-    }
+
+    // The circuit from above, with everybody on it. The one thing the view out
+    // of the cockpit cannot tell you is what the next corner but one is.
+    this.drawMap(state, p, 4, 26);
 
     // Top right: where you are, or what you came out here to beat.
     rt.panel(W - 84, 3, 80, 26, HUD_BACK,
@@ -481,28 +576,47 @@ export class Renderer {
     rt.text('KM/H', W - 42, SCREEN_H - 12, HUD_DIM);
     rt.text(`${gear}`, W - 18, SCREEN_H - 24, WARN, 2);
 
-    // Bottom left: the last lap, or the man in front and how long it would take
-    // to get there.
-    rt.panel(4, SCREEN_H - 34, 96, 30, HUD_BACK, HUD_EDGE);
+    // Bottom left: the tyres, and then the last lap or the man in front.
+    //
+    // The tyres get the top of the panel and a number as well as a bar, because
+    // by the third lap it is the thing deciding your race and a thin green line
+    // tucked under the lap counter was not saying so.
+    const tall = state.rules.wear ? 42 : 30;
+    rt.panel(4, SCREEN_H - tall - 4, 104, tall, HUD_BACK,
+      state.rules.wear && p.tyre < 0.25 ? BAD : HUD_EDGE);
+    let row = SCREEN_H - tall;
+    if (state.rules.wear) {
+      const gone = p.tyre < 0.25;
+      rt.text('TYRE', 8, row, gone && (state.tick % 26) < 13 ? BAD : HUD_DIM);
+      rt.text(`${Math.round(p.tyre * 100)}%`, 34, row,
+        p.tyre > 0.55 ? HUD_TEXT : p.tyre > 0.25 ? WARN : BAD);
+      rt.rect(60, row + 1, 44, 5, shade(HUD_EDGE, 0.5));
+      rt.rect(60, row + 1, Math.round(44 * p.tyre), 5,
+        p.tyre > 0.55 ? GOOD : p.tyre > 0.25 ? WARN : BAD);
+      if (p.pitT > 0) rt.text('IN THE PITS', 8, row + 10, WARN);
+      else if (p.wantPit) rt.text('PIT THIS LAP', 8, row + 10, WARN);
+      else if (gone) rt.text('TYRES GONE', 8, row + 10, (state.tick % 26) < 13 ? BAD : HUD_DIM);
+      row += 20;
+    }
     if (qual) {
-      rt.text('LAST', 8, SCREEN_H - 30, HUD_DIM);
-      rt.text(p.last ? formatTime(p.last) : '-:--.--', 34, SCREEN_H - 30,
+      rt.text('LAST', 8, row, HUD_DIM);
+      rt.text(p.last ? formatTime(p.last) : '-:--.--', 34, row,
         p.last && p.last === p.best ? WARN : HUD_TEXT);
-      rt.text(`${state.laps - lapOf(p)} TO GO`, 8, SCREEN_H - 20, HUD_DIM);
+      rt.text(`${state.laps - lapOf(p)} TO GO`, 8, row + 10, HUD_DIM);
     } else {
       const ahead = state.order && state.order[p.place - 2];
       if (ahead) {
-        rt.text('AHEAD', 8, SCREEN_H - 30, HUD_DIM);
-        rt.text(`-${formatGap(p.gap)}`, 44, SCREEN_H - 30, p.gap < 1.2 ? WARN : HUD_TEXT);
-        rt.text(teamName(ahead), 8, SCREEN_H - 20, HUD_TEXT);
+        rt.text('AHEAD', 8, row, HUD_DIM);
+        rt.text(`-${formatGap(p.gap)}`, 44, row, p.gap < 1.2 ? WARN : HUD_TEXT);
+        rt.text(teamName(ahead), 8, row + 10, HUD_TEXT);
       } else {
-        rt.text('LEADING', 8, SCREEN_H - 30, WARN);
+        rt.text('LEADING', 8, row, WARN);
         const behind = state.order && state.order[1];
-        if (behind) rt.text(`+${formatGap(behind.gap)}`, 8, SCREEN_H - 20, HUD_TEXT);
+        if (behind) rt.text(`+${formatGap(behind.gap)}`, 8, row + 10, HUD_TEXT);
       }
       // The tow, when you are in one. It is worth twenty km/h and you should know.
       if (p.tow > 0.15) {
-        rt.text('TOW', 68, SCREEN_H - 20, (state.tick % 20) < 10 ? WARN : HUD_DIM);
+        rt.text('TOW', 76, row + 10, (state.tick % 20) < 10 ? WARN : HUD_DIM);
       }
     }
 

@@ -17,7 +17,8 @@
  */
 
 import {
-  GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS, VERGE,
+  GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, PIT_EDGE, ROAD_HALF, SEG, START_TIME, TICK_RATE,
+  TIERS, VERGE,
 } from '../constants.js';
 import { buildRoute } from './route.js';
 
@@ -64,6 +65,10 @@ export function makeCar(kind, slot, s, x, extra = {}) {
     slide: 0,        // grip it is asking for and not getting
     tow: 0,          // how much of another car's hole in the air it is sitting in
     tyre: 1,         // one when they are new, zero when they have gone
+    pitT: 0,         // ticks left of a stop
+    pitCool: 0,      // and how long before the box will have you again
+    stops: 0,
+    wantPit: false,
     spinT: 0,
     place: slot + 1,
     gap: 0,
@@ -214,10 +219,18 @@ function shortTurn(from, to) {
   return d;
 }
 
-/** Is this point on the tarmac, on the kerb and grass, or in the gravel? */
-export function surfaceOf(x) {
+/**
+ * Is this point on the tarmac, in the pit lane, on the kerb and grass, or in
+ * the gravel?
+ *
+ * The pit lane is the infield run-off with tarmac on it, so it is a surface like
+ * any other and everything that reads a surface gets it for nothing: full grip,
+ * no dust thrown up, and the barrier still in the same place.
+ */
+export function surfaceOf(x, node) {
   const off = Math.abs(x) - ROAD_HALF;
   if (off <= 0) return 'road';
+  if (node && node.pit && x > ROAD_HALF && x < PIT_EDGE) return 'pit';
   if (off <= VERGE) return 'verge';
   return 'rough';
 }

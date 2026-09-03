@@ -79,9 +79,13 @@ function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
 
 // --- Scenery -----------------------------------------------------------------
 
-export function drawProp(rt, prop, x, y, z, tint, theme) {
+export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0) {
   const s = prop.s || 1;
-  put.set(x, y, z, prop.r || 0, 0, s);
+  // Trees and rocks are turned any old way and that is the point of them. A
+  // gantry, a grandstand and a marker post belong to the track and are handed
+  // its heading; without it they stand at whatever angle the world happens to
+  // be at, which for a gantry means lying across the road.
+  put.set(x, y, z, facing + (prop.r || 0), 0, s);
   switch (prop.kind) {
     case 'pine': {
       const trunk = tint(theme.trunk);
@@ -138,6 +142,18 @@ export function drawProp(rt, prop, x, y, z, tint, theme) {
       put.face(rt, tint(C.metal), [-6, 6.6, -0.6, 6, 6.6, -0.6, 6, 6.9, 4.4, -6, 6.9, 4.4]);
       put.face(rt, frame, [-6, 4.6, -0.5, -5.7, 4.6, -0.5, -5.7, 6.7, -0.5, -6, 6.7, -0.5]);
       put.face(rt, frame, [5.7, 4.6, -0.5, 6, 4.6, -0.5, 6, 6.7, -0.5, 5.7, 6.7, -0.5]);
+      break;
+    }
+    case 'garage': {
+      // A bay with a dark opening and a strip of colour over it. Four faces, and
+      // the only one doing any work is the dark one: an opening is what makes a
+      // row of boxes read as somewhere cars go into.
+      const wall = tint(shade(theme.ridge, 1.1));
+      put.face(rt, wall, [-4.4, 0, 0, 4.4, 0, 0, 4.4, 5, 0, -4.4, 5, 0]);
+      put.face(rt, tint(C.tyre), [-3.4, 0, -0.05, 3.4, 0, -0.05, 3.4, 3.4, -0.05, -3.4, 3.4, -0.05]);
+      put.face(rt, tint(C.kerbA), [-4.4, 3.6, -0.1, 4.4, 3.6, -0.1, 4.4, 4.4, -0.1, -4.4, 4.4, -0.1]);
+      put.face(rt, tint(shade(theme.ridge, 0.7)), [-4.6, 5, 0.4, 4.6, 5, 0.4,
+        4.6, 5.3, -1.6, -4.6, 5.3, -1.6]);
       break;
     }
     case 'block':

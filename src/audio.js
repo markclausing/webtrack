@@ -242,6 +242,20 @@ export class Sound {
         this.burst(0.7, 1800, event.mine ? 0.42 : 0.2);
         this.sweep(900, 220, 0.8, event.mine ? 0.22 : 0.1);
         break;
+      case 'pitin':
+        if (!event.mine) break;
+        // The rattle of a wheel gun, which is the noise everybody knows a pit
+        // stop by and is four bursts of filtered noise.
+        for (let i = 0; i < 4; i++) {
+          setTimeout(() => this.burst(0.09, 2600, 0.3), 260 + i * 120);
+        }
+        this.say('pit');
+        break;
+      case 'tyres':
+        if (!event.mine) break;
+        this.blip(660, 0.08, 'square', 0.22);
+        setTimeout(() => this.blip(990, 0.12, 'square', 0.24), 90);
+        break;
       case 'check':
         for (let i = 0; i < 3; i++) {
           setTimeout(() => this.blip(520 + i * 260, 0.12, 'square', 0.22), i * 110);

@@ -51,7 +51,8 @@ pauses.
 survives it: your quickest single lap. Fresh tyres the whole way, nobody in your
 mirrors, and nothing to blame.
 
-**Grand Prix** is seven other cars and a standing start from the back row. The
+**Grand Prix** is seven other cars, a standing start from the back row, tyres
+that will not last the distance and a pit lane to do something about it. The
 board keeps the whole race rather than your best lap, because a quick lap in a
 race you lost is a consolation and not a result.
 
@@ -83,9 +84,21 @@ asking for both at once gets you neither and a lot of grass.
 
 **Tyres go off, and they go off faster if you lean on them.** Wear is charged for
 cornering load squared, so two smooth laps leave you something for the third and
-two ragged ones do not — you finish a race on about a quarter of a set and ten
-km/h down in every corner. Only in the race; qualifying is always on fresh
-rubber.
+two ragged ones do not. A dead set is worth nearly half your grip — about eight
+seconds a lap — and the meter in the bottom corner goes red and starts flashing
+long before you have to think about it. Only in the race; qualifying is always on
+fresh rubber.
+
+**So there is a pit lane, and whether to use it is the only strategic decision in
+the game.** It is the inside of the start straight: cross the white line onto it,
+obey the limiter, stop on the box for a second and a third, and the tyres are
+new. The whole detour costs about thirteen seconds. Eight a lap against thirteen
+once means it pays with two laps left to run and does not with one — which is why
+the pass is four laps rather than three: over three the answer is always no, and
+a decision with one answer is not a decision. The clock does not stop while you
+are standing there, and neither does anybody else.
+
+![Stopped on the box, on nineteen per cent](docs/screenshots/pits.png)
 
 **Sit behind somebody on the straight.** The tow removes nearly half your drag
 and is worth about twenty km/h. It reaches forty metres and needs you roughly
@@ -93,7 +106,15 @@ behind them, which is what makes the last third of a straight interesting instea
 of a formality.
 
 **The kerbs are yours; the grass is not.** Two wheels on the red and white costs
-you very little. Four wheels on the green costs three quarters of your grip.
+you very little. Four wheels on the green costs three quarters of your grip. The
+pit lane is tarmac like any other, which is why it needed no new rules — only a
+surface, a limiter and a box to stand on.
+
+**There is a map in the corner.** It is the one thing the view out of the cockpit
+cannot give you: where the next corner but one goes, and where the other seven
+are when they are not in front of you.
+
+![Into the lane, on thirty-three per cent](docs/screenshots/pitlane.png)
 
 **They are given slightly less grip and slightly less top end than you, and
 nothing else.** No rubber band, no catching you up when you crash, no pulling
@@ -104,11 +125,11 @@ learning where they brake is the only way past seven of them in three laps.
 
 **The pass** is 4.3 km through the mountains, climbing fifty metres and giving it
 all back — three kinds of corner, all of them third gear or lower, with enough
-between them to use what you gained. **The boulevard** is 5.7 km of sea front:
-flat, open, and quick enough that the corners which do matter matter a great
-deal. **The grand circuit** is 8.2 km out of the hills, down to the water and
-back up again, and it is two laps because one of them is already a long
-afternoon.
+between them to use what you gained. Four laps. **The boulevard** is 5.7 km of
+sea front: flat, open, and quick enough that the corners which do matter matter a
+great deal. Three laps. **The grand circuit** is 8.2 km out of the hills, down to
+the water and back up again, and it is two laps because one of them is already a
+long afternoon.
 
 ![The grand circuit, on the coastal half of the lap](docs/screenshots/grand.png)
 
@@ -130,6 +151,15 @@ everybody looks at most.
 Then the loop is relaxed until nothing on it is sharper than a car with a wing
 can go round. A curve through control points will happily ask for a 37 km/h
 hairpin, which is not a corner, it is a wall with a gap in it.
+
+The other thing a loop changes is the scenery. On a road that never comes back on
+itself the hillsides can do as they like; on a circuit the ground to your right
+is the middle of the lap, which is also what you are looking across when you look
+at the far side of the track — so a hundred and twenty metre hill in it is a
+hundred and twenty metre hill drawn over the track. Which is exactly what it was,
+and exactly what it looked like. The infield is now one flat plain a few metres
+below the average height of the circuit. The outside may still do as it pleases:
+it points away, and nothing it does can ever be in front of anything.
 
 ## The look
 
@@ -265,7 +295,8 @@ Three things, none of which need a browser:
   is not there is a bump on the piece of track everybody drives most. Then it
   drives each of them with the game's own reference driver and asks the questions
   a bug would answer wrongly: is anybody outside the barriers, did the field race,
-  did the laps count, did the tyres go off — and the one that is about the game
+  did the laps count, did the tyres go off, does the pit lane have tarmac on it
+  and a limiter over it — and the one that is about the game
   rather than the code, **is braking later still quicker**. It runs the same
   driver at three levels of commitment and fails if it is not. A driving model
   that gets that wrong is broken however finite its numbers are, and nothing else

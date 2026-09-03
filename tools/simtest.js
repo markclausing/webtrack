@@ -11,10 +11,12 @@
 // game breaks by drifting rather than by throwing, so drift is what this looks
 // for.
 
-import { GRIP, SEG, TICK_RATE, TOP_SPEED, WALL_AT } from '../src/constants.js';
+import {
+  BTN, GRIP, PIT_SPEED, PIT_X, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
+} from '../src/constants.js';
 import { buildRoute } from '../src/game/route.js';
 import { driveLine, makeRace, step } from '../src/game/sim.js';
-import { finalTicks, formatTime, ordinal, player } from '../src/game/state.js';
+import { finalTicks, formatTime, ordinal, player, surfaceOf } from '../src/game/state.js';
 import {
   cleanEntry, compare, Highscores, merge, qualifies, sortTable,
 } from '../src/highscores.js';
@@ -120,6 +122,45 @@ for (const tier of ['easy', 'normal', 'hard']) {
     p.best > 0 && p.best < p.lapFrom);
   ok('qualifying: the board is given the lap, not the session',
     finalTicks(state) === p.best);
+}
+
+// The pit lane: a surface, a speed limit, and a set of tyres at the end of it.
+{
+  const state = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 8 });
+  const route = state.route;
+  const box = route.nodes[route.pitBox];
+  ok('the box is in the lane and the lane is tarmac',
+    box.pit && surfaceOf(PIT_X, box) === 'pit' && surfaceOf(0, box) === 'road');
+  ok('and the grass beside the lane is still grass',
+    surfaceOf(PIT_X, route.nodes[route.pitBox + 200]) === 'rough');
+
+  // Driven into the box and stopped: the tyres come back and the clock does not.
+  const p = player(state);
+  state.lights = 0;
+  p.tyre = 0.1;
+  p.s = route.pitBox * SEG;
+  p.x = PIT_X;
+  p.speed = 0;
+  const before = state.elapsed;
+  let ticks = 0;
+  while (p.tyre < 1 && ticks < 300) {
+    step(state, 0);
+    ticks++;
+  }
+  ok(`a stop takes ${((state.elapsed - before) / TICK_RATE).toFixed(1)}s and fits new tyres`,
+    p.tyre === 1 && p.stops === 1 && ticks < 200);
+  ok('and the clock ran the whole time it was standing there',
+    state.elapsed > before);
+
+  // The limiter: full throttle in the lane will not get you past it.
+  p.pitCool = 0;
+  p.speed = 90;
+  for (let t = 0; t < 240; t++) {
+    p.x = PIT_X;
+    step(state, BTN.UP);
+  }
+  ok(`the limiter holds it to ${Math.round(p.speed * 3.6)}km/h in the lane`,
+    p.speed <= PIT_SPEED + 0.5);
 }
 
 // Laps roll over cleanly at the line, on a track that has no beginning.

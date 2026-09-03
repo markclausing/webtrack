@@ -101,6 +101,9 @@ if (route === 'docs') {
     // driver asking for more grip than there is.
     ['corner', (s) => player(s).slide > 2 && player(s).speed > 55, 'pass', 'gp', 1.35],
     ['coast', (s) => player(s).s > 2500 && player(s).speed > 82, 'coast', 'gp'],
+    // Stopping. Caught on the way in, with the crew's box under the nose.
+    ['pits', (s) => player(s).pitT > 20 && player(s).pitT < 70, 'pass', 'gp'],
+    ['pitlane', (s) => player(s).wantPit && player(s).speed < 34 && player(s).x > 9, 'pass', 'gp'],
     ['qualifying', (s) => player(s).best > 0 && player(s).speed > 70, 'coast', 'qual'],
     ['grand', (s) => {
       const at = player(s).s % s.route.metres;

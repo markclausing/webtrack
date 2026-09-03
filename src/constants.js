@@ -144,8 +144,15 @@ export const MODES = {
 
 /** How many cars are in a grand prix, including you. */
 export const FIELD = 8;
-/** And how many laps each circuit is worth. The long one is worth fewer. */
-export const LAPS = { pass: 3, coast: 3, grand: 2 };
+/**
+ * And how many laps each circuit is worth.
+ *
+ * Four on the short one, and the number is chosen against the tyres rather than
+ * against the clock: over three laps a set lasts and stopping is always a
+ * mistake, so the pit lane is scenery. Over four it is a question, which is what
+ * a pit lane is for.
+ */
+export const LAPS = { pass: 4, coast: 3, grand: 2 };
 /** Metres between rows on the grid, and how far off centre a grid slot sits. */
 export const GRID_GAP = 11;
 export const GRID_OFF = 2.6;
@@ -192,8 +199,34 @@ export const CHECKPOINT_EVERY = 220;
  * whatever you did with the first two, and the decision the wear was there to
  * create never gets made.
  */
-export const TYRE_FLOOR = 0.8;
-export const TYRE_WEAR = 0.0055;
+export const TYRE_FLOOR = 0.55;
+export const TYRE_WEAR = 0.008;
+
+// --- The pit lane --------------------------------------------------------------
+
+/**
+ * Where the pits are, in nodes either side of the start line, and what using
+ * them costs.
+ *
+ * The lane is not a separate piece of road: it is the run-off on the infield
+ * side of the track, made of tarmac for the length of the pits, with a white
+ * line down it and a speed limit on it. That keeps every existing rule - the
+ * grip, the barrier, the collisions, the lap counter - working unchanged, and it
+ * is what a pit lane looks like from a car anyway.
+ *
+ * The whole detour costs about thirteen seconds against a lap of the pass, and a
+ * dead set costs about eight a lap. So one stop pays if there are two laps left
+ * to spend the new tyres on and does not if there is one, which is the decision
+ * the lane exists to create. Stop because the tyres have gone, not because there
+ * is a pit lane.
+ */
+export const PIT_FROM = -38;        // nodes before the line where the lane starts
+export const PIT_TO = 12;           // and where it rejoins
+export const PIT_BOX = -16;         // the node your crew is standing on
+export const PIT_X = 11.6;          // the middle of the lane, on the infield side
+export const PIT_EDGE = 14.6;       // its outer edge, just inside the barrier
+export const PIT_SPEED = 32;        // 115 km/h, and the engine will not pull past it
+export const PIT_TIME = 80;        // a second and two thirds of four wheels off
 
 /** What the three settings change. */
 export const TIERS = {

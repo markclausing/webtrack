@@ -38,6 +38,10 @@ export const WORDS = {
   win: ['W', 'IH', 'N'],
   the: ['DH', 'AH'],
   you: ['Y', 'UW'],
+  box: ['B', 'AA', 'K', 'S'],
+  new: ['N', 'UW'],
+  tyres: ['T', 'AY', 'ER', 'Z'],
+  in: ['IH', 'N'],
 };
 
 /**
@@ -53,4 +57,5 @@ export const LINES = {
   over: ['out of time', 'time up'],
   finish: ['finish', 'well done'],
   won: ['first place', 'you win', 'nice one'],
+  pit: ['box box', 'new tyres'],
 };
