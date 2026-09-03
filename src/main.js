@@ -18,15 +18,15 @@
 
 import { Sound } from './audio.js';
 import { boardFor } from './config.js';
-import { BRAKE, BTN, GRIP, ROAD_HALF, SEG, TIERS, TOP_SPEED } from './constants.js';
+import { MODES, TIERS } from './constants.js';
 import { Highscores, makeId, NAME_LENGTH, placeOf } from './highscores.js';
 import {
   ACTIONS, InputDevices, keyLabel, loadBindings, PRESETS, saveBindings,
 } from './input.js';
 import { NameEntry } from './nameEntry.js';
 import { Renderer } from './render/renderer.js';
-import { finalTicks, formatTime, ordinal, player, ROUTES } from './game/state.js';
-import { makeRace, step } from './game/sim.js';
+import { finalTicks, formatTime, lapOf, ordinal, player, ROUTES } from './game/state.js';
+import { driveLine, makeRace, step } from './game/sim.js';
 import { isTouchDevice, TouchControls } from './touch.js';
 
 const TICK_MS = 1000 / 60;
@@ -57,6 +57,7 @@ const pauseBox = document.getElementById('pause');
 const overBox = document.getElementById('gameover');
 const hiscoreBox = document.getElementById('hiscore');
 
+let mode = 'gp';
 let route = 'pass';
 let tier = 'normal';
 
@@ -123,53 +124,30 @@ function drain(state) {
 /**
  * The car on the menu screen.
  *
- * Not an opponent and not a replay: the same simulation with a driver in it that
- * does the two things a driver does. It works out how fast it may be going from
- * the corner it can see - the same sum the rivals do - and it aims at the apex.
- * It is not quick, and it is not supposed to be: an attract screen wants to look
- * like somebody playing, and somebody playing is somebody you can beat.
+ * Not an opponent and not a replay: the game's own reference driver, which is
+ * the same braking arithmetic the rivals use, given a little less grip than it
+ * has. It is not quick and is not supposed to be - an attract screen wants to
+ * look like somebody playing, and somebody playing is somebody you can beat.
  */
-function autopilot(state) {
-  const p = player(state);
-  const nodes = state.route.nodes;
-  const from = Math.floor(p.s / SEG);
-  let limit = TOP_SPEED;
-  for (let n = 0; n <= 34; n++) {
-    const node = nodes[Math.min(nodes.length - 1, from + n)];
-    const k = Math.abs(node.curve) / SEG;
-    if (k < 1e-5) continue;
-    const corner = Math.sqrt(GRIP * 0.9 / k);
-    limit = Math.min(limit, Math.sqrt(corner * corner + 2 * BRAKE * 0.8 * Math.max(0, n * SEG - 8)));
-  }
-  const soon = nodes[Math.min(nodes.length - 1, from + 20)];
-  let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
-  for (const other of state.cars) {
-    if (other === p) continue;
-    const gap = other.s - p.s;
-    if (gap > 2 && gap < 26 && Math.abs(other.x - p.x) < 3.6) {
-      line = other.x + (other.x > 0 ? -3.6 : 3.6);
-    }
-  }
-  let mask = p.speed < limit ? BTN.UP : 0;
-  if (p.speed > limit * 1.02) mask |= BTN.DOWN;
-  const off = line - p.x;
-  if (off > 0.5) mask |= BTN.RIGHT;
-  if (off < -0.5) mask |= BTN.LEFT;
-  return mask;
-}
+const autopilot = (state) => driveLine(state, 0.88);
 
 function attract() {
-  const state = makeRace({ route, tier, seed: (Math.random() * 1e9) | 0 });
+  // Always a grand prix behind the menu, whatever is selected in front of it: an
+  // empty circuit is the correct thing to qualify on and the wrong thing to
+  // watch.
+  const state = makeRace({ route, mode: 'gp', tier, seed: (Math.random() * 1e9) | 0 });
   // Started a long way in, at speed, with the lights already out and the clock
   // wound up: the menu is never showing a standing start it will not finish, and
   // never the same forty metres of track twice.
-  const at = Math.random() * (state.route.metres * 0.66) + 200;
+  const at = Math.random() * state.route.metres + 200;
   for (const car of state.cars) {
     car.s += at;
     car.speed = 62;
+    car.lap = Math.floor(car.s / state.route.metres);
   }
   state.lights = 0;
   state.clock = 9999;
+  state.laps = 99;
   return state;
 }
 
@@ -177,7 +155,7 @@ function attract() {
 
 function startRun() {
   sound.wake();
-  game.state = makeRace({ route, tier, seed: (Date.now() & 0x7fffffff) });
+  game.state = makeRace({ route, mode, tier, seed: (Date.now() & 0x7fffffff) });
   game.playing = true;
   game.paused = false;
   game.acc = 0;
@@ -214,14 +192,26 @@ function finish(state) {
 function showResult(state) {
   const p = player(state);
   const done = state.finished;
-  document.getElementById('overTitle').textContent = done
-    ? (state.place === 1 ? 'WINNER' : `FINISHED ${ordinal(state.place)}`)
-    : 'OUT OF TIME';
-  document.getElementById('overText').textContent = done
-    ? `${formatTime(finalTicks(state))}, ${ordinal(state.place)} of eight, from `
-      + `${ordinal(p.slot + 1)} on the grid.`
-    : `The clock went at ${(p.s / 1000).toFixed(1)} kilometres, ${ordinal(state.place)} `
-      + 'of eight. Checkpoints are the only thing that puts seconds back.';
+  const title = document.getElementById('overTitle');
+  const text = document.getElementById('overText');
+
+  if (state.mode === 'qual') {
+    title.textContent = p.best ? 'LAP SET' : 'NO TIME';
+    text.textContent = p.best
+      ? `${formatTime(p.best)}, best of ${lapOf(p)} laps.`
+      : 'The clock went before a lap was finished. There is no time to show and '
+        + 'nothing to beat.';
+  } else {
+    title.textContent = done
+      ? (state.place === 1 ? 'WINNER' : `FINISHED ${ordinal(state.place)}`)
+      : 'OUT OF TIME';
+    text.textContent = done
+      ? `${formatTime(finalTicks(state))} for ${state.laps} laps, ${ordinal(state.place)} `
+        + `of ${state.field}, from ${ordinal(p.slot + 1)} on the grid. `
+        + `Best lap ${formatTime(p.best)}.`
+      : `The clock went on lap ${lapOf(p) + 1}, ${ordinal(state.place)} of `
+        + `${state.field}. Checkpoints are the only thing that puts seconds back.`;
+  }
   overBox.classList.remove('hidden');
 }
 
@@ -268,17 +258,31 @@ function pick(attr, onPick) {
   }
 }
 
+pick('mode', (value) => {
+  mode = value;
+  renderMode();
+  renderScores(mode, route, tier);
+});
 pick('route', (value) => {
   route = value;
   document.getElementById('routeBlurb').textContent = ROUTES[route].blurb;
-  renderScores(route, tier);
+  renderScores(mode, route, tier);
   game.demo = attract();
 });
 pick('skill', (value) => {
   tier = value;
   renderSkill();
-  renderScores(route, tier);
+  renderScores(mode, route, tier);
 });
+
+function renderMode() {
+  document.getElementById('modeBlurb').textContent = mode === 'qual'
+    ? 'An empty circuit and a long clock. Three laps, and the quickest single one '
+      + 'is what the board keeps. Fresh tyres the whole way.'
+    : 'Seven other cars and a standing start from the back row. The tyres are '
+      + 'good for about two laps of leaning on them, and the board keeps the whole '
+      + 'race rather than your best lap.';
+}
 pick('sound', (value) => sound.enable(value === 'on'));
 pick('talk', (value) => sound.voice(value === 'on'));
 
@@ -286,22 +290,23 @@ function renderSkill() {
   const cfg = TIERS[tier];
   document.getElementById('skillBlurb').textContent
     = `Clock ${Math.round(cfg.clock * 100)}%, your grip ${Math.round(cfg.grip * 100)}%, `
-    + `and the other seven driving at ${Math.round(cfg.ai * 100)}% of what they can do. `
+    + `and the others driving at ${Math.round(cfg.ai * 100)}% of what they can do. `
     + 'Each setting keeps its own list.';
 }
 
 // --- The score board ----------------------------------------------------------
 
-const pending = { open: false, entry: null, route: 'pass', tier: 'normal' };
+const pending = { open: false, entry: null, mode: 'gp', route: 'pass', tier: 'normal' };
 
 const nameEntry = new NameEntry(document.getElementById('hiscoreLetters'), (name) => {
   try {
     globalThis.localStorage?.setItem('webtrack.name', name);
   } catch { /* private mode */ }
-  const place = highscores.add(pending.route, pending.tier, { ...pending.entry, name });
+  const place = highscores.add(pending.mode, pending.route, pending.tier,
+    { ...pending.entry, name });
   pending.open = false;
   hiscoreBox.classList.add('hidden');
-  renderScores(pending.route, pending.tier, place);
+  renderScores(pending.mode, pending.route, pending.tier, place);
   document.getElementById('scoresBox').open = true;
   toMenu();
   syncScores();
@@ -354,36 +359,39 @@ document.getElementById('hiscoreLetters').addEventListener('click', (e) => {
 document.getElementById('hiscoreOk').addEventListener('click', () => nameEntry.confirm());
 
 /**
- * Only a finished race counts.
+ * What counts, which is not the same thing in the two modes.
  *
- * A board of times cannot hold a race that stopped halfway, because there is no
- * number to compare: somebody who gave up after four hundred metres has a
- * shorter elapsed time than anybody who got to the flag. So the board is the
- * finishers' board, and everything else goes on the result card and nowhere
- * else.
+ * A race has to have been finished: a board of race times cannot hold one that
+ * stopped halfway, because somebody who gave up on lap one has a shorter elapsed
+ * time than anybody who got to the flag. A qualifying lap only has to exist -
+ * the session running out of time with two good laps behind you is a normal way
+ * for qualifying to end, and the lap still counts.
  */
 function offerRecord(state) {
   if (pending.open) return true;
-  if (!state.finished) return false;
+  const p = player(state);
+  const qual = state.mode === 'qual';
+  if (qual ? !p.best : !state.finished) return false;
 
   const entry = {
     id: makeId(),
     name: lastName(),
     time: finalTicks(state),
-    place: state.place,
+    place: qual ? 1 : state.place,
     metres: Math.round(state.route.metres),
     at: Date.now(),
   };
-  if (!highscores.qualifies(route, tier, entry)) return false;
+  if (!highscores.qualifies(mode, route, tier, entry)) return false;
 
   pending.entry = entry;
+  pending.mode = mode;
   pending.route = route;
   pending.tier = tier;
   pending.open = true;
   document.getElementById('hiscoreLine').textContent
     = `${formatTime(entry.time)}: number `
-    + `${placeOf(highscores.table(route, tier), entry)} `
-    + `of the ${boardName(route, tier)} board`;
+    + `${placeOf(highscores.table(mode, route, tier), entry)} `
+    + `of the ${boardName(mode, route, tier)} board`;
   hiscoreBox.classList.remove('hidden');
   // Out of the way while the picker is up. They sit under this panel and cannot
   // be reached anyway, and a control showing through an overlay that swallows
@@ -414,22 +422,22 @@ async function syncScores() {
     const data = await res.json();
     if (!data?.board) return false;
     highscores.absorb(data.board);
-    renderScores(route, tier);
+    renderScores(mode, route, tier);
     return true;
   } catch {
     return false;
   }
 }
 
-function boardName(r, t) {
-  return `${ROUTES[r].label} ${t.toUpperCase()}`;
+function boardName(m, r, t) {
+  return `${MODES[m].label.toUpperCase()} ${ROUTES[r].label} ${t.toUpperCase()}`;
 }
 
-function renderScores(r, t, freshPlace = 0) {
+function renderScores(m, r, t, freshPlace = 0) {
   const body = document.getElementById('scoresBody');
-  document.getElementById('scoresLevel').textContent = boardName(r, t);
+  document.getElementById('scoresLevel').textContent = boardName(m, r, t);
   body.innerHTML = '';
-  const rows = highscores.table(r, t);
+  const rows = highscores.table(m, r, t);
   for (let i = 0; i < rows.length; i++) {
     const tr = document.createElement('tr');
     if (i + 1 === freshPlace) tr.className = 'fresh';
@@ -439,7 +447,8 @@ function renderScores(r, t, freshPlace = 0) {
       ['result', formatTime(rows[i].time)],
       // Labelled rather than bare. A column of "4"s next to a column of times is
       // a column nobody can read without being told what it is.
-      ['stage', rows[i].place > 90 ? '--' : ordinal(rows[i].place)],
+      // Where they finished, which qualifying does not have an answer to.
+      ['stage', m === 'qual' || rows[i].place > 90 ? '\u2014' : ordinal(rows[i].place)],
       ['when', new Date(rows[i].at).toLocaleDateString()],
     ]) {
       const td = document.createElement('td');
@@ -450,11 +459,13 @@ function renderScores(r, t, freshPlace = 0) {
     body.appendChild(tr);
   }
   document.getElementById('scoresNote').textContent = rows.length
-    ? 'Your time from the lights to the flag, with where you finished beside it. '
-      + 'Only a race you got to the end of goes on the board, and each circuit and '
-      + 'setting keeps its own.'
-    : 'Nothing here yet. Get to the flag on this circuit on this setting and the '
-      + 'list is yours.';
+    ? (m === 'qual'
+      ? 'The quickest single lap of the session. Each circuit and setting keeps its '
+        + 'own list, and qualifying and the race keep separate ones.'
+      : 'The whole race, from the lights to the flag, with where you finished beside '
+        + 'it. Only a race you got to the end of goes on the board.')
+    : 'Nothing here yet. Set a time on this circuit on this setting and the list is '
+      + 'yours.';
 }
 
 // --- Changing the keys ---------------------------------------------------------
@@ -549,9 +560,10 @@ window.addEventListener('orientationchange', fit);
 fit();
 
 document.getElementById('routeBlurb').textContent = ROUTES[route].blurb;
+renderMode();
 renderSkill();
 renderKeys();
-renderScores(route, tier);
+renderScores(mode, route, tier);
 syncScores();
 game.demo = attract();
 game.last = performance.now();

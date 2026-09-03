@@ -68,48 +68,18 @@ globalThis.ImageData = FakeImageData;
 globalThis.document = { createElement: () => fakeCanvas() };
 
 const { Renderer } = await import('../src/render/renderer.js');
-const { makeRace, step } = await import('../src/game/sim.js');
+const { driveLine, makeRace, step } = await import('../src/game/sim.js');
 const { player } = await import('../src/game/state.js');
-const { BTN, BRAKE, GRIP, ROAD_HALF, SEG, TOP_SPEED } = await import('../src/constants.js');
+const { SEG } = await import('../src/constants.js');
 
 // --- Riding to the interesting bit ---------------------------------------------
 
 const [route = 'grand', until = '1500', count = '6', zoom = '3'] = process.argv.slice(2);
-const state = makeRace({ route, tier: 'normal', seed: 31337 });
+const state = makeRace({ route, mode: process.env.MODE || 'gp', tier: 'normal', seed: 31337 });
 const renderer = new Renderer(fakeCanvas());
 
-/**
- * A driver, of sorts: brakes for the corner it can see and aims at the apex.
- *
- * The same arithmetic the rivals use, because a screenshot of a car that is
- * driving badly is a screenshot of a game that looks bad.
- */
-function hand(s) {
-  const p = player(s);
-  const nodes = s.route.nodes;
-  const from = Math.floor(p.s / SEG);
-  let limit = TOP_SPEED;
-  for (let n = 0; n <= 34; n++) {
-    const node = nodes[Math.min(nodes.length - 1, from + n)];
-    const k = Math.abs(node.curve) / SEG;
-    if (k < 1e-5) continue;
-    const corner = Math.sqrt(GRIP / k);
-    limit = Math.min(limit, Math.sqrt(corner * corner + 2 * BRAKE * 0.8 * Math.max(0, n * SEG - 8)));
-  }
-  const soon = nodes[Math.min(nodes.length - 1, from + 20)];
-  let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
-  for (const other of s.cars) {
-    if (other === p) continue;
-    const gap = other.s - p.s;
-    if (gap > 2 && gap < 26 && Math.abs(other.x - p.x) < 3.6) line = other.x + (other.x > 0 ? -3.6 : 3.6);
-  }
-  let mask = p.speed < limit ? BTN.UP : 0;
-  if (p.speed > limit * 1.02) mask |= BTN.DOWN;
-  const off = line - p.x;
-  if (off > 0.5) mask |= BTN.RIGHT;
-  if (off < -0.5) mask |= BTN.LEFT;
-  return mask;
-}
+/** The game's own reference driver, so a screenshot is of the game driving. */
+const hand = (world) => driveLine(world, 0.95);
 
 mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
 
@@ -123,28 +93,37 @@ mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
  */
 if (route === 'docs') {
   const want = [
-    ['grid', (s) => s.lights > 20 && s.lights < 60, 'pass'],
-    ['pass', (s) => player(s).s > 2200 && player(s).speed > 70, 'pass'],
+    ['grid', (s) => s.lights > 20 && s.lights < 60, 'pass', 'gp'],
+    ['pass', (s) => player(s).s > 1800 && player(s).speed > 78, 'pass', 'gp'],
     ['battle', (s) => s.cars.some((c) => c !== player(s) && Math.abs(c.s - player(s).s) < 14
-      && Math.abs(c.x - player(s).x) < 6) && player(s).speed > 55, 'pass'],
-    ['corner', (s) => player(s).slide > 1 && player(s).speed > 45, 'pass'],
-    ['coast', (s) => player(s).s > 2500 && player(s).speed > 75, 'coast'],
+      && Math.abs(c.x - player(s).x) < 6) && player(s).speed > 55, 'pass', 'gp'],
+    // Over-committed on purpose: a picture of the tyres letting go needs a
+    // driver asking for more grip than there is.
+    ['corner', (s) => player(s).slide > 2 && player(s).speed > 55, 'pass', 'gp', 1.35],
+    ['coast', (s) => player(s).s > 2500 && player(s).speed > 82, 'coast', 'gp'],
+    ['qualifying', (s) => player(s).best > 0 && player(s).speed > 70, 'coast', 'qual'],
+    ['grand', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.42 && at < s.route.metres * 0.58 && player(s).speed > 70;
+    }, 'grand', 'gp'],
   ];
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
-  for (const [name, when, on] of want) {
-    const world = makeRace({ route: on, tier: 'normal', seed: 20260903 });
+  for (const [name, when, on, mode, share = 0.95] of want) {
+    const world = makeRace({ route: on, mode, tier: 'normal', seed: 20260903 });
     const view = new Renderer(fakeCanvas());
 
     let got = false;
     for (let t = 0; t < 60 * 60 * 6 && !got; t++) {
-      step(world, hand(world));
+      step(world, driveLine(world, share));
       world.clock = Math.max(world.clock, 40);
       world.over = false;
+      world.finished = false;
       view.follow(world, player(world));
       if (when(world)) {
         view.draw(world);
         writeFileSync(path.join(ROOT, 'docs', 'screenshots', `${name}.png`), png(view.rt, 2));
-        console.log(`docs/screenshots/${name}.png  at ${(player(world).s / 1000).toFixed(2)}km`);
+        console.log(`docs/screenshots/${name}.png  lap ${player(world).lap + 1}, `
+          + `${Math.round(player(world).speed * 3.6)}km/h`);
         got = true;
       }
     }
@@ -163,6 +142,7 @@ for (let t = 0; t <= target; t++) {
   // a set of pictures would leave half of them of the same frame.
   state.clock = Math.max(state.clock, 40);
   state.over = false;
+  state.finished = false;
   // The camera is eased towards where it should be a little each frame, so it
   // has to be stepped every tick like it is in the game. Only easing it on the
   // frames that get saved leaves it four hundred metres behind the car, which

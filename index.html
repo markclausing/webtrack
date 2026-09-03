@@ -33,14 +33,23 @@
     <div id="menu" class="overlay">
       <div class="panel">
         <h1>WEB<span>TRACK</span></h1>
-        <p class="tag">HTML / JavaScript &middot; eight cars, one clock, no second lap</p>
+        <p class="tag">HTML / JavaScript &middot; three circuits, eight cars, one set of tyres</p>
 
         <div class="row">
-          <label>Route</label>
+          <label>Session</label>
+          <div class="btns">
+            <button data-mode="gp" class="active">Grand Prix</button>
+            <button data-mode="qual">Qualifying</button>
+          </div>
+        </div>
+        <p id="modeBlurb" class="fineprint"></p>
+
+        <div class="row">
+          <label>Circuit</label>
           <div class="btns">
             <button data-route="pass" class="active">The pass</button>
             <button data-route="coast">The boulevard</button>
-            <button data-route="grand">Grand run</button>
+            <button data-route="grand">Grand circuit</button>
           </div>
         </div>
         <p id="routeBlurb" class="fineprint"></p>
@@ -87,9 +96,10 @@
           </table>
           <p id="bindHint" class="status">Click a key to change it.</p>
           <ul class="hints">
-            <li><b>You start eighth of eight.</b> Seven cars, ten kilometres and
-              about three minutes. Where you finish is the game; your time is
-              what goes on the board.</li>
+            <li><b>Two ways out.</b> Qualifying is an empty circuit and one
+              number: your quickest single lap. A grand prix is seven other cars,
+              a standing start from the back row, and a set of tyres that will
+              not last the distance.</li>
             <li><b>Grip is one number and you are always spending it.</b> A
               corner takes what it needs first and the steering gets whatever is
               left, so at the limit the wheel stops answering. That is not a bug
@@ -105,6 +115,10 @@
             <li><b>The kerbs are yours, the grass is not.</b> Two wheels on the
               red and white costs you very little. Four wheels on the green costs
               you three quarters of your grip and most of your afternoon.</li>
+            <li><b>Tyres go off, and they go off faster if you lean on them.</b>
+              Wear is charged for cornering load squared, so two smooth laps
+              leave you something for the third and two ragged ones do not.
+              Qualifying is always on fresh rubber.</li>
             <li><b>The clock is not the opponent.</b> Seventy seconds to start
               and forty more under every gantry - it is there so a race that has
               gone wrong ends, not to race against. The other seven are the
@@ -119,7 +133,7 @@
         </details>
 
         <div class="panelFooter">
-          <button id="start" class="primary">RIDE</button>
+          <button id="start" class="primary">RACE</button>
         </div>
       </div>
     </div>

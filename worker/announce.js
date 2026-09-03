@@ -17,9 +17,9 @@ import { LEVELS, partsOf } from '../src/highscores.js';
 const MAX_LINES = 3;
 
 const ROADS = {
-  pass: 'over the pass',
-  coast: 'along the boulevard',
-  grand: 'the whole grand run',
+  pass: 'the pass',
+  coast: 'the boulevard',
+  grand: 'the grand circuit',
 };
 
 const PLACED = {
@@ -74,8 +74,12 @@ function ordinal(n) {
 
 function line({ entry, level, place }) {
   const parts = partsOf(level);
+  if (parts.mode === 'qual') {
+    return `🏎️ **${entry.name}** put a **${time(entry.time)}** lap on `
+      + `${ROADS[parts.route] || 'the circuit'}${AGAINST[parts.tier] ?? ''} — ${ordinal(place)}`;
+  }
   const placed = PLACED[entry.place] ?? (entry.place < 90 ? `, ${entry.place}th` : '');
-  return `🏎️ **${entry.name}** went ${ROADS[parts.route] || 'the road'} in `
+  return `🏎️ **${entry.name}** raced ${ROADS[parts.route] || 'the circuit'} in `
     + `**${time(entry.time)}**${AGAINST[parts.tier] ?? ''}${placed} — ${ordinal(place)}`;
 }
 

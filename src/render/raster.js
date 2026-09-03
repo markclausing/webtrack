@@ -85,6 +85,15 @@ export class Raster {
      * on a television the eye reads the tone in between. Set it, draw, clear it.
      */
     this.dither = 0;
+    /**
+     * Half the pixels, in a chequerboard, and the other half left alone.
+     *
+     * This is how a machine with no alpha channel drew smoke, and it is the only
+     * honest way to draw it here: a flat light-grey polygon over the car is a
+     * white slab, and the same polygon with every other pixel missing is a cloud
+     * you can see the car through. Set it, draw, clear it.
+     */
+    this.stipple = 0;
   }
 
   /**
@@ -269,7 +278,14 @@ export class Raster {
       const stop = Math.min(width, Math.ceil(rx));
       let z = lw + dw * (x - lx);
       let at = y * width + x;
-      if (this.dither) {
+      if (this.stipple) {
+        // Not written to the depth buffer: smoke does not hide what is behind
+        // it, it is drawn over it, and a cloud that occluded the car would put
+        // holes in the car instead of putting smoke in front of it.
+        for (; x < stop; x++, at++, z += dw) {
+          if (((x ^ y) & 1) && z > depth[at]) pix[at] = colour;
+        }
+      } else if (this.dither) {
         const other = this.dither;
         for (; x < stop; x++, at++, z += dw) {
           if (z > depth[at]) {

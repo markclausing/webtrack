@@ -26,14 +26,14 @@
  */
 
 import {
-  ACCEL, AI_GRIP, AI_LOOK, AI_TOP, BODY_S, BODY_X, BRAKE, BTN, CHECKPOINT_EVERY,
+  ACCEL, AI_GRIP, AI_LOOK, AI_TOP, BODY_S, BODY_X, BRAKE, BTN,
   CHECKPOINT_TIME, DRAG, DRIVE, DT, GRAVITY, GRIP, GRIP_ROUGH, GRIP_VERGE, NUDGE, NUDGE_COST,
   OFFROAD_DRAG, OFFROAD_TOP, ROAD_HALF, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL, SPIN_AT,
   SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
-  TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP,
+  TOW_RANGE, TOW_WIDTH, TYRE_FLOOR, TYRE_WEAR, WALL_AT, WALL_KEEP,
 } from '../constants.js';
 import { nextRandom, randRange } from '../util.js';
-import { makeState, nodeAt, player, racing, surfaceOf } from './state.js';
+import { makeState, nodeAt, nodeStep, player, racing, surfaceOf } from './state.js';
 
 /** Ticks before the same pair of cars can be charged for touching again. */
 const BUMP_COOL = 20;
@@ -69,6 +69,7 @@ export function step(state, mask = 0) {
 
   tow(state);
   contacts(state);
+  laps(state);
   order(state);
   checkpoints(state);
 
@@ -158,7 +159,9 @@ function drive(state, car) {
   // great deal of the speed, which is what makes running wide a mistake rather
   // than a wider line.
   const hold = surf === 'road' ? 1 : surf === 'verge' ? GRIP_VERGE : GRIP_ROUGH;
-  const grip = GRIP * state.cfg.grip * hold * (car.gripScale || 1);
+  // What is left of the tyres. Fresh they give everything; gone, four fifths.
+  const rubber = TYRE_FLOOR + (1 - TYRE_FLOOR) * car.tyre;
+  const grip = GRIP * state.cfg.grip * hold * rubber * (car.gripScale || 1);
   const pull = (car.power || DRIVE) * (surf === 'rough' ? OFFROAD_TOP : 1);
 
   let acc = 0;
@@ -202,6 +205,14 @@ function drive(state, car) {
 
   car.s += car.speed * DT;
 
+  // The tyres, charged for lateral load squared. A driver who was smooth for two
+  // laps has something left for the third; one who leant on them does not.
+  if (state.rules.wear) {
+    const load = need / Math.max(1, grip);
+    car.tyre = Math.max(0, car.tyre - TYRE_WEAR * DT
+      * (0.06 + load * load * 1.5 + car.slide * 0.02 + (surf === 'road' ? 0 : 1.4)));
+  }
+
   // Which way the car is pointed, for drawing. It follows where the car is
   // actually going rather than where it is asked to go, so a car running wide is
   // visibly pointing at the apex it is not going to make.
@@ -209,10 +220,6 @@ function drive(state, car) {
   car.yaw += (to - car.yaw) * 0.25;
   car.roll = -Math.sign(kappa) * Math.min(0.045, (need / Math.max(1, grip)) * 0.045);
 
-  if (car.s >= state.route.metres - 12) {
-    car.done = true;
-    car.doneAt = state.elapsed;
-  }
 }
 
 /** Round it goes: the end of somebody's afternoon, and often somebody else's. */
@@ -222,6 +229,49 @@ function spin(state, car) {
   car.slide = 1;
   if (car === player(state)) state.shake = 1;
   state.events.push({ t: 'spin', mine: car === player(state) });
+}
+
+// --- Laps ----------------------------------------------------------------------
+
+/**
+ * Who has crossed the line, and what it took them.
+ *
+ * A car's distance keeps going up for the whole race; the lap it is on is that
+ * distance divided by the length of the circuit, and a lap is finished when that
+ * division rolls over. There is no trigger on the track and nothing to miss:
+ * driving backwards over the line would take the counter down again, which is
+ * exactly what should happen and is not a case anybody had to write.
+ *
+ * The first crossing is the start of the race rather than the end of a lap,
+ * because the grid is behind the line - which is why laps start at minus one.
+ */
+function laps(state) {
+  const total = state.route.metres;
+  for (const car of state.cars) {
+    if (car.done) continue;
+    const now = Math.floor(car.s / total);
+    if (now === car.lap) continue;
+    const was = car.lap;
+    car.lap = now;
+    if (was >= 0 && now > was) {
+      car.last = state.elapsed - car.lapFrom;
+      if (!car.best || car.last < car.best) {
+        car.best = car.last;
+        if (car === player(state)) {
+          state.lapNote = 130;
+          state.events.push({ t: 'best', time: car.last });
+        }
+      } else if (car === player(state)) {
+        state.lapNote = 130;
+        state.events.push({ t: 'lap', time: car.last });
+      }
+    }
+    car.lapFrom = state.elapsed;
+    if (now >= state.laps) {
+      car.done = true;
+      car.doneAt = state.elapsed;
+    }
+  }
 }
 
 // --- The tow -------------------------------------------------------------------
@@ -321,7 +371,7 @@ function think(state, car) {
     const { i } = nodeAt(state.route, car.s);
     // Where the corner is going, a good way ahead: you turn in before you can
     // feel it, which is what makes a line a line rather than a reaction.
-    const soon = state.route.nodes[Math.min(state.route.nodes.length - 1, i + 22)];
+    const soon = nodeStep(state.route, i, 22);
     const apex = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * wide;
     car.line = apex;
 
@@ -360,16 +410,16 @@ function think(state, car) {
  * braking point is, and working it out rather than scripting it is why the same
  * code drives the pass and the boulevard.
  */
-function safeSpeed(state, car) {
-  const nodes = state.route.nodes;
-  const grip = GRIP * state.cfg.grip * AI_GRIP * (car.gripScale || 1);
+function safeSpeed(state, car, share = AI_GRIP) {
+  const rubber = TYRE_FLOOR + (1 - TYRE_FLOOR) * car.tyre;
+  const grip = GRIP * state.cfg.grip * share * rubber * (car.gripScale || 1);
   const brake = BRAKE * 0.82;
   let limit = TOP_SPEED;
-  const from = Math.floor(car.s / SEG);
+  const from = nodeAt(state.route, car.s).i;
   const reach = Math.ceil(AI_LOOK / SEG);
 
   for (let n = 0; n <= reach; n++) {
-    const node = nodes[Math.min(nodes.length - 1, from + n)];
+    const node = nodeStep(state.route, from, n);
     const kappa = Math.abs(node.curve) / SEG;
     if (kappa < 1e-5) continue;
     const corner = Math.sqrt(grip / kappa);
@@ -379,6 +429,44 @@ function safeSpeed(state, car) {
     limit = Math.min(limit, Math.sqrt(corner * corner + 2 * brake * d));
   }
   return limit;
+}
+
+/**
+ * A hand on the wheel: the reference driver.
+ *
+ * The same two sums the rivals do - how fast may I be going for what is coming,
+ * and where is the apex - handed the player's car instead of a rival's. `share`
+ * is how much of the available grip it is willing to use, so it is a dial from
+ * timid to over-committed.
+ *
+ * It exists because three other places wanted a driver and each had written its
+ * own: the attract screen behind the menu, the screenshot tool, and the test
+ * that checks braking later is still quicker. Three copies of a braking point is
+ * three things to get wrong, and the test was the one that mattered - it was
+ * checking its own arithmetic rather than the game's.
+ */
+export function driveLine(state, share = 0.95) {
+  const p = player(state);
+  const route = state.route;
+  const limit = safeSpeed(state, p, share);
+  const soon = nodeStep(route, nodeAt(route, p.s).i, 20);
+
+  // The apex, and then anybody slow enough to be in the way of it.
+  let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
+  for (const other of state.cars) {
+    if (other === p || other.done) continue;
+    const gap = other.s - p.s;
+    if (gap > 2 && gap < 26 && Math.abs(other.x - p.x) < 3.6) {
+      line = other.x + (other.x > 0 ? -3.6 : 3.6);
+    }
+  }
+
+  let mask = p.speed < limit ? BTN.UP : 0;
+  if (p.speed > limit * 1.02) mask |= BTN.DOWN;
+  const off = line - p.x;
+  if (off > 0.5) mask |= BTN.RIGHT;
+  if (off < -0.5) mask |= BTN.LEFT;
+  return mask;
 }
 
 /** Where to go to get round somebody who is slower and in front. */
@@ -430,18 +518,30 @@ function order(state) {
 
 // --- The clock -------------------------------------------------------------------
 
+/**
+ * The gantries, which give the clock its seconds back.
+ *
+ * Held as one absolute distance rather than as a node and a lap, so crossing the
+ * line for the fourth time is the same arithmetic as crossing it for the first
+ * and there is no case where the lap rolled over and the checkpoint did not.
+ */
 function checkpoints(state) {
   const p = player(state);
-  const node = Math.floor(p.s / SEG);
-  const next = (state.checkpoint + 1) * CHECKPOINT_EVERY;
-  if (node < next) return;
-  state.checkpoint++;
-  state.clock += CHECKPOINT_TIME * state.cfg.clock;
-  state.checkNote = 110;
-  state.events.push({ t: 'check', clock: state.clock });
+  const route = state.route;
+  const cps = route.checkpoints;
+  let guard = 0;
+  while (p.s >= state.cpAt && guard++ < 8) {
+    state.checkpoint++;
+    state.clock += CHECKPOINT_TIME * state.cfg.clock * state.rules.clock;
+    state.checkNote = 110;
+    state.events.push({ t: 'check', clock: state.clock });
+    state.cpIndex = (state.cpIndex + 1) % cps.length;
+    const lap = Math.floor(state.cpAt / route.metres) + (state.cpIndex === 0 ? 1 : 0);
+    state.cpAt = lap * route.metres + cps[state.cpIndex] * SEG;
+  }
 }
 
-/** A race, ready to run: a grid, and eight drivers with something to tell apart. */
+/** A race, ready to run: a grid, and a field with something to tell apart. */
 export function makeRace(options) {
   return seedField(makeState(options));
 }

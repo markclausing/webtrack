@@ -22,17 +22,22 @@
  * And the field of view moves with speed. Half of everything that makes this
  * feel quick is in `follow`: the lens goes wide, the camera drops towards the
  * road and pulls in, and the horizon shakes. None of it changes the simulation
- * by a single tick, and all of it changes the game.
+ * by a single tick, and all of it changes the game. What is deliberately not in
+ * here is anything painted on top of the picture rather than into it - there
+ * were streaks up the sides for a while and they read as a fault in the
+ * renderer, because that is what an artefact that does not belong to the world
+ * looks like.
  */
 
 import {
   CAM_AHEAD, CAM_BACK, CAM_BACK_FAST, CAM_HIGH, CAM_HIGH_FAST, CAM_LAG, CHECKPOINT_TIME,
-  DRAW_AHEAD, DRAW_BEHIND, FIELD, FOCAL, FOCAL_FAST, gearAt, GRID_GAP, GRID_OFF, LIGHTS,
+  DRAW_AHEAD, DRAW_BEHIND, FOCAL, FOCAL_FAST, gearAt, GRID_GAP, GRID_OFF, LIGHTS,
   ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TOP_SPEED, WALL_AT,
 } from '../constants.js';
 import { RINGS } from '../game/route.js';
 import {
-  formatClock, formatGap, formatTime, kmh, ordinal, player, progress, racing, worldOf,
+  formatClock, formatGap, formatTime, kmh, lapOf, nodeAt, nodeStep, ordinal, player,
+  progress, racing, worldOf,
 } from '../game/state.js';
 import { drawProp, drawRacer, drawShadow, drawSmoke } from './models.js';
 import { C, THEMES } from './palette.js';
@@ -97,7 +102,7 @@ export class Renderer {
     const cam = this.follow(state, p);
     this.surf += 0.05;
 
-    const theme = this.theme(state, p);
+    const theme = this.theme(nodeAt(state.route, p.s).t >= 0 ? state.route.nodes[nodeAt(state.route, p.s).i].warm : 0);
     // The horizon moves with the camera, so the sky bands move with it. Signed
     // the other way it looks almost right, which is worse than looking wrong.
     const lift = Math.tan(cam.pitch) * rt.focal / SCREEN_H;
@@ -107,10 +112,7 @@ export class Renderer {
     this.ground(state, theme, p);
     this.cars(state, theme, p);
 
-    if (chrome) {
-      this.streaks(p);
-      this.hud(state, p);
-    }
+    if (chrome) this.hud(state, p);
     rt.blit(this.ctx, this.buffer);
   }
 
@@ -181,25 +183,28 @@ export class Renderer {
   }
 
   /**
-   * Which set of colours, blended across the join.
+   * Which set of colours, at a given amount of sea front.
    *
-   * On the grand run the pass becomes the boulevard somewhere in the middle, and
-   * the light has to change with it. Three hundred nodes of blend is about
-   * twenty seconds at speed: long enough that nobody sees it happen, short
-   * enough that you notice afterwards that the sky went warm.
+   * A circuit can be mountain at the start line and coast on the far side of the
+   * lap, so this is asked per node rather than per frame - and cached in nine
+   * buckets, because nine greens that differ by less than the palette can
+   * express are one green wearing nine hats.
+   *
+   * The sky and the haze come from the node the player is on; the ground comes
+   * from the node being drawn. That is what lets the land arrive at the water
+   * over a few hundred metres instead of changing its mind at a line.
    */
-  theme(state, p) {
-    const route = state.route;
+  theme(warm) {
+    if (warm <= 0.02) return THEMES.mountain;
+    if (warm >= 0.98) return THEMES.coast;
+    const key = `blend${Math.round(warm * 8)}`;
+    if (this[key]) return this[key];
+    const t = Math.round(warm * 8) / 8;
     const a = THEMES.mountain;
     const b = THEMES.coast;
-    if (route.seam < 0) return route.nodes[0].kind === 'coast' ? b : a;
-    const at = p.s / SEG;
-    const t = Math.max(0, Math.min(1, (at - (route.seam - 200)) / 340));
-    if (t <= 0) return a;
-    if (t >= 1) return b;
-    const key = `blend${Math.round(t * 8)}`;
-    if (this[key]) return this[key];
-    const out = { sky: a.sky.map(([f, c], i) => [f + (b.sky[i][0] - f) * t, mix(c, b.sky[i][1], t)]) };
+    const out = {
+      sky: a.sky.map(([f, c], i) => [f + (b.sky[i][0] - f) * t, mix(c, b.sky[i][1], t)]),
+    };
     for (const k of ['fog', 'near', 'mid', 'far', 'ridge', 'verge', 'rock', 'tree', 'trunk', 'water']) {
       out[k] = mix(a[k], b[k], t);
     }
@@ -219,17 +224,19 @@ export class Renderer {
   ground(state, theme, p) {
     const rt = this.rt;
     const route = state.route;
-    const nodes = route.nodes;
-    const start = Math.max(0, Math.floor(p.s / SEG) - DRAW_BEHIND);
-    const end = Math.min(nodes.length - 1, start + DRAW_AHEAD);
     const edge = ROAD_HALF + RUMBLE;
+    const first = nodeAt(route, p.s).i - DRAW_BEHIND;
 
-    for (let i = start; i < end; i++) {
-      const a = nodes[i];
-      const b = nodes[i + 1];
-      const away = (i - start) * SEG;
+    for (let step = 0; step < DRAW_AHEAD; step++) {
+      const i = first + step;
+      const a = nodeStep(route, i, 0);
+      const b = nodeStep(route, i, 1);
+      const away = step * SEG;
       const f = fog(away);
       const tint = (colour) => mix(colour, theme.fog, f);
+      // The ground beside this node takes its colours from this node, which is
+      // how a circuit can leave the hills and arrive at the sea inside a lap.
+      const local = a.warm > 0.02 && a.warm < 0.98 ? this.theme(a.warm) : theme;
 
       // Tarmac, in bands of three nodes, which is the oldest trick there is for
       // telling you how fast you are going without a speedometer. The lighter
@@ -294,11 +301,11 @@ export class Renderer {
       // The ground: four bands a side, each drawn less often than the one
       // inside it.
       for (let band = 0; band < BANDS.length; band++) {
-        const [inner, outer, kind, step] = BANDS[band];
-        if (i % step !== 0) continue;
-        const far = nodes[Math.min(nodes.length - 1, i + step)];
+        const [inner, outer, kind, every] = BANDS[band];
+        if (((i % every) + every) % every !== 0) continue;
+        const far = nodeStep(route, i, every);
         for (const side of [-1, 1]) {
-          const colour = bandColour(theme, a, side, kind, i, this.surf);
+          const colour = bandColour(local, a, side, kind, i, this.surf);
           rt.quad(
             a.x + a.nx * side * inner, groundY(a, side, inner), a.z + a.nz * side * inner,
             a.x + a.nx * side * outer, groundY(a, side, outer), a.z + a.nz * side * outer,
@@ -311,8 +318,8 @@ export class Renderer {
 
       // Surf. A white line that shuffles along the waterline, and the single
       // cheapest thing in the game that makes the sea look wet.
-      if (a.g.sea && (i % 2) === 0 && away < 620) {
-        const far = nodes[Math.min(nodes.length - 1, i + 2)];
+      if (a.g.wet > 0.6 && (((i % 2) + 2) % 2) === 0 && away < 620) {
+        const far = nodeStep(route, i, 2);
         const w0 = RINGS[0] + Math.sin(i * 0.7 + this.surf) * 1.6;
         const w1 = RINGS[0] + Math.sin((i + 2) * 0.7 + this.surf) * 1.6;
         rt.quad(
@@ -324,26 +331,30 @@ export class Renderer {
         );
       }
 
-      this.startLine(state, i, a, b, tint);
+      this.startLine(state, a.i, a, b, tint);
 
-      const props = route.props[i];
+      const props = route.props[a.i];
       if (props && away < 760) {
         for (const prop of props) {
           const off = prop.side * prop.off;
           drawProp(rt, prop,
             a.x + a.nx * off, groundY(a, Math.sign(off) || 1, Math.abs(off)), a.z + a.nz * off,
-            tint, theme);
+            tint, local);
         }
       }
     }
   }
 
-  /** The chequered line, and the boxes the grid is painted in. */
-  startLine(state, i, a, b, tint) {
+  /**
+   * The chequered line, and the boxes the grid is painted in.
+   *
+   * The line is node zero, which on a circuit is a place you come back to rather
+   * than a place you leave, so it is drawn every lap. The boxes behind it are
+   * only worth drawing while there is anybody standing on them.
+   */
+  startLine(state, node, a, b, tint) {
     const rt = this.rt;
-    const line = Math.round((30 + (FIELD - 1) * GRID_GAP + 18) / SEG);
-    if (i === line) {
-      // Chequers, across the whole width, in blocks of a metre and a bit.
+    if (node === 0) {
       for (let k = -5; k < 5; k++) {
         const x0 = k * (ROAD_HALF / 5);
         const x1 = (k + 1) * (ROAD_HALF / 5);
@@ -357,21 +368,22 @@ export class Renderer {
       }
       return;
     }
-    // A box for each grid slot, so the grid reads as a grid before the lights go.
-    if (state.tick > 400) return;
-    for (let slot = 0; slot < FIELD; slot++) {
-      const at = Math.round((30 + (FIELD - 1 - slot) * GRID_GAP) / SEG);
-      if (at !== i) continue;
-      const side = slot % 2 === 0 ? -1 : 1;
-      const x0 = side * GRID_OFF - 1.3;
-      const x1 = side * GRID_OFF + 1.3;
-      rt.quad(
-        a.x + a.nx * x0, roadY(a, x0) + 0.045, a.z + a.nz * x0,
-        a.x + a.nx * x1, roadY(a, x1) + 0.045, a.z + a.nz * x1,
-        b.x + b.nx * x1, roadY(b, x1) + 0.045, b.z + b.nz * x1,
-        b.x + b.nx * x0, roadY(b, x0) + 0.045, b.z + b.nz * x0,
-        tint(C.kerbB),
-      );
+    if (!racing(state)) {
+      const count = state.route.nodes.length;
+      for (let slot = 0; slot < state.field; slot++) {
+        const at = Math.round(-(24 + slot * GRID_GAP) / SEG);
+        if (((at % count) + count) % count !== node) continue;
+        const side = slot % 2 === 0 ? -1 : 1;
+        const x0 = side * GRID_OFF - 1.3;
+        const x1 = side * GRID_OFF + 1.3;
+        rt.quad(
+          a.x + a.nx * x0, roadY(a, x0) + 0.045, a.z + a.nz * x0,
+          a.x + a.nx * x1, roadY(a, x1) + 0.045, a.z + a.nz * x1,
+          b.x + b.nx * x1, roadY(b, x1) + 0.045, b.z + b.nz * x1,
+          b.x + b.nx * x0, roadY(b, x0) + 0.045, b.z + b.nz * x0,
+          tint(C.kerbB),
+        );
+      }
     }
   }
 
@@ -401,43 +413,23 @@ export class Renderer {
     return (colour) => mix(colour, theme.fog, f);
   }
 
-  /**
-   * Streaks at the edges of the screen, flat out.
-   *
-   * Four rows of pixels a side, moving outwards. It is not a real effect - there
-   * is no motion blur here and there is not going to be - and it does not need
-   * to be: at three hundred and fifty the eye is already being told it is
-   * travelling by the kerbs and the posts, and this only agrees with them.
-   */
-  streaks(p) {
-    const rush = (p.speed - TOP_SPEED * 0.62) / (TOP_SPEED * 0.38);
-    if (rush <= 0) return;
-    const rt = this.rt;
-    const many = Math.round(Math.min(1, rush) * 7);
-    for (let i = 0; i < many; i++) {
-      const t = (i * 37 + p.s * 6) % 100 / 100;
-      const y = Math.round(SCREEN_H * (0.36 + ((i * 0.19 + t) % 1) * 0.5));
-      const len = 6 + Math.round(t * 22);
-      const colour = shade(C.kerbB, 0.85);
-      rt.rect(0, y, len, 1, colour);
-      rt.rect(SCREEN_W - len, y + 3, len, 1, colour);
-    }
-  }
-
   // --- The panel ------------------------------------------------------------
 
   /**
    * The head-up display.
    *
-   * Five things, in the five places an arcade cabinet put them: where you are in
-   * the race, what the clock says, how fast you are going, what gear that is,
-   * and who is in front. Position is the biggest of them because it is the one
-   * you are actually playing for; the speed is second because it is the one you
-   * glance at most.
+   * Six things, and which six depends on what you came out to do. Qualifying
+   * wants the lap you are on, the lap you just did and the best you have
+   * managed; a grand prix wants where you are, who is in front and how long the
+   * tyres have left. The clock, the speed and the gear are the same either way.
+   *
+   * Everything is in the corner an arcade cabinet put it in, and the biggest
+   * thing on the screen is whichever number you are actually playing for.
    */
   hud(state, p) {
     const rt = this.rt;
     const W = SCREEN_W;
+    const qual = state.mode === 'qual';
 
     // The clock, in the middle, big, and red when it is nearly gone.
     const urgent = state.clock < 10;
@@ -445,20 +437,31 @@ export class Renderer {
     rt.panel(W / 2 - 26, 3, 52, 22, HUD_BACK, HUD_EDGE);
     rt.textMid(formatClock(state.clock), W / 2, 7, clockColour, 2);
 
-    // Elapsed, top left. This is the number the score board will keep.
-    rt.panel(4, 3, 74, 15, HUD_BACK, HUD_EDGE);
-    rt.text('TIME', 8, 7, HUD_DIM);
-    rt.text(formatTime(state.elapsed), 33, 7, HUD_TEXT);
+    // The lap you are on and how long you have been on it, top left.
+    rt.panel(4, 3, 92, 24, HUD_BACK, HUD_EDGE);
+    rt.text('LAP', 8, 6, HUD_DIM);
+    rt.text(`${Math.min(state.laps, lapOf(p) + 1)}/${state.laps}`, 28, 6, HUD_TEXT);
+    rt.text(formatTime(state.elapsed - p.lapFrom), 50, 6, HUD_TEXT);
+    rt.rect(8, 16, 84, 2, shade(HUD_EDGE, 0.6));
+    rt.rect(8, 16, Math.round(84 * progress(state)), 2, GOOD);
+    // What is left of the tyres, under it, and only when there is wear to show.
+    if (state.rules.wear) {
+      rt.text('TYRE', 8, 20, HUD_DIM);
+      rt.rect(30, 21, 62, 4, shade(HUD_EDGE, 0.5));
+      rt.rect(30, 21, Math.round(62 * p.tyre), 4,
+        p.tyre > 0.55 ? GOOD : p.tyre > 0.25 ? WARN : BAD);
+    }
 
-    // Where you are, top right, and the biggest thing on the screen after the
-    // clock. `2ND OF 8` rather than a bare number: the second half is what makes
-    // the first half mean anything on the first lap you ever drive.
-    rt.panel(W - 78, 3, 74, 26, HUD_BACK, state.place === 1 ? WARN : HUD_EDGE);
-    rt.text(ordinal(state.place), W - 74, 6, state.place <= 3 ? WARN : HUD_TEXT, 2);
-    rt.text(`OF ${FIELD}`, W - 34, 12, HUD_DIM);
-    const bar = Math.round(68 * progress(state));
-    rt.rect(W - 75, 24, 68, 2, shade(HUD_EDGE, 0.6));
-    rt.rect(W - 75, 24, bar, 2, GOOD);
+    // Top right: where you are, or what you came out here to beat.
+    rt.panel(W - 84, 3, 80, 26, HUD_BACK,
+      (qual ? p.best && state.lapNote > 0 : state.place === 1) ? WARN : HUD_EDGE);
+    if (qual) {
+      rt.text('BEST', W - 80, 6, HUD_DIM);
+      rt.text(p.best ? formatTime(p.best) : '-:--.--', W - 80, 16, p.best ? WARN : HUD_DIM);
+    } else {
+      rt.text(ordinal(state.place), W - 80, 6, state.place <= 3 ? WARN : HUD_TEXT, 2);
+      rt.text(`OF ${state.field}`, W - 40, 12, HUD_DIM);
+    }
 
     // Speed and gear, bottom right, because it is where a right hand is already
     // pointing. The rev bar above them is the only part of the gearbox that
@@ -478,29 +481,44 @@ export class Renderer {
     rt.text('KM/H', W - 42, SCREEN_H - 12, HUD_DIM);
     rt.text(`${gear}`, W - 18, SCREEN_H - 24, WARN, 2);
 
-    // Who is in front, bottom left, and how long it would take to get there.
-    rt.panel(4, SCREEN_H - 34, 92, 30, HUD_BACK, HUD_EDGE);
-    const ahead = state.order && state.order[p.place - 2];
-    if (ahead) {
-      rt.text('AHEAD', 8, SCREEN_H - 30, HUD_DIM);
-      rt.text(`-${formatGap(p.gap)}`, 44, SCREEN_H - 30, p.gap < 1.2 ? WARN : HUD_TEXT);
-      rt.text(teamName(ahead), 8, SCREEN_H - 20, HUD_TEXT);
+    // Bottom left: the last lap, or the man in front and how long it would take
+    // to get there.
+    rt.panel(4, SCREEN_H - 34, 96, 30, HUD_BACK, HUD_EDGE);
+    if (qual) {
+      rt.text('LAST', 8, SCREEN_H - 30, HUD_DIM);
+      rt.text(p.last ? formatTime(p.last) : '-:--.--', 34, SCREEN_H - 30,
+        p.last && p.last === p.best ? WARN : HUD_TEXT);
+      rt.text(`${state.laps - lapOf(p)} TO GO`, 8, SCREEN_H - 20, HUD_DIM);
     } else {
-      rt.text('LEADING', 8, SCREEN_H - 30, WARN);
-      const behind = state.order && state.order[1];
-      if (behind) rt.text(`+${formatGap(behind.gap)}`, 8, SCREEN_H - 20, HUD_TEXT);
-    }
-    // The tow, when you are in one. It is worth twenty km/h and you should know.
-    if (p.tow > 0.15) {
-      rt.text('TOW', 66, SCREEN_H - 20, (state.tick % 20) < 10 ? WARN : HUD_DIM);
+      const ahead = state.order && state.order[p.place - 2];
+      if (ahead) {
+        rt.text('AHEAD', 8, SCREEN_H - 30, HUD_DIM);
+        rt.text(`-${formatGap(p.gap)}`, 44, SCREEN_H - 30, p.gap < 1.2 ? WARN : HUD_TEXT);
+        rt.text(teamName(ahead), 8, SCREEN_H - 20, HUD_TEXT);
+      } else {
+        rt.text('LEADING', 8, SCREEN_H - 30, WARN);
+        const behind = state.order && state.order[1];
+        if (behind) rt.text(`+${formatGap(behind.gap)}`, 8, SCREEN_H - 20, HUD_TEXT);
+      }
+      // The tow, when you are in one. It is worth twenty km/h and you should know.
+      if (p.tow > 0.15) {
+        rt.text('TOW', 68, SCREEN_H - 20, (state.tick % 20) < 10 ? WARN : HUD_DIM);
+      }
     }
 
     this.cornerSign(state, p);
 
-    if (state.checkNote > 0) {
-      rt.panel(W / 2 - 62, 44, 124, 26, HUD_BACK, GOOD);
+    // The lap you have just done, in the middle, for two seconds.
+    if (state.lapNote > 0) {
+      const fresh = p.last && p.last === p.best;
+      rt.panel(W / 2 - 52, 44, 104, 24, HUD_BACK, fresh ? WARN : HUD_EDGE);
+      rt.textMid(fresh ? 'BEST LAP' : `LAP ${lapOf(p)}`, W / 2, 48, fresh ? WARN : HUD_DIM);
+      rt.textMid(formatTime(p.last), W / 2, 58, HUD_TEXT);
+    } else if (state.checkNote > 0) {
+      rt.panel(W / 2 - 62, 44, 124, 24, HUD_BACK, GOOD);
       rt.textMid('CHECKPOINT', W / 2, 48, GOOD);
-      rt.textMid(`+${Math.round(state.cfg.clock * CHECKPOINT_TIME)} SECONDS`, W / 2, 58, HUD_TEXT);
+      rt.textMid(`+${Math.round(state.cfg.clock * state.rules.clock * CHECKPOINT_TIME)} SECONDS`,
+        W / 2, 58, HUD_TEXT);
     }
 
     if (!racing(state)) this.lights(state);
@@ -509,39 +527,42 @@ export class Renderer {
   /**
    * The board at the side of the road, a corner early.
    *
-   * Looks half a straight up the track for the sharpest thing there, and draws
-   * an arrow for it if it is sharp enough to matter. Everybody who has ever
-   * played one of these reads it without being told, and without it a blind
-   * crest on the pass is a guess rather than a corner.
+   * Looks half a straight up the track for the sharpest thing on it and draws an
+   * arrow for it if it is worth a warning. Everybody who has ever played one of
+   * these reads it without being told, and without it a blind crest on the pass
+   * is a guess rather than a corner.
+   *
+   * An arrow rather than a chevron, and drawn as a solid triangle. A chevron at
+   * this size is five pixels of outline and reads as a smudge; a triangle reads
+   * as a direction from across the room.
    */
   cornerSign(state, p) {
-    const nodes = state.route.nodes;
-    const from = Math.floor(p.s / SEG);
+    const from = nodeAt(state.route, p.s).i;
     let worst = 0;
     let at = 0;
-    for (let n = 6; n < 44; n++) {
-      const node = nodes[Math.min(nodes.length - 1, from + n)];
+    for (let n = 6; n < 46; n++) {
+      const node = nodeStep(state.route, from, n);
       if (Math.abs(node.curve) > Math.abs(worst)) {
         worst = node.curve;
         at = n;
       }
     }
-    if (Math.abs(worst) < 0.03) return;
+    if (Math.abs(worst) < 0.035) return;
+
     const rt = this.rt;
     const hard = Math.abs(worst) > 0.085;
-    const near = at < 22;
+    const near = at < 24;
     const colour = hard ? (near ? BAD : WARN) : HUD_DIM;
-    const wide = hard ? 26 : 18;
-    const x = SCREEN_W / 2 + (worst > 0 ? 34 : -34 - wide);
-    rt.panel(x, 30, wide, 15, HUD_BACK, colour);
-    // One chevron for a corner, two for one that will have you if you ignore it.
-    for (let c = 0; c < (hard ? 2 : 1); c++) {
-      const at = x + 4 + c * 9;
-      for (let i = 0; i < 5; i++) {
-        const step = worst > 0 ? i : 4 - i;
-        rt.rect(at + step, 34 + Math.abs(i - 2), 1, 8 - Math.abs(i - 2) * 2, colour);
-      }
+    const right = worst > 0;
+    const x = SCREEN_W / 2 + (right ? 32 : -50);
+    rt.panel(x, 30, 18, 16, HUD_BACK, colour);
+    // A solid triangle, eight rows, pointing the way the corner goes.
+    for (let row = 0; row < 8; row++) {
+      const len = Math.max(1, Math.round(11 - Math.abs(row - 3.5) * 2.4));
+      rt.rect(right ? x + 3 : x + 15 - len, 34 + row, len, 1, colour);
     }
+    // And a bar behind it for the corners that will actually have you.
+    if (hard) rt.rect(right ? x + 2 : x + 14, 34, 2, 8, colour);
   }
 
   /**
@@ -610,9 +631,12 @@ function lerp(a, b, t) {
  * drew water and still the best way to do it in a renderer with no textures.
  */
 function bandColour(theme, node, side, kind, i, surf) {
-  if (node.g.sea && side < 0 && kind !== 'verge') {
+  if (node.g.wet > 0.5 && side < 0 && kind !== 'verge') {
     const ripple = Math.sin(i * 0.5 + surf * 2) > 0.4;
-    return ripple ? shade(theme.water, 1.18) : theme.water;
+    const water = ripple ? shade(theme.water, 1.18) : theme.water;
+    // Eased in over the last half of the change, so the ground arrives at the
+    // waterline instead of the waterline arriving at the ground.
+    return mix(theme.near, water, Math.min(1, (node.g.wet - 0.5) * 4));
   }
   if (kind === 'verge') return (i % 6) < 3 ? theme.verge : shade(theme.verge, 0.92);
   if (kind === 'near') return (i % 8) < 4 ? theme.near : shade(theme.near, 0.94);

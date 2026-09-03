@@ -1,24 +1,33 @@
 /**
- * The road, and everything standing beside it.
+ * The circuit, and everything standing beside it.
  *
- * Built once, before the run starts, from a seed - so the mountain pass is the
- * same mountain pass every time anybody rides it. That is not a detail: a score
- * board of times is worthless if the road is different on each attempt, and a
- * road generated as you ride it cannot be learned, which is the only thing that
- * makes a time come down on the tenth run.
+ * Built once, before the race starts, from a seed - so the mountain circuit is
+ * the same mountain circuit every time anybody drives it. That is not a detail:
+ * a board of lap times is worthless if the track was different, and a track
+ * generated as you drive it cannot be learned, which is the only thing that
+ * makes a time come down on the tenth attempt.
  *
- * A route is a list of nodes six metres apart. Each one knows where it is in the
- * world, which way it is pointing, and how high the ground is on either side at
- * three distances out. That last part is what the scenery is: there are no
- * models of hills anywhere, only the ground rising away from the tarmac, and a
- * mountain is what you get when it rises a long way.
+ * It closes. That is the whole difference from what was here before, and it is
+ * the reason for the shape of this file. You cannot make a road that returns to
+ * where it started by walking forwards and turning: the total turning has to
+ * come to exactly two pi and the position has to land back on itself, and
+ * nudging a heading until it does is a fight you lose. So it is built the other
+ * way round - a closed loop first, laid out as control points around a circle,
+ * and the headings and curvatures read back off it afterwards. Closure is then
+ * not something to be achieved; it is a property of the thing that was drawn.
+ *
+ * Everything that varies around the lap is made of harmonics of the lap, for the
+ * same reason: a sine of the lap position comes back to where it started
+ * because that is what a sine does. The hills, the wobble in the hillsides and
+ * the change from mountain to sea front are all sums of those, so there is never
+ * a seam at the start line - the place the player looks at most.
  *
  * Nothing here is a billboard. A palm tree is three polygons standing in the
- * world, and if you ride round a bend you see it from the side, because it is
- * actually there. Everything else follows from that.
+ * world, and if you go round a bend you see it from the side, because it is
+ * actually there.
  */
 
-import { CHECKPOINT_EVERY } from '../constants.js';
+import { CHECKPOINT_EVERY, SEG } from '../constants.js';
 
 /**
  * How far out, in metres from the centreline, each ground ring sits.
@@ -29,7 +38,10 @@ import { CHECKPOINT_EVERY } from '../constants.js';
  */
 export const RINGS = [15.6, 32, 95, 340];
 
-/** Deterministic and local: route building must not touch the simulation's rng. */
+/** Where the water is, for the circuits that have any. Everything else is above it. */
+export const SEA = -6;
+
+/** Deterministic and local: track building must not touch the simulation's rng. */
 function seeded(seed) {
   let s = seed | 0;
   return () => {
@@ -41,175 +53,338 @@ function seeded(seed) {
   };
 }
 
-/**
- * A run of road with one character to it.
- *
- * `curve` is radians of heading per node and `slope` is metres of climb per
- * node; both are targets that the builder eases into rather than steps to, or
- * the road would have corners in it in the geometric sense.
- */
-function sections(kind, rnd) {
-  const out = [];
-  const push = (n, curve, slope, tag = '') => out.push({ n, curve, slope, tag });
+const lerp = (a, b, t) => a + (b - a) * t;
 
-  if (kind === 'mountain') {
-    // Out of the valley on a straight, so the first thing anybody does is get on
-    // the throttle rather than wonder which way the road goes. It is also the
-    // grid, and a grid wants somewhere for eight cars to sort themselves out.
-    push(80, 0, 0.008, 'start');
-    for (let i = 0; i < 8; i++) {
-      const dir = rnd() < 0.5 ? -1 : 1;
-      const shape = rnd();
-      // Three kinds of corner, and they are three different gears. A hairpin is
-      // the one that decides the lap: everybody arrives at it far too fast and
-      // whoever gets on the power first leaves it in front.
-      const hard = shape < 0.3 ? 0.115 : shape < 0.62 ? 0.068 : 0.032;
-      push(18 + Math.floor(rnd() * 14), dir * hard, 0.05 + rnd() * 0.05);
-      push(24 + Math.floor(rnd() * 34), dir * 0.006, 0.02);
-      push(20 + Math.floor(rnd() * 22), -dir * (hard * 0.75), -0.02 + rnd() * 0.05);
-      // And a straight, because a corner is only worth anything if there is
-      // somewhere to use what you gained in it.
-      push(44 + Math.floor(rnd() * 62), 0, -0.06 + rnd() * 0.1);
+/**
+ * A wobble that comes back to where it started.
+ *
+ * A sum of harmonics of the lap: whatever it decides at the start line it
+ * decides again a lap later, exactly, because sin(2 pi) is sin(0). Every varying
+ * quantity in this file is one of these, which is why there is no seam anywhere
+ * and no code that goes looking for one.
+ *
+ * Normalised to roughly minus one to one so the amplitudes below mean metres.
+ */
+function loopNoise(rnd, harmonics = 5) {
+  const parts = [];
+  let scale = 0;
+  for (let h = 1; h <= harmonics; h++) {
+    const amp = (rnd() * 2 - 1) / h;
+    scale += Math.abs(amp);
+    parts.push({ h, amp, phase: rnd() * Math.PI * 2 });
+  }
+  return (t) => {
+    let sum = 0;
+    for (const p of parts) sum += p.amp * Math.sin(p.h * t * Math.PI * 2 + p.phase);
+    return sum / (scale || 1);
+  };
+}
+
+/**
+ * The bones of the circuit: a ring of points at uneven angles and uneven radii.
+ *
+ * The unevenness is the design. Two points close together in angle with
+ * different radii make a corner; a wide angular gap between two at a similar
+ * radius makes a straight. Squaring the random gap is what gives a handful of
+ * long gaps and a lot of short ones, which is the shape of every real circuit -
+ * three or four straights that matter and a dozen corners between them.
+ */
+function controlPoints(rnd, count, radius) {
+  const gaps = [];
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    const gap = 0.3 + rnd() ** 2 * 2.6;
+    gaps.push(gap);
+    total += gap;
+  }
+  const pts = [];
+  let angle = 0;
+  for (let i = 0; i < count; i++) {
+    const r = radius * (0.56 + rnd() * 0.66);
+    // x = r sin, z = r cos with the angle increasing puts the outside of the
+    // loop on the left of the car, which is where the sea has to be.
+    pts.push({ x: Math.sin(angle) * r, z: Math.cos(angle) * r });
+    angle += (gaps[i] / total) * Math.PI * 2;
+  }
+  return pts;
+}
+
+/** Catmull-Rom through four points: the curve that passes through its controls. */
+function spline(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const at = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * t
+    + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+  return { x: at(p0.x, p1.x, p2.x, p3.x), z: at(p0.z, p1.z, p2.z, p3.z) };
+}
+
+/** The control ring, as a dense closed polyline. */
+function sampleLoop(pts, per = 48) {
+  const n = pts.length;
+  const at = (i) => pts[((i % n) + n) % n];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < per; k++) {
+      out.push(spline(at(i - 1), at(i), at(i + 1), at(i + 2), k / per));
     }
-    // Down the other side, quick, which is where the time is and where the
-    // brakes are asked the hardest question of the day.
-    push(90, 0.004, -0.09);
-    push(46, -0.052, -0.05);
-    push(120, 0.014, -0.05);
-  } else {
-    // The sea front. Long, open and almost flat: the curves are there to stop
-    // you holding the throttle wide, not to catch you out.
-    push(80, 0, 0, 'start');
-    for (let i = 0; i < 7; i++) {
-      const dir = rnd() < 0.5 ? -1 : 1;
-      // Flat out, flat out, and then one that is not.
-      push(80 + Math.floor(rnd() * 80), dir * (0.003 + rnd() * 0.01), (rnd() - 0.5) * 0.02);
-      push(26 + Math.floor(rnd() * 22), -dir * (0.045 + rnd() * 0.03), (rnd() - 0.5) * 0.03);
-      push(60 + Math.floor(rnd() * 70), 0, (rnd() - 0.5) * 0.02);
-    }
-    push(140, 0.005, 0);
   }
   return out;
 }
 
 /**
- * The ground either side, as absolute heights at the three rings.
+ * The polyline again, with its points exactly one node apart.
  *
- * A mountain road has a cut face on the inside of the hill and nothing at all on
- * the outside, and which side is which changes as the road turns - so it is
- * worked out per node from the heading, not fixed per route. The coast is
- * simpler and more absolute: the sea is at zero, always, and the road is a
- * shelf above it.
+ * The spacing is the lap length divided by a whole number of nodes rather than
+ * six metres exactly, so the last node is the same distance from the first as
+ * every other pair. Six metres and a remainder would put one short segment at
+ * the start line, which is a bump you would feel on every lap.
  */
-function ground(kind, i, y, curve, rnd, noise) {
-  const wob = (a, b) => noise(i * a) * b;
-  if (kind === 'mountain') {
-    // Uphill side and downhill side, swapping with the direction of the bend.
-    const lean = Math.max(-1, Math.min(1, curve * 26));
-    const cliff = [1 + lean, 1 - lean];   // left, right multipliers
-    return {
-      l: [y + 0.6 + wob(0.7, 1.4), y + 5 * cliff[0] + wob(0.3, 7), y + 34 * cliff[0] + wob(0.11, 40)],
-      r: [y + 0.6 + wob(0.9, 1.4), y + 5 * cliff[1] + wob(0.37, 7), y + 34 * cliff[1] + wob(0.13, 40)],
-      far: [y + 120 + noise(i * 0.05) * 190, y + 120 + noise(i * 0.043 + 9) * 190],
+function resample(poly, seg) {
+  const n = poly.length;
+  const run = [0];
+  for (let i = 1; i <= n; i++) {
+    const a = poly[i - 1];
+    const b = poly[i % n];
+    run.push(run[i - 1] + Math.hypot(b.x - a.x, b.z - a.z));
+  }
+  const total = run[n];
+  const count = Math.max(240, Math.round(total / seg));
+  const step = total / count;
+  const out = [];
+  let at = 0;
+  for (let i = 0; i < count; i++) {
+    const want = i * step;
+    while (at < n - 1 && run[at + 1] < want) at++;
+    const span = run[at + 1] - run[at] || 1;
+    const t = (want - run[at]) / span;
+    const a = poly[at];
+    const b = poly[(at + 1) % n];
+    out.push({ x: lerp(a.x, b.x, t), z: lerp(a.z, b.z, t) });
+  }
+  return out;
+}
+
+/**
+ * The sharpest corner on the loop, in radians per node.
+ *
+ * A curve through control points does whatever the control points ask for, and
+ * two of them close together at different radii ask for a hairpin tighter than
+ * anything a car with a wing has ever been round - thirty-seven km/h, on one
+ * circuit, which is not a corner, it is a wall with a gap in it.
+ */
+function sharpest(ring) {
+  const n = ring.length;
+  const at = (i) => ring[((i % n) + n) % n];
+  let worst = 0;
+  let prev = Math.atan2(at(1).x - at(0).x, at(1).z - at(0).z);
+  for (let i = 1; i <= n; i++) {
+    const now = Math.atan2(at(i + 1).x - at(i).x, at(i + 1).z - at(i).z);
+    worst = Math.max(worst, Math.abs(turn(prev, now)));
+    prev = now;
+  }
+  return worst;
+}
+
+/**
+ * Each point pulled a little towards the average of its neighbours.
+ *
+ * Closed, so the start line is smoothed exactly like everywhere else. Repeated,
+ * it takes the spikes out of the curvature and leaves the shape of the circuit
+ * alone - a hairpin becomes a slow corner rather than becoming a straight.
+ */
+function relax(ring, amount) {
+  const n = ring.length;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = ring[(i - 1 + n) % n];
+    const b = ring[i];
+    const c = ring[(i + 1) % n];
+    out[i] = {
+      x: lerp(b.x, (a.x + c.x) / 2, amount),
+      z: lerp(b.z, (a.z + c.z) / 2, amount),
     };
   }
-  // Coast: sea to the left of the boulevard, town rising to the right.
-  const shelf = 4 + noise(i * 0.09) * 3;
-  return {
-    l: [y - 1.4 - noise(i * 0.3) * 0.8, y - shelf, 0],
-    r: [y + 0.5 + wob(1.1, 0.7), y + 2.2 + wob(0.4, 3), y + 9 + wob(0.16, 16)],
-    far: [0, y + 40 + noise(i * 0.05 + 4) * 60],
-    sea: true,
-  };
+  return out;
 }
 
-/** Smooth-ish value noise, so hillsides roll instead of jittering. */
-function noiseFn(rnd) {
-  const table = new Float32Array(512);
-  for (let i = 0; i < table.length; i++) table[i] = rnd() * 2 - 1;
-  return (x) => {
-    const f = Math.floor(x);
-    const t = x - f;
-    const a = table[((f % 512) + 512) % 512];
-    const b = table[(((f + 1) % 512) + 512) % 512];
-    const s = t * t * (3 - 2 * t);
-    return a + (b - a) * s;
-  };
+/** Two angles apart, the short way round. Used everywhere a heading is compared. */
+export function turn(from, to) {
+  let d = to - from;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
 }
 
 /**
- * Builds one leg: the pass, or the sea front.
+ * The ground either side, as absolute heights at the three rings.
  *
- * @param {'mountain'|'coast'} kind
- * @param {number} seed
+ * Two profiles, blended by `warm`. The mountain one has a cut face on the inside
+ * of the hill and nothing at all on the outside, and which side is which changes
+ * as the track turns. The sea front one is simpler and more absolute: the water
+ * is at SEA, always, and the track is a shelf a few metres above it with the
+ * town rising away on the other side.
+ *
+ * Blending them rather than switching is what lets one circuit be both, and is
+ * why the grand circuit can climb out of the hills and arrive at the coast
+ * without a line across the world where it changes its mind.
  */
-export function buildLeg(kind, seed) {
-  const rnd = seeded(seed);
-  const noise = noiseFn(seeded(seed ^ 0x9e37));
-  const plan = sections(kind, rnd);
+function ground(y, curve, warm, wob) {
+  const lean = Math.max(-1, Math.min(1, curve * 22));
+  const mL = [y + 0.6 + wob(0.7) * 1.4, y + 5 * (1 + lean) + wob(0.3) * 7,
+    y + 34 * (1 + lean) + wob(0.11) * 40];
+  const mR = [y + 0.6 + wob(0.9) * 1.4, y + 5 * (1 - lean) + wob(0.37) * 7,
+    y + 34 * (1 - lean) + wob(0.13) * 40];
+  const mFar = [y + 120 + wob(0.05) * 190, y + 120 + wob(0.043) * 190];
 
-  const nodes = [];
-  let a = 0;          // heading, radians, 0 = down +z
-  let x = 0;
-  let y = kind === 'mountain' ? 40 : 7;
-  let z = 0;
-  let curve = 0;
-  let slope = 0;
+  const cL = [SEA, SEA, SEA];
+  const cR = [y + 0.5 + wob(1.1) * 0.7, y + 2.2 + wob(0.4) * 3, y + 9 + wob(0.16) * 16];
+  const cFar = [SEA, y + 40 + wob(0.05) * 60];
 
-  for (const part of plan) {
-    for (let i = 0; i < part.n; i++) {
-      // Eased rather than stepped: a road that changed curvature instantly would
-      // have a kink you could see and a bump you could feel.
-      curve += (part.curve - curve) * 0.09;
-      slope += (part.slope - slope) * 0.07;
-      a += curve;
-      const n = nodes.length;
-      const dx = Math.sin(a);
-      const dz = Math.cos(a);
-      x += dx * 6;
-      z += dz * 6;
-      y += slope * 6;
-      // The sea front stays a sea front. Left to wander it climbs sixteen
-      // metres above the water inside a kilometre, and from a camera two and a
-      // half metres up you then spend the lap looking down a cliff at a beach
-      // with no sea on the other side of it.
-      if (kind === 'coast') y = Math.max(4.5, Math.min(9.5, y));
+  const mix3 = (a, b) => [lerp(a[0], b[0], warm), lerp(a[1], b[1], warm), lerp(a[2], b[2], warm)];
+  return {
+    l: mix3(mL, cL),
+    r: mix3(mR, cR),
+    far: [lerp(mFar[0], cFar[0], warm), lerp(mFar[1], cFar[1], warm)],
+    // How much of this node is sea front rather than mountain. Used for the
+    // colour of the water and for whether there is any.
+    wet: warm,
+  };
+}
 
-      nodes.push({
-        i: n,
-        x, y, z,
-        a,
-        dx, dz,
-        nx: dz, nz: -dx,          // the right-hand vector, in the ground plane
-        curve,
-        slope,
-        // Banking, into the corner. Small: this is a circuit, not a bowl.
-        bank: -curve * 3.2,
-        g: ground(kind, n, y, curve, rnd, noise),
-      });
-    }
+/** The three circuits. `warm` is 0 for mountain, 1 for sea front. */
+const CIRCUITS = {
+  pass: {
+    seed: 0x2c19, points: 15, radius: 640, climb: 54, tightest: 0.15,
+    warm: () => 0,
+  },
+  coast: {
+    seed: 0x51a7, points: 13, radius: 780, climb: 6, tightest: 0.082,
+    warm: () => 1,
+  },
+  grand: {
+    seed: 0x77b3, points: 19, radius: 980, climb: 46, tightest: 0.125,
+    // Half the lap in the hills and half of it beside the water, with the start
+    // line in the mountains. Cosine rather than a step, because the terrain has
+    // to arrive at the sea rather than fall into it.
+    warm: (t) => 0.5 - 0.5 * Math.cos(t * Math.PI * 2),
+  },
+};
+
+export function buildRoute(key) {
+  const plan = CIRCUITS[key] || CIRCUITS.pass;
+  const rnd = seeded(plan.seed);
+  const climb = loopNoise(seeded(plan.seed ^ 0x9e37), 4);
+  const roll = loopNoise(seeded(plan.seed ^ 0x1d3f), 7);
+  const wobble = loopNoise(seeded(plan.seed ^ 0x51ed), 6);
+
+  // Drawn, then relaxed until nothing on it is sharper than this circuit is
+  // allowed to be. Forty passes is plenty and the loop stops as soon as it can;
+  // the alternative - rejecting seeds until one behaves - throws away a good
+  // circuit because of one corner on it.
+  let ring = resample(sampleLoop(controlPoints(rnd, plan.points, plan.radius)), SEG);
+  for (let pass = 0; pass < 40 && sharpest(ring) > plan.tightest; pass++) {
+    ring = resample(relax(ring, 0.5), SEG);
+  }
+  const count = ring.length;
+  const at = (i) => ring[((i % count) + count) % count];
+
+  // Heading first, kept continuous around the lap so that interpolating between
+  // two nodes never has to think about where the angle wrapped.
+  const heading = new Float64Array(count);
+  let a = Math.atan2(at(1).x - at(0).x, at(1).z - at(0).z);
+  heading[0] = a;
+  for (let i = 1; i < count; i++) {
+    const want = Math.atan2(at(i + 1).x - at(i).x, at(i + 1).z - at(i).z);
+    a += turn(a, want);
+    heading[i] = a;
   }
 
-  return { kind, nodes, seed, props: scatter(kind, nodes, seeded(seed ^ 0x51ed)) };
+  // Then the hills, and a check that none of them is a wall. A sum of harmonics
+  // can produce a one in three if the phases line up, and a one in three is not
+  // a gradient, it is a ramp.
+  const height = new Float64Array(count);
+  let steepest = 0;
+  for (let pass = 0; pass < 6; pass++) {
+    const scale = plan.climb / (1 + pass * 0.55);
+    steepest = 0;
+    for (let i = 0; i < count; i++) {
+      const t = i / count;
+      const warm = plan.warm(t);
+      height[i] = 5 + (climb(t) + 1) * 0.5 * scale * (1 - warm) + roll(t) * 2.4;
+    }
+    for (let i = 0; i < count; i++) {
+      const rise = Math.abs(height[(i + 1) % count] - height[i]) / SEG;
+      steepest = Math.max(steepest, rise);
+    }
+    if (steepest <= 0.13) break;
+  }
+
+  const nodes = [];
+  for (let i = 0; i < count; i++) {
+    const t = i / count;
+    const warm = plan.warm(t);
+    const curve = turn(heading[i], heading[(i + 1) % count]);
+    const y = height[i];
+    const wob = (freq) => wobble((t * count * freq) % 1);
+    nodes.push({
+      i,
+      x: at(i).x,
+      y,
+      z: at(i).z,
+      a: heading[i],
+      dx: Math.sin(heading[i]),
+      dz: Math.cos(heading[i]),
+      nx: Math.cos(heading[i]),      // the right-hand vector, in the ground plane
+      nz: -Math.sin(heading[i]),
+      curve,
+      slope: (height[(i + 1) % count] - y) / SEG,
+      // Banking, into the corner. Small: this is a circuit, not a bowl.
+      bank: -curve * 3.2,
+      warm,
+      g: ground(y, curve, warm, wob),
+    });
+  }
+
+  return {
+    key,
+    nodes,
+    props: scatter(nodes, seeded(plan.seed ^ 0x3a71)),
+    length: count,
+    metres: count * SEG,
+    steepest,
+    // Which nodes stop the clock. The line, and one on the far side of the lap,
+    // so a long circuit is not one enormous held breath.
+    checkpoints: checkpointsFor(count),
+  };
+}
+
+/** The nodes that give time back, always including the start line itself. */
+function checkpointsFor(count) {
+  const every = Math.max(CHECKPOINT_EVERY, Math.ceil(count / 3));
+  const out = [0];
+  for (let at = every; at < count - every * 0.4; at += every) out.push(at);
+  return out;
 }
 
 /**
- * Everything standing beside the road.
+ * Everything standing beside the track.
  *
  * Placed on the node it belongs to and drawn when that node is drawn, which
- * means the scenery is culled by the same distance test as the road and costs
- * nothing to sort. Density is deliberately uneven: a run of bare road makes the
+ * means the scenery is culled by the same distance test as the track and costs
+ * nothing to sort. Density is deliberately uneven: a run of bare verge makes the
  * next stand of pines look like something.
  */
-function scatter(kind, nodes, rnd) {
+function scatter(nodes, rnd) {
   const out = nodes.map(() => null);
+  const count = nodes.length;
   const add = (i, prop) => {
-    if (i < 0 || i >= nodes.length) return;
-    (out[i] ||= []).push(prop);
+    const at = ((i % count) + count) % count;
+    (out[at] ||= []).push(prop);
   };
 
-  for (let i = 4; i < nodes.length; i++) {
+  for (let i = 0; i < count; i++) {
     const n = nodes[i];
+    const warm = n.warm;
 
     // Marker posts, both sides, every twenty-four metres, everywhere.
     //
@@ -223,151 +398,60 @@ function scatter(kind, nodes, rnd) {
       add(i, { kind: 'post', side: 1, off: 16.4, s: 1, r: 0 });
     }
 
-    if (kind === 'mountain') {
+    if (warm < 0.55) {
       // Trees on the low side, rock on the high side: that is what a cut through
-      // a hill looks like, and it also tells you which way the road is about to
-      // go before you can see the bend.
+      // a hill looks like, and it also tells you which way the track is about to
+      // go before you can see the corner.
       const low = n.g.l[1] < n.g.r[1] ? -1 : 1;
-      if (rnd() < 0.5) {
+      const many = 1 - warm;
+      if (rnd() < 0.5 * many) {
         add(i, { kind: 'pine', side: low, off: 19 + rnd() * 26, s: 0.8 + rnd() * 0.9, r: rnd() * 6.28 });
       }
-      if (rnd() < 0.34) {
+      if (rnd() < 0.34 * many) {
         add(i, { kind: 'pine', side: low, off: 34 + rnd() * 55, s: 0.9 + rnd() * 1.2, r: rnd() * 6.28 });
       }
-      if (rnd() < 0.2) {
+      if (rnd() < 0.2 * many) {
         add(i, { kind: 'rock', side: -low, off: 18 + rnd() * 9, s: 0.7 + rnd() * 1.4, r: rnd() * 6.28 });
       }
-      if (rnd() < 0.06) {
+      if (rnd() < 0.06 * many) {
         add(i, { kind: 'crag', side: -low, off: 30 + rnd() * 40, s: 2 + rnd() * 4, r: rnd() * 6.28 });
       }
-    } else {
-      if (i % 7 === 0) {
+    }
+    if (warm > 0.45) {
+      const many = warm;
+      if (i % 7 === 0 && rnd() < many) {
         add(i, { kind: 'palm', side: -1, off: 17.5 + rnd() * 2, s: 0.9 + rnd() * 0.5, r: rnd() * 6.28 });
       }
-      if (rnd() < 0.3) {
+      if (rnd() < 0.3 * many) {
         add(i, { kind: 'palm', side: 1, off: 18 + rnd() * 6, s: 0.9 + rnd() * 0.6, r: rnd() * 6.28 });
       }
-      if (rnd() < 0.13) {
+      if (rnd() < 0.13 * many) {
         add(i, { kind: 'block', side: 1, off: 38 + rnd() * 30, s: 1 + rnd() * 2.6, r: rnd() * 0.6 - 0.3 });
       }
-      // Out on the water. Far enough that they read as scenery, near enough
-      // that you can tell a hull from a buoy.
-      if (rnd() < 0.05) {
+      // Out on the water. Far enough that they read as scenery, near enough that
+      // you can tell a hull from a buoy.
+      if (rnd() < 0.05 * many) {
         add(i, { kind: 'boat', side: -1, off: 120 + rnd() * 260, s: 1.4 + rnd() * 2.6, r: rnd() * 6.28 });
       }
-      if (rnd() < 0.05) {
+      if (rnd() < 0.05 * many) {
         add(i, { kind: 'buoy', side: -1, off: 45 + rnd() * 70, s: 1, r: 0 });
       }
     }
+  }
 
-    // Grandstands over the start, on both sides, because a grid with nobody
-    // watching it is not a grid, it is a car park.
-    if (i > 6 && i < 30 && i % 4 === 0) {
-      add(i, { kind: 'stand', side: -1, off: 24, s: 1, r: 0 });
-      add(i, { kind: 'stand', side: 1, off: 24, s: 1, r: 0 });
-    }
-    // The gantry is the checkpoint. It is placed on the node the clock is
-    // actually reading, not near it, because a gate you go under half a second
-    // before the seconds arrive is a gate that is lying to you.
-    if (i > 0 && i % CHECKPOINT_EVERY === 0) {
-      add(i, { kind: 'arch', side: 0, off: 0, s: 1, r: 0 });
-    }
+  // The grandstands go where the grid is, which on a circuit is where the start
+  // line is, which is node zero - and node zero is now a place you come back to
+  // twice a lap rather than somewhere you leave once.
+  for (let i = -22; i < 12; i += 4) {
+    add(i, { kind: 'stand', side: -1, off: 24, s: 1, r: 0 });
+    add(i, { kind: 'stand', side: 1, off: 24, s: 1, r: 0 });
+  }
+
+  // The gantry is the checkpoint. It is placed on the node the clock is actually
+  // reading, not near it, because a gate you go under half a second before the
+  // seconds arrive is a gate that is lying to you.
+  for (const at of checkpointsFor(count)) {
+    add(at, { kind: 'arch', side: 0, off: 0, s: 1, r: 0 });
   }
   return out;
 }
-
-/**
- * A whole route, one leg or two.
- *
- * The grand tour is the pass and the sea front joined end to end, with the
- * second leg's coordinates carried on from where the first stopped - so it is
- * one continuous world and one continuous time, not two races with a loading
- * screen between them.
- */
-export function buildRoute(key) {
-  const legs = key === 'coast' ? [['coast', 0x51a7]]
-    : key === 'pass' ? [['mountain', 0x2c19]]
-      : [['mountain', 0x2c19], ['coast', 0x51a7]];
-
-  const nodes = [];
-  const props = [];
-  let ox = 0;
-  let oz = 0;
-  let oy = 0;
-  let oa = 0;
-
-  for (const [kind, seed] of legs) {
-    const leg = buildLeg(kind, seed);
-    const cos = Math.cos(oa);
-    const sin = Math.sin(oa);
-    for (const n of leg.nodes) {
-      // Rotated and shifted onto the end of what came before, so the seam is a
-      // piece of road like any other rather than a jump.
-      const x = n.x * cos + n.z * sin;
-      const z = -n.x * sin + n.z * cos;
-      const a = n.a + oa;
-      nodes.push({
-        ...n,
-        i: nodes.length,
-        x: ox + x,
-        z: oz + z,
-        y: oy + (n.y - leg.nodes[0].y),
-        a,
-        dx: Math.sin(a),
-        dz: Math.cos(a),
-        nx: Math.cos(a),
-        nz: -Math.sin(a),
-        g: {
-          ...n.g,
-          l: n.g.l.map((h) => h + oy - leg.nodes[0].y),
-          r: n.g.r.map((h) => h + oy - leg.nodes[0].y),
-          far: n.g.far.map((h) => (n.g.sea && h === 0 ? 0 : h + oy - leg.nodes[0].y)),
-        },
-        kind,
-      });
-    }
-    props.push(...leg.props);
-    const last = nodes[nodes.length - 1];
-    ox = last.x;
-    oz = last.z;
-    oy = last.y;
-    oa = last.a;
-  }
-
-  // The coast leg puts the sea at zero, and the pass leg ends wherever it ends.
-  // Joining them would leave the boulevard forty metres up a cliff, so the sea
-  // is told where the road actually is.
-  const seaAt = nodes.find((n) => n.kind === 'coast');
-  const sea = seaAt ? seaAt.y - 4.5 : 0;
-  for (const n of nodes) {
-    if (!n.g.sea) continue;
-    // The waterline sits just outside the barrier: a few metres of sand off the
-    // kerb and then sea all the way to the horizon.
-    //
-    // That is a lie about geography and the right call about a video game. From
-    // a camera two and a half metres above the tarmac, water that starts thirty
-    // metres out is a blue stripe three pixels tall near the horizon - correct,
-    // and worth nothing. Bringing it in to the edge of the run-off is what makes
-    // the boulevard a sea front rather than a road with a rumour of a sea.
-    n.g.l = [sea, sea, sea];
-    n.g.far = [sea, n.g.far[1]];
-  }
-
-  // Where the pass becomes the boulevard, so the sky can change its mind
-  // gradually rather than between one node and the next.
-  let seam = -1;
-  for (let i = 1; i < nodes.length; i++) {
-    if (nodes[i].kind !== nodes[i - 1].kind) { seam = i; break; }
-  }
-
-  return {
-    key,
-    nodes,
-    props,
-    sea,
-    seam,
-    length: nodes.length,
-    metres: nodes.length * 6,
-  };
-}
-

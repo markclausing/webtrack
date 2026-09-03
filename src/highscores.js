@@ -30,13 +30,23 @@
  * five do: all of them live on the same github.io domain, and one key would mean
  * lap times landing in a shooter's table.
  */
-export const KEY = 'webtrack.highscores.v2';
+export const KEY = 'webtrack.highscores.v3';
 
+export const MODE_KEYS = ['qual', 'gp'];
 export const ROUTE_KEYS = ['pass', 'coast', 'grand'];
 export const TIERS = ['easy', 'normal', 'hard'];
 
-/** The lists, keyed `pass:hard`. */
-export const LEVELS = ROUTE_KEYS.flatMap((r) => TIERS.map((t) => `${r}:${t}`));
+/**
+ * The lists, keyed `qual:pass:hard`.
+ *
+ * Eighteen of them, which sounds like a lot for ten rows each and is the right
+ * number: a qualifying lap on an empty circuit and a race time over three laps
+ * are not the same quantity, and putting them in one table would mean a board on
+ * which the top row was always a qualifying lap and nobody could see why.
+ */
+export const LEVELS = MODE_KEYS.flatMap(
+  (m) => ROUTE_KEYS.flatMap((r) => TIERS.map((t) => `${m}:${r}:${t}`)),
+);
 export const TABLE_SIZE = 10;
 export const NAME_LENGTH = 3;
 
@@ -78,10 +88,10 @@ export function cleanEntry(raw) {
     id: String(raw.id || '').slice(0, 40) || makeId(),
     name: cleanName(raw.name),
     time,
-    // Where you finished. Not part of the ordering, and on the board because it
-    // is the other half of the story: two drivers on the same time did not have
-    // the same race, and a quick time from the back of a beaten field is a
-    // different afternoon from a slow one spent leading.
+    // Where you finished, or 1 for a qualifying lap where there was nobody to
+    // finish in front of. Not part of the ordering, and on the board because it
+    // is the other half of the story: two drivers on the same race time did not
+    // have the same race.
     place: Number.isFinite(place) ? Math.max(1, Math.min(99, place)) : 99,
     metres: clampNumber(raw.metres, 0, MAX_METRES),
     at: Number.isFinite(at) && at > 0 ? at : Date.now(),
@@ -187,16 +197,17 @@ export function without(board, ids) {
   return merge({}, out);
 }
 
-/** `('pass', 'hard')` -> `'pass:hard'`, and anything unrecognised -> the first list. */
-export function levelOf(route, tier = 'normal') {
-  const key = String(route).includes(':') ? String(route) : `${route}:${tier}`;
+/** `('gp', 'pass', 'hard')` -> `'gp:pass:hard'`, and anything unknown -> the first list. */
+export function levelOf(mode, route = 'pass', tier = 'normal') {
+  const key = String(mode).includes(':') ? String(mode) : `${mode}:${route}:${tier}`;
   return LEVELS.includes(key) ? key : LEVELS[0];
 }
 
-/** Which route and setting a list is for, for putting on screen. */
+/** Which mode, circuit and setting a list is for, for putting on screen. */
 export function partsOf(key) {
-  const [route, tier] = String(key).split(':');
+  const [mode, route, tier] = String(key).split(':');
   return {
+    mode: MODE_KEYS.includes(mode) ? mode : 'gp',
     route: ROUTE_KEYS.includes(route) ? route : 'pass',
     tier: TIERS.includes(tier) ? tier : 'normal',
   };
@@ -244,27 +255,27 @@ export class Highscores {
     } catch { /* private mode: the board just will not stick */ }
   }
 
-  table(route, tier) {
-    return this.tables[levelOf(route, tier)] || [];
+  table(mode, route, tier) {
+    return this.tables[levelOf(mode, route, tier)] || [];
   }
 
-  qualifies(route, tier, entry) {
-    return qualifies(this.table(route, tier), entry);
+  qualifies(mode, route, tier, entry) {
+    return qualifies(this.table(mode, route, tier), entry);
   }
 
   /** Adds a run and returns where it landed, or 0 if it missed the board. */
-  add(route, tier, entry) {
+  add(mode, route, tier, entry) {
     const clean = cleanEntry(entry);
     if (!clean) return 0;
-    const level = levelOf(route, tier);
+    const level = levelOf(mode, route, tier);
     this.tables[level] = sortTable([...this.table(level), clean]);
     this.write();
     return this.tables[level].findIndex((r) => r.id === clean.id) + 1;
   }
 
   /** The best anybody has done on a list, for showing in the menu. */
-  best(route, tier) {
-    return this.table(route, tier)[0] || null;
+  best(mode, route, tier) {
+    return this.table(mode, route, tier)[0] || null;
   }
 
   /** Folds in a board from somewhere else and keeps the result. */

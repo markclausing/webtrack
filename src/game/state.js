@@ -17,27 +17,27 @@
  */
 
 import {
-  FIELD, GRID_GAP, GRID_OFF, LIGHTS, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS, VERGE,
+  GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS, VERGE,
 } from '../constants.js';
 import { buildRoute } from './route.js';
 
 export const ROUTES = {
   pass: {
     label: 'THE PASS',
-    blurb: 'Ten kilometres of mountain, climbing out of the valley and dropping '
-      + 'down the far side. Third gear corners with nowhere at all to put a car '
-      + 'that arrives in fifth.',
+    blurb: 'Four and a quarter kilometres through the mountains, climbing fifty '
+      + 'metres and giving it all back. Third gear corners with nowhere at all to '
+      + 'put a car that arrives in fifth.',
   },
   coast: {
     label: 'THE BOULEVARD',
-    blurb: 'The sea front: long, open and quick, with four corners on it that '
-      + 'matter and a great deal of full throttle in between. Whoever leads onto '
-      + 'the last straight does not usually lead off it.',
+    blurb: 'Five and three quarters along the sea front: flat, open and quick, '
+      + 'with four corners on it that matter and a great deal of full throttle in '
+      + 'between. Whoever leads onto the last straight rarely leads off it.',
   },
   grand: {
-    label: 'THE GRAND RUN',
-    blurb: 'Over the mountain and along the coast without stopping. Twenty-one '
-      + 'kilometres, one set of tyres, and the only time worth having.',
+    label: 'THE GRAND CIRCUIT',
+    blurb: 'Eight kilometres out of the hills, down to the water and back up '
+      + 'again. Two laps, because one of them is already a long afternoon.',
   },
 };
 
@@ -63,9 +63,16 @@ export function makeCar(kind, slot, s, x, extra = {}) {
     yaw: 0,
     slide: 0,        // grip it is asking for and not getting
     tow: 0,          // how much of another car's hole in the air it is sitting in
+    tyre: 1,         // one when they are new, zero when they have gone
     spinT: 0,
     place: slot + 1,
     gap: 0,
+    // Laps completed. Minus one on the grid, because the grid is behind the line
+    // and the first crossing of it starts the race rather than ending a lap.
+    lap: -1,
+    lapFrom: 0,      // the tick this lap started on
+    last: 0,         // the lap just finished
+    best: 0,         // the quickest so far, which is the whole of qualifying
     done: false,
     doneAt: 0,
     ctl: null,
@@ -83,33 +90,46 @@ export function makeCar(kind, slot, s, x, extra = {}) {
  * an arcade racer has about three minutes in which to give you seven overtakes
  * and the feeling that you earned each one.
  */
-export function makeState({ route = 'pass', tier = 'normal', seed = 1 } = {}) {
+export function makeState({ route = 'pass', mode = 'gp', tier = 'normal', seed = 1 } = {}) {
   const cfg = TIERS[tier] || TIERS.normal;
+  const rules = MODES[mode] || MODES.gp;
   const built = buildRoute(route);
+  const field = rules.field;
 
   const grid = [];
-  for (let slot = 0; slot < FIELD; slot++) {
-    // Pole sits furthest up the road; the player is on the back row.
-    const at = 30 + (FIELD - 1 - slot) * GRID_GAP;
+  for (let slot = 0; slot < field; slot++) {
+    // The grid is behind the line, so everybody starts on a negative distance
+    // and the first thing that happens is a lap counter going from minus one to
+    // nought. Pole sits nearest the line; the player is on the back row.
+    const at = -(24 + slot * GRID_GAP);
     const side = slot % 2 === 0 ? -1 : 1;
-    grid.push(makeCar(slot === FIELD - 1 ? 'player' : 'rival', slot, at, side * GRID_OFF));
+    grid.push(makeCar(slot === field - 1 ? 'player' : 'rival', slot, at, side * GRID_OFF));
   }
 
   return {
     routeKey: route,
     route: built,
+    mode,
+    rules,
+    laps: LAPS[route] || 3,
+    field,
     tier,
     cfg,
     rng: seed | 0,
     tick: 0,
     /** cars[0] is always the player. Where they started lives in `slot`. */
-    cars: [grid[FIELD - 1], ...grid.slice(0, FIELD - 1)],
+    cars: [grid[field - 1], ...grid.slice(0, field - 1)],
     lights: LIGHTS,
-    clock: START_TIME * cfg.clock,
+    clock: START_TIME * cfg.clock * rules.clock,
     elapsed: 0,
     checkpoint: 0,
     checkNote: 0,
-    place: FIELD,
+    lapNote: 0,
+    // The next checkpoint, as a distance rather than a node: the line itself,
+    // which everybody crosses on the way out of the first corner of their lives.
+    cpAt: 0,
+    cpIndex: 0,
+    place: field,
     finished: false,
     over: false,
     reason: '',
@@ -124,29 +144,51 @@ export const player = (state) => state.cars[0];
 /** Has the race actually started, or are the lights still on? */
 export const racing = (state) => state.lights <= 0;
 
-/** How far along, as a fraction. What the progress bar is. */
+/** How far round this lap, as a fraction. What the progress bar is. */
 export function progress(state) {
-  return Math.max(0, Math.min(1, player(state).s / state.route.metres));
+  return wrap(player(state).s, state.route.metres) / state.route.metres;
 }
+
+/** Anything, into the range zero to `by`. Negative distances included. */
+export function wrap(value, by) {
+  return ((value % by) + by) % by;
+}
+
+/** Laps completed, never below zero, for putting on the screen. */
+export const lapOf = (car) => Math.max(0, car.lap);
 
 /**
  * The node under a given distance, and how far past it we are.
  *
- * Clamped at both ends rather than wrapping: this is a road from somewhere to
- * somewhere, not a circuit, and a car that has run off the end of it should stay
- * pinned to the last piece of tarmac rather than reappear at the start.
+ * Wrapped, because the track is a loop and a car's distance is not: `s` keeps
+ * going up for the whole race and the lap it is on is that distance divided by
+ * the length of the circuit. Everything that asks where a car is goes through
+ * here, so that is the only place the loop has to be remembered.
  */
 export function nodeAt(route, s) {
-  const at = s / SEG;
-  const i = Math.max(0, Math.min(route.nodes.length - 2, Math.floor(at)));
-  return { i, t: Math.max(0, Math.min(1, at - i)) };
+  const at = wrap(s, route.metres) / SEG;
+  const i = Math.floor(at) % route.nodes.length;
+  return { i, t: at - Math.floor(at) };
+}
+
+/**
+ * The node this many further round the lap.
+ *
+ * Every piece of code that looks up the road goes through here. On a loop that
+ * is not a nicety: `nodes[i + 20]` is undefined a hundred metres before the
+ * line and negative on the grid, and both of those are a crash rather than a
+ * wrong answer.
+ */
+export function nodeStep(route, i, ahead) {
+  const n = route.nodes.length;
+  return route.nodes[(((i + ahead) % n) + n) % n];
 }
 
 /** World position and heading of a point on the track, `x` metres off centre. */
 export function worldOf(route, s, x, lift = 0) {
   const { i, t } = nodeAt(route, s);
   const a = route.nodes[i];
-  const b = route.nodes[i + 1];
+  const b = route.nodes[(i + 1) % route.nodes.length];
   const bank = a.bank + (b.bank - a.bank) * t;
   const nx = a.nx + (b.nx - a.nx) * t;
   const nz = a.nz + (b.nz - a.nz) * t;
@@ -154,12 +196,22 @@ export function worldOf(route, s, x, lift = 0) {
     x: a.x + (b.x - a.x) * t + nx * x,
     y: a.y + (b.y - a.y) * t + lift - bank * x * 0.12,
     z: a.z + (b.z - a.z) * t + nz * x,
-    a: a.a + (b.a - a.a) * t,
+    // The heading is continuous round the lap and then jumps by two pi at the
+    // line, so the two are compared the short way round rather than subtracted.
+    a: a.a + shortTurn(a.a, b.a) * t,
     bank,
     slope: a.slope,
     curve: a.curve,
     node: a,
   };
+}
+
+/** Two headings apart, the short way round. */
+function shortTurn(from, to) {
+  let d = to - from;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
 }
 
 /** Is this point on the tarmac, on the kerb and grass, or in the gravel? */
@@ -203,13 +255,14 @@ export function ordinal(place) {
 }
 
 /**
- * The number that goes on the score board.
+ * The number that goes on the score board, which is not the same number in the
+ * two modes.
  *
- * Just the time. There is no bonus and nothing to subtract: a race is won by
- * being quicker than the others and the clock already knows who was. Where you
- * finished goes on the board beside it, because two drivers on the same time did
- * not have the same race, but it is not what the board is sorted by.
+ * Qualifying keeps your quickest single lap, because that is the entire point of
+ * going out on an empty circuit. A grand prix keeps the whole race, because a
+ * quick lap in a race you lost is a consolation and not a result.
  */
 export function finalTicks(state) {
+  if (state.mode === 'qual') return Math.max(1, Math.round(player(state).best || 0));
   return Math.max(1, Math.round(state.elapsed));
 }

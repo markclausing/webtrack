@@ -125,8 +125,27 @@ export const WALL_KEEP = 0.42;
 
 // --- The field ---------------------------------------------------------------
 
-/** How many cars are in the race, including you. */
+/**
+ * The two ways to go out.
+ *
+ * Qualifying is you and an empty circuit and one number that matters: the
+ * quickest single lap you managed. A grand prix is seven other cars, the same
+ * number of laps, tyres that will not last them, and one number that matters
+ * rather less than where you finished.
+ *
+ * They are two games on one track and they want two boards, because a lap on
+ * empty tarmac and a lap spent trying to get past somebody are not comparable
+ * and never will be.
+ */
+export const MODES = {
+  qual: { label: 'Qualifying', field: 1, wear: 0, clock: 1.5 },
+  gp: { label: 'Grand Prix', field: 8, wear: 1, clock: 1 },
+};
+
+/** How many cars are in a grand prix, including you. */
 export const FIELD = 8;
+/** And how many laps each circuit is worth. The long one is worth fewer. */
+export const LAPS = { pass: 3, coast: 3, grand: 2 };
 /** Metres between rows on the grid, and how far off centre a grid slot sits. */
 export const GRID_GAP = 11;
 export const GRID_OFF = 2.6;
@@ -154,6 +173,27 @@ export const START_TIME = 70;
 export const CHECKPOINT_TIME = 40;
 /** Checkpoints, in nodes. One every thirteen hundred metres or so. */
 export const CHECKPOINT_EVERY = 220;
+
+// --- Tyres -------------------------------------------------------------------
+
+/**
+ * What is left of the grip when the tyres have gone, and how fast they go.
+ *
+ * Twenty per cent is a lot - it is about ten km/h off every corner - and it
+ * arrives gradually enough that you do not notice it happening, only that the
+ * lap you drove on the last lap does not work any more. Wear is charged for
+ * lateral load squared, so the driver who was smooth for two laps has something
+ * left for the third and the one who leant on them does not. That is the whole
+ * mechanic and it is three lines.
+ *
+ * The rate is set so a race ends at about a quarter of a set rather than at
+ * none of one. Tyres that reach zero on the second of three laps are not a
+ * mechanic, they are a countdown - the third lap is then the same third lap
+ * whatever you did with the first two, and the decision the wear was there to
+ * create never gets made.
+ */
+export const TYRE_FLOOR = 0.8;
+export const TYRE_WEAR = 0.0055;
 
 /** What the three settings change. */
 export const TIERS = {

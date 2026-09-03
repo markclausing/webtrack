@@ -277,26 +277,35 @@ export function drawRacer(rt, car, x, y, z, yaw, tint) {
 /**
  * Smoke off the tyres, or dust off the grass.
  *
- * Three flat squares behind the back wheels, growing and rising. There is no
- * particle system and no transparency: at this resolution a puff of light grey
- * that gets bigger for half a second is a locked tyre, and anything more careful
- * would be invisible.
+ * Six small squares behind the back wheels, growing and rising and drawn with
+ * every other pixel missing. There is no particle system and no transparency: at
+ * this resolution a chequerboard of light grey is a cloud, and a solid one is a
+ * white slab over the car - which is exactly what this was before the stipple
+ * existed, and it looked like a bug because it was one.
+ *
+ * They are small on purpose. A puff the size of the car reads as fog; a puff the
+ * size of a wheel reads as a wheel that has stopped turning.
  */
 export function drawSmoke(rt, car, x, y, z, yaw, tint, rough, tick) {
   const colour = tint(rough ? DUST : SMOKE);
   put.set(x, y, z, yaw, 0, 1);
-  for (let i = 0; i < 3; i++) {
-    const age = ((tick * 0.09 + i * 0.33) % 1);
-    const size = 0.35 + age * 1.5;
-    const back = -1.8 - age * 5.5;
-    const lift = 0.15 + age * 1.1;
-    for (const side of [-HALF, HALF]) {
+  rt.stipple = 1;
+  for (let i = 0; i < 4; i++) {
+    const age = ((tick * 0.09 + i * 0.25) % 1);
+    const size = 0.13 + age * 0.42;
+    const back = -1.7 - age * 2.2;
+    const lift = 0.2 + age * 0.42;
+    // Drifting out as well as back, and each puff a little off from the one
+    // before, so it is a cloud coming off a tyre rather than two neat columns.
+    const drift = age * 0.5 + (i % 2) * 0.16;
+    for (const side of [-HALF - drift, HALF + drift]) {
       put.face(rt, colour, [
-        side - size, lift - size * 0.5, back,
-        side + size, lift - size * 0.5, back,
-        side + size, lift + size * 0.5, back,
-        side - size, lift + size * 0.5, back,
+        side - size, lift - size, back,
+        side + size, lift - size, back,
+        side + size, lift + size, back,
+        side - size, lift + size, back,
       ]);
     }
   }
+  rt.stipple = 0;
 }

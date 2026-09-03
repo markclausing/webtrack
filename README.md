@@ -3,12 +3,11 @@
 ### ▶ [Play it](https://markclausing.github.io/webtrack/)
 
 A polygon racing game in the browser, in the spirit of the first generation of
-them: eight single seaters, a standing start, and about three minutes between
-the lights and the flag. You start eighth of eight. Ten kilometres of mountain
-pass or sea front, a clock that only checkpoints will refill, and seven cars
-that brake later than you do until you learn where they brake.
+them. Three closed circuits, eight single seaters, and two ways to go out: put a
+lap in on an empty track, or start eighth of eight with a set of tyres that will
+not last the distance.
 
-Your time at the flag goes on a shared board.
+Whichever you drive, the time goes on a shared board.
 
 No dependencies, no build step, no WebGL — HTML, CSS and JavaScript exactly as
 the browser receives them, and a polygon renderer written by hand into a
@@ -18,7 +17,7 @@ the browser receives them, and a polygon renderer written by hand into a
 [webracing](https://github.com/markclausing/webracing) and
 [webtype](https://github.com/markclausing/webtype).
 
-![Three cars into a mountain corner at three hundred and twenty](docs/screenshots/corner.png)
+![Three cars into a mountain corner](docs/screenshots/battle.png)
 
 ## Running it yourself
 
@@ -46,7 +45,20 @@ On a phone, hold it sideways. The bottom-left corner is the wheel, `GAS` is the
 big button, `BRAKE` is the small one beside it, and the little `II` at the top
 pauses.
 
-![The grid, five lights on, and seven cars in front of you](docs/screenshots/grid.png)
+## Two ways out
+
+**Qualifying** is an empty circuit, three laps and a long clock. Only one number
+survives it: your quickest single lap. Fresh tyres the whole way, nobody in your
+mirrors, and nothing to blame.
+
+**Grand Prix** is seven other cars and a standing start from the back row. The
+board keeps the whole race rather than your best lap, because a quick lap in a
+race you lost is a consolation and not a result.
+
+They keep separate boards. A lap on empty tarmac and a lap spent trying to get
+past somebody are not comparable and never will be.
+
+![The grid, the lights, and seven cars in front of you](docs/screenshots/grid.png)
 
 ## How it drives
 
@@ -67,6 +79,14 @@ one gives you the front end back.
 and the corner is worth three. You can have all of one or all of the other, and
 asking for both at once gets you neither and a lot of grass.
 
+![Asking for more grip than there is](docs/screenshots/corner.png)
+
+**Tyres go off, and they go off faster if you lean on them.** Wear is charged for
+cornering load squared, so two smooth laps leave you something for the third and
+two ragged ones do not — you finish a race on about a quarter of a set and ten
+km/h down in every corner. Only in the race; qualifying is always on fresh
+rubber.
+
 **Sit behind somebody on the straight.** The tow removes nearly half your drag
 and is worth about twenty km/h. It reaches forty metres and needs you roughly
 behind them, which is what makes the last third of a straight interesting instead
@@ -75,28 +95,41 @@ of a formality.
 **The kerbs are yours; the grass is not.** Two wheels on the red and white costs
 you very little. Four wheels on the green costs three quarters of your grip.
 
-![Wheel to wheel out of a slow corner](docs/screenshots/battle.png)
-
-**The other seven are the race; the clock is not.** Seventy seconds at the lights
-and forty more under every gantry. It is there so that a race which has gone
-wrong ends, not to be raced against. Where you finish is the game — your time is
-just what the board keeps.
-
 **They are given slightly less grip and slightly less top end than you, and
 nothing else.** No rubber band, no catching you up when you crash, no pulling
 away when you do not. A rival that cheated would be one you could not learn, and
-learning where they brake is the only way to get past seven of them in three
-minutes.
+learning where they brake is the only way past seven of them in three laps.
 
-## Two circuits, and a third that is both
+## Three circuits
 
-**The pass** is ten kilometres of mountain: three kinds of corner, all of them
-third gear or lower, and long enough between them to use what you gained.
-**The boulevard** is the sea front, flat and quick, four corners that matter and
-a great deal of full throttle. **The grand run** is one after the other without
-stopping, twenty-one kilometres, and the only time worth having.
+**The pass** is 4.3 km through the mountains, climbing fifty metres and giving it
+all back — three kinds of corner, all of them third gear or lower, with enough
+between them to use what you gained. **The boulevard** is 5.7 km of sea front:
+flat, open, and quick enough that the corners which do matter matter a great
+deal. **The grand circuit** is 8.2 km out of the hills, down to the water and
+back up again, and it is two laps because one of them is already a long
+afternoon.
 
-![The sea front at three hundred and forty](docs/screenshots/coast.png)
+![The grand circuit, on the coastal half of the lap](docs/screenshots/grand.png)
+
+They are closed loops, and that is not a detail of the level design — it is the
+shape of `route.js`. You cannot make a road that returns to where it started by
+walking forwards and turning: the total turning has to come to exactly 2π *and*
+the position has to land back on itself, and nudging a heading until it does is a
+fight you lose. So it is built the other way round. A closed loop is drawn first,
+as control points around a circle, and the headings and curvatures are read back
+off it afterwards. Closure is then not something to be achieved; it is a property
+of the thing that was drawn.
+
+Everything that varies around the lap — the hills, the wobble in the hillsides,
+the change from mountain to sea front — is a sum of harmonics *of the lap*, for
+the same reason: a sine comes back to where it started because that is what a
+sine does. So there is no seam at the start line, which is the piece of track
+everybody looks at most.
+
+Then the loop is relaxed until nothing on it is sharper than a car with a wing
+can go round. A curve through control points will happily ask for a 37 km/h
+hairpin, which is not a corner, it is a wall with a gap in it.
 
 ## The look
 
@@ -120,6 +153,10 @@ which is the actual look:
 - **The track is chequered, not banded.** There is no grey between the two greys
   that palette has, so the lighter stripe is a one-pixel chequerboard of both,
   exactly the way the hardware faked a colour it did not have.
+- **Smoke is a mesh, not a colour.** There is no alpha channel here. Tyre smoke
+  is drawn with every other pixel missing, which is how these machines did
+  transparency and the only honest way to do it — a solid light-grey polygon over
+  the car is a white slab, and looks like a bug because it is one.
 - **The sky is bands and the haze is one colour.** Everything distant fades to
   the colour the bottom of the sky is painted, so the horizon is a join you
   cannot see rather than a line.
@@ -131,7 +168,7 @@ which is the actual look:
 ### Where the speed comes from
 
 Half of it is not speed. The car does 350 km/h, which is a number; the rest is
-five things that cost nothing and are worth more than another fifty would be:
+four things that cost nothing and are worth more than another fifty would be:
 
 - **The lens opens with the throttle.** The focal length goes from 250 to 178
   between a standstill and flat out, so the world stops going past through the
@@ -144,10 +181,12 @@ five things that cost nothing and are worth more than another fifty would be:
   vision. Take them out and the car feels like it has lost fifty km/h.
 - **Kerb stripes every six metres**, so there is something ticking past even on
   a straight with nothing beside it.
-- **Streaks at the edges of the screen** over about 220 km/h. Not a real effect,
-  and it does not need to be — it only agrees with the other four.
 
-![Out of the valley on the mountain pass](docs/screenshots/pass.png)
+There were streaks up the sides of the screen for a while as well. They came out
+again: an artefact that does not belong to the world reads as a fault in the
+renderer, whatever it was meant to suggest.
+
+![The sea front](docs/screenshots/coast.png)
 
 ## How it is put together
 
@@ -159,7 +198,7 @@ src/
   audio.js          a V10 out of four oscillators, and everything else
   main.js           menus, the loop, the wiring between them
   game/
-    route.js        the circuit, built once from a seed
+    route.js        the circuit: a closed loop, built once from a seed
     sim.js          sixty ticks a second, and the only thing that writes
     state.js        what a race is, and how to read it
   render/
@@ -182,12 +221,14 @@ six-bit input mask instead of a mind.
 
 **Everything is measured along the track, not across the world.** A car is a
 distance and an offset. Two cars are near each other when their distances are
-close, which is one subtraction — and who is winning is whoever has the larger
-one, which stays true through every corner for free.
+close, which is one subtraction; who is winning is whoever has the larger one;
+and the lap somebody is on is that distance divided by the length of the circuit.
+Driving backwards over the line takes the lap counter down again, which is
+exactly right and is not a case anybody had to write.
 
-**The circuit is built from a seed, once.** A time is worthless if the track was
-different, and a track generated as you drive it cannot be learned, which is the
-only thing that makes a time come down on the tenth attempt.
+**The circuit is built from a seed, once.** A lap time is worthless if the track
+was different, and a track generated as you drive it cannot be learned, which is
+the only thing that makes a time come down on the tenth attempt.
 
 **The simulation never reads the clock.** It runs at a fixed sixtieth and the
 loop runs it as many times as real time says it should have; a slow machine drops
@@ -196,16 +237,19 @@ machine that set it.
 
 ## The score board
 
-Ten times per circuit per setting, sorted quickest first, kept in `localStorage`
-so a browser on its own needs nothing. Point `src/config.js` at a Cloudflare
-Worker and every page posts its board and reads everybody else's back; boards are
-*merged* by row id rather than overwritten, so two devices and two browsers add up
-instead of taking turns. `worker/README.md` is the two commands, plus the broom
-for when somebody puts something on it you would rather they had not.
+Ten times per mode per circuit per setting, sorted quickest first, kept in
+`localStorage` so a browser on its own needs nothing. Point `src/config.js` at a
+Cloudflare Worker and every page posts its board and reads everybody else's back;
+boards are *merged* by row id rather than overwritten, so two devices and two
+browsers add up instead of taking turns. `worker/README.md` is the two commands,
+plus the broom for when somebody puts something on it you would rather they had
+not.
 
-Only a race you finished goes on the board. A board of times cannot hold one that
-stopped halfway — somebody who gave up after four hundred metres has a shorter
-elapsed time than anybody who got to the flag.
+A qualifying lap only has to exist. A race has to have been finished — a board of
+race times cannot hold one that stopped halfway, because somebody who gave up on
+lap one has a shorter elapsed time than anybody who got to the flag.
+
+![Qualifying: one number, and it has just gone green](docs/screenshots/qualifying.png)
 
 ## Tests
 
@@ -215,12 +259,17 @@ npm test
 
 Three things, none of which need a browser:
 
-- `tools/simtest.js` drives every circuit with a hand on the wheel that brakes
-  for corners, and asks the questions a bug would answer wrongly: is anybody
-  outside the barriers, did the field race, does the same seed still drive the
-  same race — and the one that is about the game rather than the code, **is
-  braking later still quicker**. A driving model in which it is not is broken
-  however finite its numbers are, and nothing else here would notice.
+- `tools/simtest.js` checks the circuits close — that the headings come back
+  round having turned through exactly one lap, and that the pair of nodes
+  straddling the start line is the same length as every other pair, because if it
+  is not there is a bump on the piece of track everybody drives most. Then it
+  drives each of them with the game's own reference driver and asks the questions
+  a bug would answer wrongly: is anybody outside the barriers, did the field race,
+  did the laps count, did the tyres go off — and the one that is about the game
+  rather than the code, **is braking later still quicker**. It runs the same
+  driver at three levels of commitment and fails if it is not. A driving model
+  that gets that wrong is broken however finite its numbers are, and nothing else
+  here would notice.
 - `tools/pagecheck.js` builds a document out of `index.html` — every id that is
   actually in the markup and nothing else — imports `main.js` against it, presses
   start, and drives four seconds of the real loop. An element the code asks for
