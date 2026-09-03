@@ -85,6 +85,12 @@ export function step(state, mask = 0) {
 
   state.elapsed++;
   state.clock -= DT;
+  // The afternoon going. Measured on distance rather than on the clock, so a
+  // race that has gone badly gets dark at the same place on the circuit as one
+  // that has gone well - the light is a property of how far round you are, not
+  // of how long you took.
+  state.light = Math.max(0, Math.min(1,
+    player(state).s / (state.route.metres * state.laps)));
   if (state.clock <= 0) {
     state.clock = 0;
     return end(state, 'time');
@@ -392,12 +398,19 @@ function think(state, car) {
   if (car.think > 0) car.think--;
   else {
     car.think = 10 + Math.floor(nextRandom(state) * 14);
-    const { i } = nodeAt(state.route, car.s);
     // Where the corner is going, a good way ahead: you turn in before you can
     // feel it, which is what makes a line a line rather than a reaction.
+    //
+    // Only the apex, deliberately. A proper three-phase line - outside on entry,
+    // apex, outside on exit - was tried and made them two seconds a lap slower
+    // and put them on the grass a third of the time: the line moves further and
+    // faster than their steering can follow, and a car sawing at a line it
+    // cannot hold is slower than a car holding a worse one. If they are to be
+    // quicker it will be by driving this line better, not by aiming at a
+    // cleverer one.
+    const { i } = nodeAt(state.route, car.s);
     const soon = nodeStep(state.route, i, 22);
-    const apex = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * wide;
-    car.line = apex;
+    car.line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * wide;
 
     // Somebody slow in the way is worth more than the perfect line.
     const block = inTheWay(state, car);
@@ -432,7 +445,7 @@ function think(state, car) {
   car.ctl = {
     throttle: car.speed < want,
     brake: car.speed > want * 1.02 + 0.5,
-    steer: Math.max(-1, Math.min(1, off * 0.7)),
+    steer: Math.max(-1, Math.min(1, off * 0.95)),
   };
 }
 
@@ -447,7 +460,11 @@ function think(state, car) {
  */
 function safeSpeed(state, car, share = AI_GRIP) {
   const grip = GRIP * state.cfg.grip * share * (car.gripScale || 1);
-  const brake = BRAKE * 0.82;
+  // How much of the brakes the braking point is worked out with. Under one
+  // because a car that brakes at exactly the last possible moment has no margin
+  // for the corner being slightly different than it looked - and over the old
+  // 0.82, because that margin was a second a lap of nothing.
+  const brake = BRAKE * 0.92;
   let limit = TOP_SPEED;
   const from = nodeAt(state.route, car.s).i;
   const reach = Math.ceil(AI_LOOK / SEG);

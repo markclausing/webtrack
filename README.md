@@ -3,9 +3,12 @@
 ### ▶ [Play it](https://markclausing.github.io/webtrack/)
 
 A polygon racing game in the browser, in the spirit of the first generation of
-them. Three closed circuits, eight single seaters, and two ways to go out: put a
-lap in on an empty track, or start eighth of eight against seven cars that are
-within one per cent of you and will shut the door.
+them. Three closed circuits, eight single seaters, a red suspension bridge to
+cross, and an afternoon that runs out: you start in daylight, the sun is on the
+horizon by the second lap and you finish in the dark.
+
+Two ways to go out — put a lap in on an empty circuit, or start eighth of eight
+against seven cars in the same machinery as yours that will shut the door.
 
 Whichever you drive, the time goes on a shared board.
 
@@ -111,19 +114,37 @@ driving at the scenery being a racing line.
 cannot give you: where the next corner but one goes, and where the other seven
 are when they are not in front of you.
 
+**And the light goes.** The race starts in the afternoon, has the sun on the
+horizon by the second lap and finishes at night, gradually and without ever doing
+it in front of you. It is measured on distance rather than on the clock, so a
+race that has gone badly gets dark at the same place on the circuit as one that
+has gone well.
+
+![The sun on the horizon, second lap](docs/screenshots/dusk.png)
+
+![The third lap, on headlights](docs/screenshots/night.png)
+
 **They will shut the door on you.** A rival with somebody in its mirrors moves
 part of the way across to cover the side you are coming down — part, so there is
 always a way past, and only on the approach, because covering the inside of a
 corner it is already in means going off the outside of it. Make them commit, then
 go the other way.
 
-**They are given slightly less grip and slightly less top end than you, and
-nothing else.** One and a half per cent of grip, which is about a second a lap:
-enough to come through the field if you take every one of them, and nowhere near
-enough if you throw one away. No rubber band, no catching you up when you crash,
-no pulling away when you do not. A rival that cheated would be one you could not
-learn, and learning where they brake is the only way past seven of them in three
-laps.
+**They are in the same car as you, and on normal they are given three per cent
+more of it.** That is deliberately on the wrong side of one: at ninety-eight per
+cent of your grip they were a field a driver who knows the circuit simply walked
+away from. Three per cent is worth about a second a lap, which over three laps is
+the difference between coming through and not — and it leaves the difficulty to
+be the only thing it should be, which is how well they use the car. No rubber
+band, no catching you up when you crash, no pulling away when you do not. A rival
+that cheated at *braking points* would be one you could not learn, and learning
+where they brake is still the only way past seven of them.
+
+They aim at the apex and nothing cleverer. A proper three-phase racing line —
+outside on entry, apex, outside on exit — was tried and made them two seconds a
+lap slower and put them on the grass a third of the time: the line moves further
+and faster than their steering can follow, and a car sawing at a line it cannot
+hold is slower than a car holding a worse one.
 
 **And they stay in touch with each other.** The field is spread by about one per
 cent of pace from pole to the back row, end to end. That number is doing more for
@@ -222,14 +243,27 @@ four things that cost nothing and are worth more than another fifty would be:
   vision. Take them out and the car feels like it has lost fifty km/h.
 - **Kerb stripes every six metres and a broken white line down the middle**, so
   there is something ticking past even on a straight with nothing beside it.
-- **Landmarks you go round three times.** A red bridge over the track, a big
-  wheel turning on the infield, two balloons and a helicopter holding station
-  over turn four. The second time you see the wheel you know where you are on the
-  lap without reading anything, which is the whole job of it.
+- **Landmarks you go round three times.** A big wheel turning on the infield with
+  team-coloured cabins, two balloons and a helicopter holding station. The second
+  time you see the wheel you know where you are on the lap without reading
+  anything, which is the whole job of it.
+- **A red suspension bridge that is part of the circuit**, laid on the
+  straightest four hundred metres there is because a suspension bridge wants a
+  straight, with the ground falling away to water on both sides of the deck. The
+  cable is the whole thing: take it away and it is a road with red walls on it,
+  put it back and it is a crossing, from half a mile away, in eight quads a node.
+- **A day that ends.** Each time of day is one arithmetic operation applied to
+  every colour that goes into the world — darken, then pull towards a wash — so a
+  colour added tomorrow gets a night version for nothing. The sky is the
+  exception and is replaced rather than tinted, because dusk is not a darker
+  afternoon, it is a different set of colours in a different order. The head-up
+  display is never tinted at all: a dashboard is lit from the inside.
 
 There were streaks up the sides of the screen for a while as well. They came out
 again: an artefact that does not belong to the world reads as a fault in the
 renderer, whatever it was meant to suggest.
+
+![The bridge, which is part of the circuit](docs/screenshots/bridge.png)
 
 ![The big wheel on the infield](docs/screenshots/landmark.png)
 

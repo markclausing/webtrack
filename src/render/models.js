@@ -309,7 +309,7 @@ const AXLE = 1.5;
  * wheels standing out in the air are what stop it reading as a saloon; and the
  * helmet is how you tell at a glance that there is somebody in it.
  */
-export function drawRacer(rt, car, x, y, z, yaw, tint) {
+export function drawRacer(rt, car, x, y, z, yaw, tint, night = 0) {
   const pal = TEAM_COLOURS[car.team % TEAM_COLOURS.length];
   put.set(x, y, z, yaw, car.roll || 0, 1);
 
@@ -369,9 +369,12 @@ export function drawRacer(rt, car, x, y, z, yaw, tint) {
   put.face(rt, wing, [-0.86, 0.5, -2.34, -0.7, 0.5, -2.34, -0.7, 1.08, -2.34, -0.86, 1.08, -2.34]);
   put.face(rt, wing, [0.7, 0.5, -2.34, 0.86, 0.5, -2.34, 0.86, 1.08, -2.34, 0.7, 1.08, -2.34]);
   // And one red light in the middle of it, which is what a wet grand prix looks
-  // like from behind and what a tow looks like here.
-  put.face(rt, tint(C.kerbA), [-0.1, 0.6, -2.36, 0.1, 0.6, -2.36,
-    0.1, 0.74, -2.36, -0.1, 0.74, -2.36]);
+  // like from behind and what a tow looks like here. After dark it is not tinted
+  // at all: a light is a light, and the one thing that should not get darker
+  // when the sun goes down is the thing you are following.
+  const lamp = night > 0.35 ? C.tail : tint(C.kerbA);
+  put.face(rt, lamp, [-0.12, 0.58, -2.36, 0.12, 0.58, -2.36,
+    0.12, 0.76, -2.36, -0.12, 0.76, -2.36]);
 }
 
 /**

@@ -34,13 +34,13 @@ import {
   DRAW_AHEAD, DRAW_BEHIND, FOCAL, FOCAL_FAST, gearAt, GRID_GAP, GRID_OFF, LIGHTS,
   ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TOP_SPEED, WALL_AT,
 } from '../constants.js';
-import { RINGS } from '../game/route.js';
+import { BRIDGE_NODES, RINGS, TOWERS } from '../game/route.js';
 import {
   formatClock, formatGap, formatTime, kmh, lapOf, nodeAt, nodeStep, ordinal, player,
   progress, racing, worldOf,
 } from '../game/state.js';
 import { drawProp, drawRacer, drawShadow, drawSmoke } from './models.js';
-import { C, TEAM_COLOURS, THEMES } from './palette.js';
+import { C, lit, SUN_BEARING, TEAM_COLOURS, THEMES, TIMES } from './palette.js';
 import { md, mix, Raster, shade } from './raster.js';
 
 /** Where the haze starts biting, and where nothing is left of the colour. */
@@ -106,11 +106,16 @@ export class Renderer {
     const cam = this.follow(state, p);
     this.surf += 0.05;
 
-    const theme = this.theme(nodeAt(state.route, p.s).t >= 0 ? state.route.nodes[nodeAt(state.route, p.s).i].warm : 0);
+    // The time of day, worked out once and then applied to every colour that
+    // goes into the world. The head-up display does not get it: a dashboard is
+    // lit from the inside.
+    this.hour(state.light || 0);
+    const theme = this.theme(state.route.nodes[nodeAt(state.route, p.s).i].warm);
     // The horizon moves with the camera, so the sky bands move with it. Signed
     // the other way it looks almost right, which is worse than looking wrong.
     const lift = Math.tan(cam.pitch) * rt.focal / SCREEN_H;
-    rt.begin(theme.sky.map(([at, colour]) => [at - lift, colour]));
+    rt.begin(this.sky(theme).map(([at, colour]) => [at - lift, colour]));
+    this.sun(cam);
     rt.setCamera(cam.x, cam.y, cam.z, cam.yaw, cam.pitch, cam.roll);
 
     this.ground(state, theme, p);
@@ -187,6 +192,109 @@ export class Renderer {
   }
 
   /**
+   * Where in the afternoon we are, as the two numbers everything else needs.
+   *
+   * Bucketed into sixteen, because the palette cannot express more than that
+   * between one end of a race and the other and because every distinct value is
+   * a new set of cached theme colours. Sixteen steps over three laps is a change
+   * nobody can catch happening.
+   */
+  hour(light) {
+    const step = Math.round(Math.max(0, Math.min(1, light)) * 16) / 16;
+    if (step === this.lightAt) return;
+    this.lightAt = step;
+    // Between whichever two times of day it falls between.
+    let i = 0;
+    while (i < TIMES.length - 2 && step > TIMES[i + 1].at) i++;
+    const a = TIMES[i];
+    const b = TIMES[i + 1];
+    const t = Math.max(0, Math.min(1, (step - a.at) / (b.at - a.at)));
+    this.now = {
+      dim: a.dim + (b.dim - a.dim) * t,
+      wash: mix(a.wash, b.wash, t),
+      pull: a.pull + (b.pull - a.pull) * t,
+      sun: mix(a.sun, b.sun, t),
+      sunSize: a.sunSize + (b.sunSize - a.sunSize) * t,
+      sunHigh: a.sunHigh + (b.sunHigh - a.sunHigh) * t,
+      from: a,
+      to: b,
+      t,
+    };
+    // The cached blends belong to the old light and are no longer true.
+    for (const key of Object.keys(this)) if (key.startsWith('blend')) delete this[key];
+    this.skyOf = -1;
+  }
+
+  /** One colour, at this time of day. Everything in the world goes through it. */
+  lamp(colour) {
+    const now = this.now;
+    return lit(colour, now.dim, now.wash, now.pull);
+  }
+
+  /**
+   * The same, but softer, for the cars.
+   *
+   * A car at night takes a good deal less of the wash than a hillside does, and
+   * that is not a cheat: they are the nearest things on the screen, they are the
+   * only things lit by anybody's headlights, and a race in which you cannot tell
+   * the red one from the blue one is a race you are not in. It is the same
+   * argument as the head-up display being lit from the inside.
+   */
+  lampCar(colour) {
+    const now = this.now;
+    return lit(colour, now.dim + (1 - now.dim) * 0.42, now.wash, now.pull * 0.5);
+  }
+
+  /**
+   * The sky, which is the one thing that is replaced rather than tinted.
+   *
+   * Darkening a blue afternoon sky gives a darker blue afternoon sky, and dusk
+   * is not a darker afternoon, it is a different set of colours in a different
+   * order. So each time of day carries its own bands and they are blended; only
+   * the daytime one is the circuit's own.
+   */
+  sky(theme) {
+    if (this.skyOf === this.lightAt) return this.skyBands;
+    const { from, to, t } = this.now;
+    const a = from.sky || theme.sky;
+    const b = to.sky || theme.sky;
+    this.skyBands = a.map(([at, colour], i) => {
+      const other = b[Math.min(i, b.length - 1)];
+      return [at + (other[0] - at) * t, mix(colour, other[1], t)];
+    });
+    this.skyOf = this.lightAt;
+    return this.skyBands;
+  }
+
+  /**
+   * The sun, or the moon, sitting where it actually is.
+   *
+   * Drawn straight into the sky before anything else, so the hills cover it when
+   * it goes behind one. Its place on the screen comes from the angle between
+   * where the camera is looking and the bearing the sun is on, which means it
+   * stays put in the world while you go round the circuit - and coming out of a
+   * corner with it straight ahead is worth more than any amount of shading.
+   */
+  sun(cam) {
+    const rt = this.rt;
+    const now = this.now;
+    let turn = SUN_BEARING - cam.yaw;
+    while (turn > Math.PI) turn -= Math.PI * 2;
+    while (turn < -Math.PI) turn += Math.PI * 2;
+    // Behind you, or so far round the edge that it would be a smear rather than
+    // a disc: the tangent runs away long before the field of view does.
+    if (Math.abs(turn) > 1.1) return;
+    const x = Math.round(SCREEN_W / 2 + Math.tan(turn) * rt.focal);
+    const horizon = SCREEN_H / 2 - Math.tan(cam.pitch) * rt.focal;
+    const y = Math.round(horizon - now.sunHigh * SCREEN_H);
+    const r = Math.round(now.sunSize);
+    for (let dy = -r; dy <= r; dy++) {
+      const half = Math.round(Math.sqrt(Math.max(0, r * r - dy * dy)));
+      rt.rect(x - half, y + dy, half * 2 + 1, 1, now.sun);
+    }
+  }
+
+  /**
    * Which set of colours, at a given amount of sea front.
    *
    * A circuit can be mountain at the start line and coast on the far side of the
@@ -199,8 +307,6 @@ export class Renderer {
    * over a few hundred metres instead of changing its mind at a line.
    */
   theme(warm) {
-    if (warm <= 0.02) return THEMES.mountain;
-    if (warm >= 0.98) return THEMES.coast;
     const key = `blend${Math.round(warm * 8)}`;
     if (this[key]) return this[key];
     const t = Math.round(warm * 8) / 8;
@@ -210,7 +316,7 @@ export class Renderer {
       sky: a.sky.map(([f, c], i) => [f + (b.sky[i][0] - f) * t, mix(c, b.sky[i][1], t)]),
     };
     for (const k of ['fog', 'near', 'mid', 'far', 'ridge', 'verge', 'rock', 'tree', 'trunk', 'water']) {
-      out[k] = mix(a[k], b[k], t);
+      out[k] = this.lamp(mix(a[k], b[k], t));
     }
     this[key] = out;
     return out;
@@ -231,13 +337,21 @@ export class Renderer {
     const edge = ROAD_HALF + RUMBLE;
     const first = nodeAt(route, p.s).i - DRAW_BEHIND;
 
+    const night = Math.max(0, (this.lightAt - 0.45) / 0.55);
     for (let step = 0; step < DRAW_AHEAD; step++) {
       const i = first + step;
       const a = nodeStep(route, i, 0);
       const b = nodeStep(route, i, 1);
       const away = step * SEG;
       const f = fog(away);
-      const tint = (colour) => mix(colour, theme.fog, f);
+      // The headlights: at night the near tarmac is a good deal brighter than
+      // the rest of the world, which is what a car's own lights look like from
+      // inside it and is most of what makes a night lap readable.
+      const beam = night > 0 ? night * Math.max(0, 1 - away / 85) ** 1.4 : 0;
+      const tint = (colour) => mix(this.lamp(colour), theme.fog, f);
+      const road = beam > 0
+        ? (colour) => mix(shade(this.lamp(colour), 1 + beam * 2.4), theme.fog, f)
+        : tint;
       // The ground beside this node takes its colours from this node, which is
       // how a circuit can leave the hills and arrive at the sea inside a lap.
       const local = a.warm > 0.02 && a.warm < 0.98 ? this.theme(a.warm) : theme;
@@ -246,18 +360,18 @@ export class Renderer {
       // telling you how fast you are going without a speedometer. The lighter
       // band is a chequer of the two greys rather than a third colour, because
       // there is no third colour between them to have.
-      rt.dither = (i % 6) < 3 ? 0 : tint(C.roadAlt);
+      rt.dither = (i % 6) < 3 ? 0 : road(C.roadAlt);
       rt.quad(
         a.x - a.nx * ROAD_HALF, roadY(a, -ROAD_HALF), a.z - a.nz * ROAD_HALF,
         a.x + a.nx * ROAD_HALF, roadY(a, ROAD_HALF), a.z + a.nz * ROAD_HALF,
         b.x + b.nx * ROAD_HALF, roadY(b, ROAD_HALF), b.z + b.nz * ROAD_HALF,
         b.x - b.nx * ROAD_HALF, roadY(b, -ROAD_HALF), b.z - b.nz * ROAD_HALF,
-        tint(C.road),
+        road(C.road),
       );
       rt.dither = 0;
       // Kerbs. Red and white, one node each, which at three hundred and fifty is
       // sixteen stripes a second going past at the edge of the screen.
-      const kerb = tint((i % 2) < 1 ? C.kerbA : C.kerbB);
+      const kerb = road((i % 2) < 1 ? C.kerbA : C.kerbB);
       for (const side of [-1, 1]) {
         rt.quad(
           a.x + a.nx * side * ROAD_HALF, roadY(a, side * ROAD_HALF), a.z + a.nz * side * ROAD_HALF,
@@ -278,7 +392,7 @@ export class Renderer {
           a.x + a.nx * 0.28, roadY(a, 0) + 0.04, a.z + a.nz * 0.28,
           b.x + b.nx * 0.28, roadY(b, 0) + 0.04, b.z + b.nz * 0.28,
           b.x - b.nx * 0.28, roadY(b, 0) + 0.04, b.z - b.nz * 0.28,
-          tint(C.kerbB),
+          road(C.kerbB),
         );
       }
 
@@ -292,7 +406,7 @@ export class Renderer {
           a.x + a.nx * outer, roadY(a, outer) + 0.04, a.z + a.nz * outer,
           b.x + b.nx * outer, roadY(b, outer) + 0.04, b.z + b.nz * outer,
           b.x + b.nx * inner, roadY(b, inner) + 0.04, b.z + b.nz * inner,
-          tint(C.kerbB),
+          road(C.kerbB),
         );
       }
 
@@ -349,6 +463,7 @@ export class Renderer {
       }
 
       this.startLine(state, a.i, a, b, tint);
+      if (a.bridge !== undefined) this.bridge(route, a, b, tint);
 
       const props = route.props[a.i];
       if (props && away < 900) {
@@ -410,6 +525,93 @@ export class Renderer {
     }
   }
 
+  /**
+   * The red bridge: the one bit of the circuit you drive over rather than past.
+   *
+   * Everything here follows the track, which is why it is drawn node by node
+   * rather than placed as a prop: the deck is the track, the railings are the
+   * edges of it, and the cable is a curve hung between two towers that are
+   * themselves standing on a road that goes up and down. A prop would be a model
+   * of a bridge standing near one.
+   *
+   * The cable is the whole thing. Take it away and this is a road with red walls
+   * on it; put it back and it is a crossing, from half a mile away, in eight
+   * quads a node.
+   */
+  bridge(route, a, b, tint) {
+    const rt = this.rt;
+    const red = tint(C.kerbA);
+    const dark = tint(shade(C.kerbA, 0.66));
+    const edge = ROAD_HALF + 0.7;
+    const cableX = ROAD_HALF + 1.5;
+
+    // The railings, along both edges, all the way over.
+    for (const side of [-1, 1]) {
+      const ax = a.x + a.nx * side * edge;
+      const az = a.z + a.nz * side * edge;
+      const bx = b.x + b.nx * side * edge;
+      const bz = b.z + b.nz * side * edge;
+      const ay = roadY(a, side * edge);
+      const by = roadY(b, side * edge);
+      // The face, and a flat top rail on it. The top rail used to be the same
+      // quad wound the other way, which is not a second surface, it is the same
+      // surface fighting itself for the depth buffer - and it came out as a red
+      // venetian blind the length of the bridge.
+      rt.quad(ax, ay, az, bx, by, bz, bx, by + 1.3, bz, ax, ay + 1.3, az, red);
+      const inx = a.nx * side * 0.22;
+      const inz = a.nz * side * 0.22;
+      rt.quad(ax - inx, ay + 1.3, az - inz, ax + inx, ay + 1.3, az + inz,
+        bx + inx, by + 1.3, bz + inz, bx - inx, by + 1.3, bz - inz, dark);
+    }
+
+    // The cable, and the hangers holding the deck off it.
+    const ca = cableHeight(a.bridge);
+    const cb = cableHeight(b.bridge);
+    for (const side of [-1, 1]) {
+      const ax = a.x + a.nx * side * cableX;
+      const az = a.z + a.nz * side * cableX;
+      const bx = b.x + b.nx * side * cableX;
+      const bz = b.z + b.nz * side * cableX;
+      const ay = roadY(a, side * cableX) + ca;
+      const by = roadY(b, side * cableX) + cb;
+      rt.quad(ax, ay, az, bx, by, bz, bx, by + 0.45, bz, ax, ay + 0.45, az, red);
+      if (a.i % 3 === 0 && ca > 2.4) {
+        const hy = roadY(a, side * cableX);
+        rt.quad(ax - a.nx * 0.16, hy, az - a.nz * 0.16, ax + a.nx * 0.16, hy, az + a.nz * 0.16,
+          ax + a.nx * 0.16, hy + ca, az + a.nz * 0.16, ax - a.nx * 0.16, hy + ca, az - a.nz * 0.16,
+          dark);
+      }
+    }
+
+    // And the two towers, on the nodes nearest where they belong.
+    for (const at of TOWERS) {
+      if (Math.abs(a.bridge - at) > 0.5 / BRIDGE_NODES) continue;
+      const high = cableHeight(at) + 3.5;
+      for (const side of [-1, 1]) {
+        const tx = a.x + a.nx * side * cableX;
+        const tz = a.z + a.nz * side * cableX;
+        const ty = roadY(a, side * cableX);
+        // A leg, as a box: two faces across the track and two along it.
+        for (const [dx, dz] of [[a.nx * 1.1, a.nz * 1.1], [a.dx * 1.1, a.dz * 1.1]]) {
+          rt.quad(tx - dx, ty, tz - dz, tx + dx, ty, tz + dz,
+            tx + dx, ty + high, tz + dz, tx - dx, ty + high, tz - dz,
+            dx === a.nx * 1.1 ? red : dark);
+        }
+      }
+      // Two crossbeams between the legs, which is what makes it a tower rather
+      // than two posts.
+      for (const h of [high * 0.55, high - 1.6]) {
+        rt.quad(
+          a.x - a.nx * cableX, roadY(a, -cableX) + h, a.z - a.nz * cableX,
+          a.x + a.nx * cableX, roadY(a, cableX) + h, a.z + a.nz * cableX,
+          a.x + a.nx * cableX, roadY(a, cableX) + h + 1.6, a.z + a.nz * cableX,
+          a.x - a.nx * cableX, roadY(a, -cableX) + h + 1.6, a.z - a.nz * cableX,
+          red,
+        );
+      }
+    }
+  }
+
   /** The other seven, and you. */
   cars(state, theme, p) {
     const rt = this.rt;
@@ -426,7 +628,7 @@ export class Renderer {
       const tint = this.tinter(theme, Math.abs(away));
       const yaw = at.a + car.yaw;
       drawShadow(rt, at.x, at.y, at.z, yaw, 1.15, 2.5, tint);
-      drawRacer(rt, car, at.x, at.y, at.z, yaw, tint);
+      drawRacer(rt, car, at.x, at.y, at.z, yaw, tint, this.lightAt);
       // Smoke when the tyres have given up, dust when they are on the grass.
       const rough = Math.abs(car.x) > ROAD_HALF + RUMBLE;
       if ((car.slide > 2 || rough) && car.speed > 8) {
@@ -497,7 +699,7 @@ export class Renderer {
   /** A fog function for one distance, made once and handed to a model. */
   tinter(theme, away) {
     const f = fog(away);
-    return (colour) => mix(colour, theme.fog, f);
+    return (colour) => mix(this.lampCar(colour), theme.fog, f);
   }
 
   // --- The panel ------------------------------------------------------------
@@ -670,6 +872,25 @@ export class Renderer {
   }
 }
 
+/**
+ * How high the cable is above the deck, across the span.
+ *
+ * Up to the first tower, a sag between the two, and down again to the far
+ * abutment. It is the shape everybody recognises and it is three lines: the
+ * middle one is a sine, which is close enough to a catenary that nobody who has
+ * seen a real bridge would say otherwise at this resolution.
+ */
+function cableHeight(t) {
+  const [first, last] = TOWERS;
+  const high = 27;
+  const sag = 8;
+  const end = 1.2;
+  if (t <= first) return end + (high - end) * (t / first);
+  if (t >= last) return end + (high - end) * ((1 - t) / (1 - last));
+  const u = (t - first) / (last - first);
+  return sag + (high - sag) * (1 - Math.sin(u * Math.PI));
+}
+
 /** How much of the haze colour is in something this far away. */
 function fog(away) {
   if (away <= FOG_NEAR) return 0;
@@ -716,7 +937,9 @@ function lerp(a, b, t) {
  * drew water and still the best way to do it in a renderer with no textures.
  */
 function bandColour(theme, node, side, kind, i, surf) {
-  if (node.g.wet > 0.5 && side < 0 && kind !== 'verge') {
+  // Under the bridge it is water on both sides; everywhere else the sea is only
+  // ever on the outside of the loop.
+  if (node.g.wet > 0.5 && (side < 0 || node.g.bay > 0.5) && kind !== 'verge') {
     const ripple = Math.sin(i * 0.5 + surf * 2) > 0.4;
     const water = ripple ? shade(theme.water, 1.18) : theme.water;
     // Eased in over the last half of the change, so the ground arrives at the

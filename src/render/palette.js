@@ -28,6 +28,7 @@ export const C = {
   metal: md(120, 124, 132),
   helmet: md(236, 236, 240),
   hot: md(250, 190, 40),
+  tail: md(255, 60, 40),
   crowd: md(160, 120, 150),
   armco: md(206, 210, 214),
 };
@@ -99,3 +100,83 @@ export const TEAM_COLOURS = [
 /** Smoke off a locked tyre, and the dust a car picks up off the grass. */
 export const SMOKE = md(214, 214, 218);
 export const DUST = md(176, 158, 112);
+
+/**
+ * The time of day, which moves while you are racing.
+ *
+ * A race starts in the afternoon, has the sun on the horizon by the second lap
+ * and finishes in the dark. Rather than three copies of every colour in this
+ * file, each time of day is a transformation applied to the colours that are
+ * already here: darken by `dim`, then pull `wash` of the way towards a colour.
+ * Dusk pulls everything towards orange and takes a fifth of the brightness;
+ * night pulls it towards a deep blue and takes two thirds.
+ *
+ * That is one arithmetic operation per polygon colour and it means a colour
+ * added to the game tomorrow gets a night version for nothing.
+ */
+export const TIMES = [
+  {
+    at: 0,
+    dim: 1,
+    wash: md(255, 246, 220),
+    pull: 0,
+    sun: md(255, 250, 226),
+    sunSize: 7,
+    sunHigh: 0.34,
+    sky: null,          // whatever the circuit's own sky is
+  },
+  {
+    at: 0.52,
+    dim: 0.84,
+    wash: md(255, 178, 98),
+    pull: 0.24,
+    sun: md(255, 140, 40),
+    sunSize: 17,
+    sunHigh: 0.01,
+    sky: [
+      [0.16, md(52, 30, 78)],
+      [0.30, md(122, 52, 88)],
+      [0.41, md(206, 96, 76)],
+      [0.49, md(248, 158, 74)],
+      [1.00, md(252, 196, 118)],
+    ],
+  },
+  {
+    at: 1,
+    dim: 0.3,
+    wash: md(56, 74, 134),
+    pull: 0.34,
+    sun: md(226, 230, 244),
+    sunSize: 6,
+    sunHigh: 0.2,
+    sky: [
+      [0.30, md(6, 6, 24)],
+      [0.44, md(12, 14, 40)],
+      [0.52, md(22, 28, 62)],
+      [1.00, md(34, 42, 82)],
+    ],
+  },
+];
+
+/**
+ * One colour, at a given time of day.
+ *
+ * Darkened and then pulled towards the wash in a single pass, because this runs
+ * once per polygon colour per frame and doing it as two calls to the helpers
+ * above would snap the colour to the palette twice - which loses a little of it
+ * each time and shows up as banding on the hillsides.
+ */
+export function lit(colour, dim, wash, pull) {
+  if (pull <= 0 && dim >= 1) return colour;
+  const r = (colour & 255) * dim;
+  const g = ((colour >> 8) & 255) * dim;
+  const b = ((colour >> 16) & 255) * dim;
+  return md(
+    r + ((wash & 255) - r) * pull,
+    g + (((wash >> 8) & 255) - g) * pull,
+    b + (((wash >> 16) & 255) - b) * pull,
+  );
+}
+
+/** Where the sun sits, as a world bearing. It does not move; you do. */
+export const SUN_BEARING = 2.2;

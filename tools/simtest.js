@@ -122,6 +122,32 @@ for (const tier of ['easy', 'normal', 'hard']) {
 }
 
 /**
+ * The afternoon goes, and it goes on distance rather than on the clock.
+ *
+ * A race that has gone badly should get dark at the same place on the circuit as
+ * one that has gone well - the light belongs to how far round you are, not to
+ * how long you took, or a driver who spun twice would be finishing at midnight
+ * on the lap everybody else did in daylight.
+ */
+{
+  const state = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 6 });
+  ok('it starts in daylight', state.light === 0);
+  const seen = [];
+  let lap = -1;
+  let t = 0;
+  while (!state.over && !state.finished && t < TICK_RATE * 600) {
+    step(state, driveLine(state, 0.98));
+    t++;
+    if (player(state).lap !== lap) {
+      lap = player(state).lap;
+      if (lap >= 0) seen.push(state.light);
+    }
+  }
+  ok(`and it is dark at the flag (light at each line: ${seen.map((v) => v.toFixed(2)).join(', ')})`,
+    state.light > 0.97 && seen.every((v, i) => i === 0 || v > seen[i - 1]));
+}
+
+/**
  * The racing is close, and it is close because of the numbers rather than
  * because of a rubber band.
  *
@@ -150,13 +176,16 @@ for (const tier of ['easy', 'normal', 'hard']) {
   }
   const share = Math.round((100 * close) / ticks);
   ok(`somebody is within ninety metres of you ${share}% of the race`, share > 45);
-  // Not the podium. The reference driver is a competent line-follower and
-  // nothing more - it does not plan an overtake, it does not use the tow on
-  // purpose, and it drives every corner the same way twice. Coming from the back
-  // row to the points against seven cars that defend is what that is worth, and
-  // a bar it cannot clear would only ever be met by making the rivals worse.
-  ok(`and a good drive comes from last to the points (${places.join(', ')})`,
-    places.every((p) => p <= 5));
+  // Places gained rather than a finishing position, because a finishing
+  // position is a bar that gets lowered every time the rivals get quicker -
+  // which is the wrong way round. The reference driver is a competent
+  // line-follower and nothing more: it does not plan an overtake, it does not
+  // use the tow on purpose, and it drives every corner the same way three times.
+  // What it should reliably do from the back row is get past some of them.
+  const gained = places.map((p) => 8 - p);
+  const mean = gained.reduce((a, b) => a + b, 0) / gained.length;
+  ok(`and a competent drive gains ${mean.toFixed(1)} places from the back row `
+    + `(finished ${places.join(', ')})`, mean >= 2 && places.every((p) => p <= 7));
 }
 
 // Laps roll over cleanly at the line, on a track that has no beginning.

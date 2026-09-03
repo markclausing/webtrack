@@ -106,6 +106,14 @@ if (route === 'docs') {
       const at = nodeAt(s.route, player(s).s).i;
       return at > 10 && at < 22 && player(s).speed > 45 && player(s).lap >= 0;
     }, 'pass', 'gp'],
+    // The afternoon going: the same circuit on the second lap and the third.
+    ['dusk', (s) => s.light > 0.5 && s.light < 0.62 && player(s).speed > 60, 'pass', 'gp'],
+    ['night', (s) => s.light > 0.9 && player(s).speed > 60, 'pass', 'gp'],
+    ['bridge', (s) => {
+      const at = nodeAt(s.route, player(s).s).i;
+      const from = s.route.bridgeFrom;
+      return at > from + 20 && at < from + 50 && player(s).speed > 55;
+    }, 'pass', 'gp'],
     ['qualifying', (s) => player(s).best > 0 && player(s).speed > 70, 'coast', 'qual'],
     ['grand', (s) => {
       const at = player(s).s % s.route.metres;

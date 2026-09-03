@@ -161,16 +161,16 @@ export const LIGHTS = 200;          // ticks
 /**
  * What a rival will do, before the skill setting has its say.
  *
- * These two numbers are the difficulty of the game and very little else is. They
- * are close to one on purpose: a rival with ninety-four per cent of your grip is
- * a rival you drive past on the second corner and never see again, and a race
- * you have won by the end of the first lap is not a race. At ninety-eight and a
- * half you have an edge worth about a second a lap, which over three laps is
- * three seconds - enough to come through the field if you take every one of
- * them, and not nearly enough if you throw one away.
+ * They are one, and they are one on purpose. A rival with ninety-four per cent
+ * of your grip is a rival you drive past on the second corner and never see
+ * again; a rival with ninety-eight is one a driver who knows the circuit still
+ * walks away from. The same car as yours, driven properly, is the only setting
+ * that makes the race about the driving - and it leaves the difficulty to be the
+ * one thing it should be, which is how well they use it. That is `cfg.ai`, and
+ * on hard they are given a few per cent more than you have.
  */
-export const AI_TOP = 0.992;        // fraction of your top speed
-export const AI_GRIP = 0.985;       // fraction of your grip, so you can out-brake them
+export const AI_TOP = 1.0;        // fraction of your top speed
+export const AI_GRIP = 1.0;       // fraction of your grip, so you can out-brake them
 /** How far ahead they look for the corner, in metres, when deciding to brake. */
 export const AI_LOOK = 190;
 
@@ -214,10 +214,20 @@ export const CHECKPOINT_TIME = 40;
 export const CHECKPOINT_EVERY = 220;
 
 /** What the three settings change. */
+/**
+ * What the three settings change.
+ *
+ * `ai` is the whole difficulty and is a multiplier on the rivals' grip and
+ * power. On normal they have three per cent more than you: it is not much, and
+ * it is deliberately on the wrong side of one, because a driver who knows the
+ * circuit is worth a good deal more than three per cent and the alternative is a
+ * field you leave behind on lap one. `grip` is your own, and is the other half
+ * of the same dial from the other end.
+ */
 export const TIERS = {
-  easy: { clock: 1.3, ai: 0.94, grip: 1.08, label: 'Easy' },
-  normal: { clock: 1, ai: 1, grip: 1, label: 'Normal' },
-  hard: { clock: 0.86, ai: 1.045, grip: 0.95, label: 'Hard' },
+  easy: { clock: 1.3, ai: 0.95, grip: 1.06, label: 'Easy' },
+  normal: { clock: 1, ai: 1.03, grip: 1, label: 'Normal' },
+  hard: { clock: 0.86, ai: 1.075, grip: 0.96, label: 'Hard' },
 };
 
 // --- The gearbox -------------------------------------------------------------

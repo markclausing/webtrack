@@ -135,6 +135,8 @@ export function makeState({ route = 'pass', mode = 'gp', tier = 'normal', seed =
     over: false,
     reason: '',
     shake: 0,
+    /** Nought at the start, one at the flag: afternoon, then dusk, then night. */
+    light: 0,
     prevMask: 0,
     events: [],
   };

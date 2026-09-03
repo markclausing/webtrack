@@ -266,6 +266,33 @@ function ground(y, lean, warm, wob, infield) {
   };
 }
 
+/**
+ * How many nodes of the circuit are a bridge, and where the towers stand on it.
+ *
+ * A suspension bridge wants a straight, so the span is put on the straightest
+ * run of track there is rather than at a fixed place - which on a procedural
+ * circuit is the difference between a crossing and a very odd looking curved
+ * one.
+ */
+export const BRIDGE_NODES = 76;
+export const TOWERS = [0.22, 0.78];
+
+/** The straightest run of `want` nodes anywhere on the lap. */
+function straightest(nodes, want) {
+  const n = nodes.length;
+  let best = Infinity;
+  let at = 0;
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    for (let k = 0; k < want; k++) sum += Math.abs(nodes[(i + k) % n].curve);
+    if (sum < best) {
+      best = sum;
+      at = i;
+    }
+  }
+  return at;
+}
+
 /** The three circuits. `warm` is 0 for mountain, 1 for sea front. */
 const CIRCUITS = {
   pass: {
@@ -334,11 +361,29 @@ export function buildRoute(key) {
     if (steepest <= 0.13) break;
   }
 
-  // One height for the whole infield: a little below the average of the track,
-  // so it is a plain the circuit sits on rather than a wall across the middle.
-  let mean = 0;
-  for (let i = 0; i < count; i++) mean += height[i];
-  const infield = mean / count - 9;
+  /**
+   * The height of the infield, per node: the track's own height smoothed over a
+   * sixth of a lap and dropped a few metres.
+   *
+   * One flat plain for the whole circuit was the fix for a hillside that reached
+   * across the middle of the loop and drew itself over the far side of the
+   * track. It worked, and it bought a second problem: on a circuit that climbs
+   * fifty metres, a plain at the average height stands twenty metres above the
+   * track wherever the track is in a dip, and a twenty metre embankment beside
+   * the road reads as a flat polygon dropped on the scene.
+   *
+   * Smoothed rather than flat keeps both properties. It never rises far above
+   * the road beside it, because it is that road's own height; and it can never
+   * tower over the far side of the loop, because it never leaves the range of
+   * heights the circuit itself occupies.
+   */
+  const infield = new Float64Array(count);
+  const soften = Math.max(8, Math.round(count / 6));
+  for (let i = 0; i < count; i++) {
+    let sum = 0;
+    for (let k = -soften; k <= soften; k++) sum += height[((i + k) % count + count) % count];
+    infield[i] = sum / (soften * 2 + 1) - 6;
+  }
 
   // Which way the hill leans, from the curvature averaged over eighty metres.
   //
@@ -389,18 +434,46 @@ export function buildRoute(key) {
       // Banking, into the corner. Small: this is a circuit, not a bowl.
       bank: -curve * 3.2,
       warm,
-      g: ground(y, lean[i], warm, wob, infield),
+      g: ground(y, lean[i], warm, wob, infield[i]),
     });
+  }
+
+  // The bridge, laid on the straightest stretch there is, with the water under
+  // it a good way below the deck. Done after the nodes exist because it needs
+  // their curvature to choose where to go and their heights to decide how far
+  // down the water is.
+  const from = straightest(nodes, BRIDGE_NODES);
+  let lowest = Infinity;
+  for (let k = 0; k < BRIDGE_NODES; k++) {
+    lowest = Math.min(lowest, nodes[(from + k) % count].y);
+  }
+  const water = lowest - 26;
+  for (let k = 0; k < BRIDGE_NODES; k++) {
+    const node = nodes[(from + k) % count];
+    node.bridge = k / (BRIDGE_NODES - 1);
+    // Everything either side of the deck falls away to the water, and both
+    // sides of it are water rather than only the seaward one.
+    const ease = Math.min(1, Math.min(k, BRIDGE_NODES - 1 - k) / 7);
+    const drop = (h) => h + (water - h) * ease;
+    node.g = {
+      ...node.g,
+      l: [drop(node.y - 1), drop(node.g.l[1]), drop(node.g.l[2])],
+      r: [drop(node.y - 1), drop(node.g.r[1]), drop(node.g.r[2])],
+      far: [drop(node.g.far[0]), drop(node.g.far[1])],
+      wet: Math.max(node.g.wet, ease),
+      bay: ease,
+    };
   }
 
   return {
     key,
     nodes,
+    bridgeFrom: from,
+    bridgeWater: water,
     props: scatter(nodes, seeded(plan.seed ^ 0x3a71)),
     length: count,
     metres: count * SEG,
     steepest,
-    infield,
     // Which nodes stop the clock. The line, and one on the far side of the lap,
     // so a long circuit is not one enormous held breath.
     checkpoints: checkpointsFor(count),
