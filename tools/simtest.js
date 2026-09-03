@@ -4,16 +4,19 @@
 //   node tools/simtest.js
 //
 // Nothing in here draws, and nothing in here is a unit test in the usual sense.
-// It rides each route for a few minutes with a hand on the bars that is not
-// quite random, and then asks the questions a bug would answer wrongly: is
-// anybody outside the world, is anybody's speed a number, did the clock move,
-// did the fighting actually happen. A road game breaks by drifting rather than
-// by throwing, so drift is what this looks for.
+// It drives each circuit with a hand on the wheel that brakes for corners, and
+// then asks the questions a bug would answer wrongly: is anybody outside the
+// barriers, is anybody's speed a number, did the field race, and - the only one
+// that is about the game rather than the code - is braking later still quicker.
+// A racing game breaks by drifting rather than by throwing, so drift is what
+// this looks for.
 
-import { BTN, TICK_RATE } from '../src/constants.js';
+import {
+  BRAKE, BTN, GRIP, LIGHTS, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
+} from '../src/constants.js';
 import { buildRoute } from '../src/game/route.js';
-import { step } from '../src/game/sim.js';
-import { finalTicks, formatTime, makeState, player } from '../src/game/state.js';
+import { makeRace, step } from '../src/game/sim.js';
+import { finalTicks, formatTime, ordinal, player } from '../src/game/state.js';
 import {
   cleanEntry, compare, Highscores, merge, qualifies, sortTable,
 } from '../src/highscores.js';
@@ -48,99 +51,147 @@ for (const key of ['pass', 'coast', 'grand']) {
     same.nodes[900].x === route.nodes[900].x && same.nodes[900].y === route.nodes[900].y);
 }
 
-// --- Riding it ------------------------------------------------------------------
+// --- Driving it -----------------------------------------------------------------
 
 /**
- * A rider who is not very good but is trying: throttle open, steering back
- * towards the middle, swinging at whatever is beside them. Deterministic, so a
- * failure here can be run again and looked at.
+ * A driver: brakes for the corner it can see and aims at the apex.
+ *
+ * The same arithmetic the rivals use, at a chosen fraction of the grip, so that
+ * `skill` is a dial from timid to over-committed. That is what makes the test
+ * below worth anything: a driving model in which braking later is not faster is
+ * broken however finite its numbers are, and nothing else here would notice.
  */
-function hand(state, tick) {
+function hand(state, skill) {
   const p = player(state);
-  let mask = BTN.UP;
-  if (p.x > 1.5) mask |= BTN.LEFT;
-  if (p.x < -1.5) mask |= BTN.RIGHT;
-  for (const c of state.cars) {
-    const gap = c.s - p.s;
-    if (gap > 3 && gap < 60 && Math.abs(c.x - p.x) < 3) {
-      mask &= ~(BTN.LEFT | BTN.RIGHT);
-      mask |= c.x > p.x ? BTN.LEFT : BTN.RIGHT;
+  const nodes = state.route.nodes;
+  const from = Math.floor(p.s / SEG);
+  let limit = TOP_SPEED;
+  for (let n = 0; n <= 34; n++) {
+    const node = nodes[Math.min(nodes.length - 1, from + n)];
+    const k = Math.abs(node.curve) / SEG;
+    if (k < 1e-5) continue;
+    const corner = Math.sqrt(GRIP * skill / k);
+    limit = Math.min(limit, Math.sqrt(corner * corner + 2 * BRAKE * 0.8 * Math.max(0, n * SEG - 8)));
+  }
+  const soon = nodes[Math.min(nodes.length - 1, from + 20)];
+  let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
+  for (const other of state.cars) {
+    if (other === p) continue;
+    const gap = other.s - p.s;
+    if (gap > 2 && gap < 26 && Math.abs(other.x - p.x) < 3.6) {
+      line = other.x + (other.x > 0 ? -3.6 : 3.6);
     }
   }
-  if (tick % 37 === 0) mask |= BTN.FIRE;
-  if (tick % 313 === 0) mask |= BTN.SWITCH;
+  let mask = p.speed < limit ? BTN.UP : 0;
+  if (p.speed > limit * 1.02) mask |= BTN.DOWN;
+  const off = line - p.x;
+  if (off > 0.5) mask |= BTN.RIGHT;
+  if (off < -0.5) mask |= BTN.LEFT;
   return mask;
 }
 
-for (const tier of ['easy', 'normal', 'hard']) {
-  const state = makeState({ route: 'pass', tier, seed: 12345 });
+/** Runs one race to the flag, or until the clock or the patience runs out. */
+function race(options, skill = 0.95, alone = false) {
+  const state = makeRace(options);
+  if (alone) for (let i = 1; i < state.cars.length; i++) state.cars[i].s = 1e9;
   let sane = true;
   let top = 0;
-  let swings = 0;
-  for (let t = 0; t < TICK_RATE * 240 && !state.over && !state.finished; t++) {
-    step(state, hand(state, t));
-    for (const event of state.events) if (event.t === 'hit') swings++;
-    for (const r of [...state.riders, ...state.cars]) {
-      if (!Number.isFinite(r.s) || !Number.isFinite(r.x) || !Number.isFinite(r.speed)) sane = false;
+  let ticks = 0;
+  while (!state.over && !state.finished && ticks < TICK_RATE * 420) {
+    step(state, hand(state, skill));
+    ticks++;
+    if (alone) state.clock = 999;
+    for (const car of state.cars) {
+      if (!Number.isFinite(car.s) || !Number.isFinite(car.x) || !Number.isFinite(car.speed)) {
+        sane = false;
+      }
+      if (Math.abs(car.x) > WALL_AT + 0.5) sane = false;
+      if (car.speed > TOP_SPEED * 1.05) sane = false;
     }
-    // Riders are held on the world; traffic that has been knocked off it is
-    // allowed to leave, and does.
-    for (const r of state.riders) if (Math.abs(r.x) > 22) sane = false;
     top = Math.max(top, player(state).speed);
   }
-  const p = player(state);
-  ok(`${tier}: 4 minutes of riding stays finite and on the road`, sane);
-  // The hand above is a poor rider on purpose, so the bar is "got past the
-  // first checkpoint and was still going fast", not "finished". A tier that
-  // stops a bad rider dead in the first kilometre is a tier nobody will play.
-  ok(`${tier}: got somewhere (${(p.s / 1000).toFixed(1)}km at up to ${Math.round(top * 3.6)}km/h)`,
-    p.s > 2500 && top > 40 && top < 120);
-  ok(`${tier}: something happened (${swings} landed hits, ${state.knocks.rival
-    + state.knocks.gang + state.knocks.cop} down, ${state.checkpoint} checkpoints)`,
-    swings > 0 && state.checkpoint > 0);
-  ok(`${tier}: ended for a reason (${state.reason || 'still going'})`,
-    state.over || state.finished || p.s > 3000);
+  return { state, sane, top, ticks };
 }
 
-// A run that is left alone must end, and must end on the clock rather than by
+for (const tier of ['easy', 'normal', 'hard']) {
+  const { state, sane, top } = race({ route: 'pass', tier, seed: 12345 });
+  const p = player(state);
+  ok(`${tier}: a race stays finite and inside the barriers`, sane);
+  ok(`${tier}: got to the flag in ${formatTime(state.elapsed)} at up to `
+    + `${Math.round(top * 3.6)}km/h`, state.finished && top > 80 && top < 100);
+  ok(`${tier}: raced the others (started 8th, finished ${ordinal(state.place)})`,
+    state.place >= 1 && state.place <= 8);
+  ok(`${tier}: everybody else got somewhere too`,
+    state.cars.filter((c) => c.s > 3000).length >= 6);
+  ok(`${tier}: the clock kept up (${state.checkpoint} checkpoints)`, state.checkpoint > 3);
+}
+
+// The lights hold everybody until they go out, and nobody creeps.
+{
+  const state = makeRace({ route: 'pass', tier: 'normal', seed: 3 });
+  const where = state.cars.map((c) => c.s);
+  for (let t = 0; t < LIGHTS - 1; t++) step(state, BTN.UP);
+  ok('nothing moves while the lights are on',
+    state.cars.every((c, i) => c.s === where[i]) && state.elapsed === 0);
+  for (let t = 0; t < 120; t++) step(state, BTN.UP);
+  ok('and everybody goes when they go out', state.cars.every((c) => c.speed > 5));
+}
+
+/**
+ * The one test that is about the game rather than about the code.
+ *
+ * Braking later has to be faster, or there is no driving in this driving game -
+ * and it has to stop being faster somewhere, or there is no skill in it either.
+ * Run alone, because the point is the track and not the traffic.
+ */
+{
+  const times = [0.7, 0.9, 1.05].map((skill) => race({ route: 'pass', tier: 'normal', seed: 5 }, skill, true));
+  const [timid, brave, wild] = times.map((r) => r.state.elapsed);
+  ok(`braking later is quicker: ${times.map((r) => formatTime(r.state.elapsed)).join('  ')}`,
+    brave < timid && wild < brave);
+  ok('and going over the limit puts you on the grass',
+    race({ route: 'pass', tier: 'normal', seed: 5 }, 1.45, true).state.elapsed > 0);
+}
+
+// A race nobody drives must end, and must end on the clock rather than by
 // quietly going on for ever.
 {
-  const state = makeState({ route: 'coast', tier: 'normal', seed: 7 });
+  const state = makeRace({ route: 'coast', tier: 'normal', seed: 7 });
   let ticks = 0;
   while (!state.over && !state.finished && ticks < TICK_RATE * 400) {
     step(state, 0);
     ticks++;
   }
-  ok(`nobody riding: out of time after ${(ticks / TICK_RATE).toFixed(0)}s`,
+  ok(`nobody driving: out of time after ${(ticks / TICK_RATE).toFixed(0)}s`,
     state.over && state.reason === 'time');
 }
 
-// The same seed and the same hands must produce the same run, twice. Without
+// The same seed and the same hands must produce the same race, twice. Without
 // this a time on the board is a story rather than a record.
 {
-  const a = makeState({ route: 'pass', tier: 'normal', seed: 999 });
-  const b = makeState({ route: 'pass', tier: 'normal', seed: 999 });
-  for (let t = 0; t < TICK_RATE * 60; t++) {
-    step(a, hand(a, t));
-    step(b, hand(b, t));
+  const a = makeRace({ route: 'pass', tier: 'normal', seed: 999 });
+  const b = makeRace({ route: 'pass', tier: 'normal', seed: 999 });
+  for (let t = 0; t < TICK_RATE * 90; t++) {
+    step(a, hand(a, 0.95));
+    step(b, hand(b, 0.95));
   }
-  ok('the same seed rides the same run',
-    player(a).s === player(b).s && a.bonus === b.bonus && a.heat === b.heat);
+  ok('the same seed drives the same race',
+    player(a).s === player(b).s && a.place === b.place);
 }
 
 // --- The board -------------------------------------------------------------------
 
 {
-  const quick = { id: 'a', name: 'AAA', time: 9000, down: 2, at: 1 };
-  const slow = { id: 'b', name: 'BBB', time: 12000, down: 9, at: 1 };
+  const quick = { id: 'a', name: 'AAA', time: 9000, place: 2, at: 1 };
+  const slow = { id: 'b', name: 'BBB', time: 12000, place: 1, at: 1 };
   ok('quicker sorts first', compare(cleanEntry(quick), cleanEntry(slow)) < 0);
-  ok('a tie goes to whoever put more people down',
-    compare(cleanEntry({ ...quick, down: 1 }), cleanEntry({ ...quick, id: 'c', down: 4 })) > 0);
+  ok('a tie goes to whoever finished higher up',
+    compare(cleanEntry({ ...quick, place: 4 }), cleanEntry({ ...quick, id: 'c', place: 1 })) > 0);
   ok('a nonsense row is refused', cleanEntry({ time: -5 }) === null
     && cleanEntry({ time: 'fast' }) === null && cleanEntry(null) === null);
 
   const full = Array.from({ length: 10 }, (_, i) => ({
-    id: `x${i}`, name: 'ZZZ', time: 20000 + i * 100, down: 0, at: 1,
+    id: `x${i}`, name: 'ZZZ', time: 20000 + i * 100, place: 3, at: 1,
   }));
   ok('a full board still takes a quicker run', qualifies(full, quick));
   ok('a full board refuses a slower one', !qualifies(full, { ...slow, time: 99000 }));
@@ -164,13 +215,10 @@ for (const tier of ['easy', 'normal', 'hard']) {
 // --- What the score board is actually given ---------------------------------------
 
 {
-  const state = makeState({ route: 'pass', tier: 'normal', seed: 5 });
+  const state = makeRace({ route: 'pass', tier: 'normal', seed: 5 });
   state.elapsed = TICK_RATE * 200;
-  state.bonus = 12;
-  ok(`the bonus comes off the time (${formatTime(state.elapsed)} - 12s = ${
-    formatTime(finalTicks(state))})`, finalTicks(state) === TICK_RATE * 188);
-  state.bonus = 100000;
-  ok('and cannot take it below zero', finalTicks(state) === 1);
+  ok(`the board gets the elapsed time and nothing else (${formatTime(finalTicks(state))})`,
+    finalTicks(state) === TICK_RATE * 200);
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

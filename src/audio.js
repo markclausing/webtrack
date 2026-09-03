@@ -1,18 +1,21 @@
 /**
  * Sound, out of oscillators. There are no samples in this repository.
  *
- * The engine is the only difficult one and it is worth the trouble, because on
- * a bike the engine is the speedometer - you know what a hundred and eighty
- * sounds like long before you can spare the half second it takes to read the
- * number. It is built the way the real thing works: a big twin fires twice and
- * then waits, which is why a Harley lopes instead of hums. Two detuned sawtooths
- * give the metal, a low-pass that opens with the throttle gives the effort, and
- * an amplitude wobble at the firing rate gives the lope. Take the wobble out and
- * it is a lawnmower.
+ * The engine is the only difficult one and it is worth the trouble, because in a
+ * car like this the engine is the rev counter - you know when to change up long
+ * before you can spare the tenth of a second it takes to look at a number. It is
+ * built the way the noise is actually made: a stack of detuned sawtooths at the
+ * firing frequency, a resonant band that sweeps up with the revs and gives it the
+ * shriek, and a second oscillator an octave up mixed in at the top of the range
+ * so the last two thousand revs sound like they cost something.
  *
- * Everything else is a short burst of something: filtered noise for a fist, a
- * longer one with a pitch drop for the crash, two square waves alternating for
- * the siren.
+ * The important part is what happens at a gear change. The note drops by the
+ * ratio, the gain ducks for four frames, and it comes back in lower. That
+ * half-tenth of silence is the whole difference between an engine and a siren,
+ * and it is four lines.
+ *
+ * Everything else is a short burst of something: filtered noise for a lock-up,
+ * a tone that slides for a spin, a square wave for the lights.
  *
  * The voice is not built here at all. speech.js is one of the five files shared
  * word for word with the other four games and knows nothing about any of them;
@@ -20,6 +23,7 @@
  */
 
 import { LINES, WORDS } from './commentary.js';
+import { gearAt, TOP_SPEED } from './constants.js';
 import { Speech } from './speech.js';
 
 export class Sound {
@@ -29,8 +33,9 @@ export class Sound {
     this.talk = true;
     this.running = false;
     this.nodes = null;
-    this.sirenUntil = 0;
     this.speech = null;
+    this.gear = 1;
+    this.squeal = 0;
   }
 
   /**
@@ -48,8 +53,8 @@ export class Sound {
       this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
       this.noise = makeNoise(this.ctx);
-      // The synthesiser reaches for a longer buffer than the impacts do, under
-      // a name of its own. Same noise; a second of it is plenty for both.
+      // The synthesiser reaches for a longer buffer under a name of its own.
+      // Same noise; a second of it is plenty for both.
       this.longNoise = this.noise;
       this.speech = new Speech(this, { WORDS, LINES });
     }
@@ -81,7 +86,7 @@ export class Sound {
     this.speech.say(event);
   }
 
-  /** Fires up the engine and leaves it running until the run ends. */
+  /** Fires it up and leaves it running until the race ends. */
   start() {
     if (!this.on || this.running) return;
     const ctx = this.wake();
@@ -92,114 +97,150 @@ export class Sound {
     out.gain.value = 0;
     out.connect(this.master);
 
+    // The shriek: a resonant band that climbs with the revs. Without the Q this
+    // is a lawnmower; with it, it is a ten cylinder engine.
     const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 400;
-    filter.Q.value = 3;
-    filter.connect(out);
+    filter.type = 'bandpass';
+    filter.frequency.value = 700;
+    filter.Q.value = 5.5;
+    const body = ctx.createBiquadFilter();
+    body.type = 'lowpass';
+    body.frequency.value = 4200;
+    filter.connect(body).connect(out);
+    // A little of the raw stack goes past the band, or the low end vanishes.
+    const bypass = ctx.createGain();
+    bypass.gain.value = 0.35;
+    bypass.connect(out);
 
-    // The lope. A gain that dips between firings, at the same rate as the
-    // cylinders, which is what makes it a twin rather than a tone.
-    const chug = ctx.createGain();
-    chug.gain.value = 0.6;
-    chug.connect(filter);
-    const lfo = ctx.createOscillator();
-    lfo.type = 'triangle';
-    lfo.frequency.value = 12;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.45;
-    lfo.connect(lfoGain).connect(chug.gain);
-    lfo.start(now);
+    const oscs = [];
+    for (const [type, detune, level] of [
+      ['sawtooth', 0, 0.34], ['sawtooth', 8, 0.3], ['sawtooth', -11, 0.3], ['square', 4, 0.14],
+    ]) {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.value = 200;
+      osc.detune.value = detune;
+      const gain = ctx.createGain();
+      gain.gain.value = level;
+      osc.connect(gain);
+      gain.connect(filter);
+      gain.connect(bypass);
+      osc.start(now);
+      oscs.push(osc);
+    }
+    // An octave up, mixed in only at the top of a gear.
+    const top = ctx.createOscillator();
+    top.type = 'sawtooth';
+    top.frequency.value = 400;
+    const topGain = ctx.createGain();
+    topGain.gain.value = 0;
+    top.connect(topGain).connect(filter);
+    top.start(now);
 
-    const a = ctx.createOscillator();
-    a.type = 'sawtooth';
-    a.frequency.value = 60;
-    const b = ctx.createOscillator();
-    b.type = 'square';
-    b.frequency.value = 60.9;
-    const mixA = ctx.createGain();
-    mixA.gain.value = 0.5;
-    const mixB = ctx.createGain();
-    mixB.gain.value = 0.22;
-    a.connect(mixA).connect(chug);
-    b.connect(mixB).connect(chug);
-    a.start(now);
-    b.start(now);
+    // The tyres, for when they have had enough.
+    const squeal = ctx.createOscillator();
+    squeal.type = 'sawtooth';
+    squeal.frequency.value = 1150;
+    const squealBand = ctx.createBiquadFilter();
+    squealBand.type = 'bandpass';
+    squealBand.frequency.value = 1600;
+    squealBand.Q.value = 9;
+    const squealGain = ctx.createGain();
+    squealGain.gain.value = 0;
+    squeal.connect(squealBand).connect(squealGain).connect(this.master);
+    squeal.start(now);
 
-    out.gain.linearRampToValueAtTime(0.3, now + 0.4);
-    this.nodes = { out, filter, a, b, lfo };
+    out.gain.linearRampToValueAtTime(0.26, now + 0.3);
+    this.nodes = { out, filter, body, oscs, top, topGain, squeal, squealGain };
     this.running = true;
+    this.gear = 1;
   }
 
   stop() {
     if (!this.nodes) return;
-    const { out, a, b, lfo } = this.nodes;
+    const { out, oscs, top, squeal, squealGain } = this.nodes;
     const now = this.ctx.currentTime;
     out.gain.cancelScheduledValues(now);
     out.gain.setValueAtTime(out.gain.value, now);
     out.gain.linearRampToValueAtTime(0, now + 0.25);
-    for (const node of [a, b, lfo]) node.stop(now + 0.3);
+    squealGain.gain.setTargetAtTime(0, now, 0.05);
+    for (const node of [...oscs, top, squeal]) node.stop(now + 0.32);
     this.nodes = null;
     this.running = false;
   }
 
   /**
-   * The engine, once a frame.
+   * The engine and the tyres, once a frame.
    *
-   * Speed drives the pitch and the filter together, and the gearing is faked the
-   * way a game of this shape has to fake it: the note climbs, drops back and
-   * climbs again every so many km/h, so that accelerating sounds like getting
-   * somewhere rather than like a siren winding up.
+   * `rev` comes out of the gearbox in constants.js, which exists for this and
+   * for the dial and for nothing else. The note follows it rather than the
+   * speed, so the pitch sweeps up seven times over a lap and drops six.
    */
   update(state) {
     if (!this.nodes || !this.on) return;
-    const p = state.riders[0];
+    const p = state.cars[0];
     const speed = Math.max(0, p.speed);
-    const gear = Math.min(5, Math.floor(speed / 15));
-    const within = (speed - gear * 15) / 15;
-    const rev = 0.25 + within * 0.75;
+    const { gear, rev } = gearAt(speed);
     const now = this.ctx.currentTime;
-    const base = 46 + rev * 74;
+    const set = (param, value, time = 0.035) => param.setTargetAtTime(value, now, time);
 
-    const set = (param, value) => {
-      param.setTargetAtTime(value, now, 0.04);
-    };
-    set(this.nodes.a.frequency, base);
-    set(this.nodes.b.frequency, base * 1.012);
-    set(this.nodes.filter.frequency, 260 + rev * 1500 + speed * 12);
-    set(this.nodes.lfo.frequency, 7 + rev * 26);
-    // Off the tarmac the note goes rough and quiet, which is the fastest way to
-    // tell somebody they are in the gravel without putting a word on the screen.
-    const rough = Math.abs(p.x) > 9 ? 0.72 : 1;
-    set(this.nodes.out.gain, (p.down ? 0.06 : 0.3) * rough);
+    // On the grid the engine is not idling, it is being held against the
+    // limiter, which is the noise everybody in the crowd is waiting for.
+    const held = state.lights > 0;
+    const load = held ? 0.72 + Math.sin(state.tick * 0.6) * 0.22 : 0.22 + rev * 0.78;
+
+    const base = 118 + load * 340;
+    for (const osc of this.nodes.oscs) set(osc.frequency, base);
+    set(this.nodes.top.frequency, base * 2);
+    set(this.nodes.topGain.gain, Math.max(0, load - 0.5) * 0.22);
+    set(this.nodes.filter.frequency, 520 + load * 2600);
+    set(this.nodes.body.frequency, 2200 + load * 4200);
+
+    // The change up: the note has already dropped, so all that is missing is the
+    // moment of nothing that tells you it happened.
+    if (gear !== this.gear) {
+      const drop = gear > this.gear;
+      this.gear = gear;
+      const out = this.nodes.out.gain;
+      out.cancelScheduledValues(now);
+      out.setValueAtTime(drop ? 0.06 : 0.2, now);
+      out.linearRampToValueAtTime(0.26, now + 0.09);
+    }
+
+    // Tyres. Sliding squeals; the grass roars.
+    const rough = Math.abs(p.x) > 8.5;
+    const want = p.spinT > 0 ? 0.3 : rough ? 0.16 : Math.min(0.26, p.slide * 0.03);
+    this.squeal += (want - this.squeal) * 0.2;
+    set(this.nodes.squealGain.gain, this.squeal, 0.03);
+    set(this.nodes.squeal.frequency, rough ? 260 : 900 + Math.min(700, p.slide * 40), 0.05);
+
+    // Quieter with a nose full of somebody else's exhaust, which is not physics
+    // but is the only cue the tow gets other than the speedometer.
+    set(this.nodes.out.gain, 0.26 * (1 - p.tow * 0.12) * (speed > 2 ? 1 : 0.5), 0.08);
   }
 
   /** Whatever the simulation just said happened. */
   play(event) {
     if (!this.on || !this.wake()) return;
     switch (event.t) {
-      case 'swing':
-        this.blip(event.kick ? 190 : 320, 0.06, 'triangle', 0.1);
+      case 'light':
+        this.blip(440, 0.16, 'square', 0.24);
         break;
-      case 'hit': {
-        // Louder when it landed on you, because it did.
-        const metal = event.on === 'car';
-        this.burst(metal ? 0.14 : 0.09, metal ? 900 : 1800, event.mine ? 0.52 : 0.3);
-        this.blip(metal ? 90 : 150, 0.1, 'square', event.mine ? 0.24 : 0.14);
+      case 'green':
+        this.blip(880, 0.4, 'square', 0.3);
+        this.say('green');
         break;
-      }
-      case 'clang':
-        this.blip(880, 0.09, 'square', 0.14);
+      case 'touch':
+        this.burst(0.1, 2600, event.mine ? 0.4 : 0.2);
+        this.blip(220, 0.07, 'square', event.mine ? 0.2 : 0.1);
         break;
-      case 'down':
-        this.burst(0.55, 700, 0.42);
-        this.sweep(320, 60, 0.5, 0.2);
-        if (event.mine) this.say('down');
+      case 'wall':
+        this.burst(0.28, 1300, event.mine ? 0.5 : 0.24);
+        this.blip(110, 0.2, 'square', event.mine ? 0.3 : 0.14);
         break;
-      case 'pickup':
-        if (!event.mine) break;
-        this.blip(660, 0.06, 'square', 0.2);
-        setTimeout(() => this.blip(990, 0.08, 'square', 0.2), 60);
+      case 'spin':
+        this.burst(0.7, 1800, event.mine ? 0.42 : 0.2);
+        this.sweep(900, 220, 0.8, event.mine ? 0.22 : 0.1);
         break;
       case 'check':
         for (let i = 0; i < 3; i++) {
@@ -207,22 +248,11 @@ export class Sound {
         }
         this.say('check');
         break;
-      case 'siren':
-        this.siren();
-        this.say('law');
-        break;
-      case 'remount':
-        this.sweep(80, 260, 0.4, 0.16);
-        break;
       case 'finish':
         for (let i = 0; i < 5; i++) {
           setTimeout(() => this.blip(440 + i * 165, 0.16, 'square', 0.24), i * 130);
         }
-        this.say('finish');
-        break;
-      case 'busted':
-        this.sweep(420, 70, 1.1, 0.28);
-        this.say('busted');
+        this.say(event.place === 1 ? 'won' : 'finish');
         break;
       case 'time':
         this.sweep(420, 70, 1.1, 0.28);
@@ -281,16 +311,6 @@ export class Sound {
     osc.connect(gain).connect(this.master);
     osc.start(now);
     osc.stop(now + life + 0.02);
-  }
-
-  /** Two notes, four times, from behind. */
-  siren() {
-    const now = Date.now();
-    if (now < this.sirenUntil) return;
-    this.sirenUntil = now + 3000;
-    for (let i = 0; i < 8; i++) {
-      setTimeout(() => this.blip(i % 2 ? 660 : 880, 0.24, 'square', 0.14), i * 260);
-    }
   }
 }
 

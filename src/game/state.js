@@ -1,5 +1,5 @@
 /**
- * What a run is made of, and how to read it.
+ * What a race is made of, and how to read it.
  *
  * The state is a plain object and nothing outside the simulation writes to it.
  * The renderer reads it, the sound reads it, the score board reads two numbers
@@ -7,64 +7,94 @@
  * that keeps a game like this honest, because the moment drawing can nudge the
  * world, what you see stops being what happened.
  *
- * Position along the road is a distance in metres, not a node index. Nodes are
- * six metres apart and that is an implementation detail of the road; a rider who
+ * Position along the track is a distance in metres, not a node index. Nodes are
+ * six metres apart and that is an implementation detail of the road; a car that
  * knew about it would have to be rewritten the day the spacing changes.
+ *
+ * It is also what decides the race. Who is winning is who has the larger `s`,
+ * which is one comparison, and it stays true through every corner because the
+ * distance is measured along the track rather than across the world.
  */
 
-import { HEALTH, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS } from '../constants.js';
+import {
+  FIELD, GRID_GAP, GRID_OFF, LIGHTS, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS, VERGE,
+} from '../constants.js';
 import { buildRoute } from './route.js';
 
 export const ROUTES = {
   pass: {
     label: 'THE PASS',
-    blurb: 'Ten kilometres of switchbacks out of the valley and down the far side. '
-      + 'The climbs cost you everything the descents give back.',
+    blurb: 'Ten kilometres of mountain, climbing out of the valley and dropping '
+      + 'down the far side. Third gear corners with nowhere at all to put a car '
+      + 'that arrives in fifth.',
   },
   coast: {
     label: 'THE BOULEVARD',
-    blurb: 'The sea front, flat and open, four lanes of it. Nothing here slows you '
-      + 'down except the traffic and the people trying to put you in it.',
+    blurb: 'The sea front: long, open and quick, with four corners on it that '
+      + 'matter and a great deal of full throttle in between. Whoever leads onto '
+      + 'the last straight does not usually lead off it.',
   },
   grand: {
     label: 'THE GRAND RUN',
-    blurb: 'Over the pass and along the coast without stopping. Twice the road, '
-      + 'twice the law, and the only time worth having.',
+    blurb: 'Over the mountain and along the coast without stopping. Twenty-one '
+      + 'kilometres, one set of tyres, and the only time worth having.',
   },
 };
 
-/** A rider, whoever is on the bike. The player is one of these and nothing more. */
-export function makeRider(kind, s, x, extra = {}) {
+/** The teams, in the order they line up. Their colours live in the palette. */
+export const TEAMS = [
+  'ROSSO', 'ARGENT', 'AZUL', 'VERDE', 'AMBRA', 'NERO', 'BIANCO', 'VIOLA',
+];
+
+/** A car, whoever is driving it. The player is one of these and nothing more. */
+export function makeCar(kind, slot, s, x, extra = {}) {
   return {
     kind,
-    pal: kind === 'player' ? 'player' : kind,
+    slot,
+    // You are always in the red one. Which car is yours has to be answerable in
+    // the quarter of a second you can spare for it at three hundred, and "the
+    // one in the middle" stops being an answer the moment somebody is alongside.
+    team: kind === 'player' ? 0 : 1 + (slot % (TEAMS.length - 1)),
     s,
     x,
     vx: 0,
     speed: 0,
-    health: HEALTH,
-    wobble: 0,
-    lean: 0,
-    swing: 0,
-    swingSide: 0,
-    swingT: 0,
-    cool: 0,
-    kicking: false,
-    hurt: 0,          // ticks of flinch, drawn as a stagger
-    down: false,
-    downT: 0,
-    spin: 0,
-    gone: false,
-    weapon: null,
-    want: 0,          // where the ai would like to be, across the road
+    /** How far the car is pointed away from the track, in radians. */
+    yaw: 0,
+    slide: 0,        // grip it is asking for and not getting
+    tow: 0,          // how much of another car's hole in the air it is sitting in
+    spinT: 0,
+    place: slot + 1,
+    gap: 0,
+    done: false,
+    doneAt: 0,
+    ctl: null,
     think: 0,
+    line: 0,         // where the ai wants to be across the track
     ...extra,
   };
 }
 
+/**
+ * A race, on the grid, with the lights still on.
+ *
+ * The player starts at the back. That is not a difficulty setting, it is the
+ * shape of the game: a race you begin in front is a race you can only lose, and
+ * an arcade racer has about three minutes in which to give you seven overtakes
+ * and the feeling that you earned each one.
+ */
 export function makeState({ route = 'pass', tier = 'normal', seed = 1 } = {}) {
   const cfg = TIERS[tier] || TIERS.normal;
   const built = buildRoute(route);
+
+  const grid = [];
+  for (let slot = 0; slot < FIELD; slot++) {
+    // Pole sits furthest up the road; the player is on the back row.
+    const at = 30 + (FIELD - 1 - slot) * GRID_GAP;
+    const side = slot % 2 === 0 ? -1 : 1;
+    grid.push(makeCar(slot === FIELD - 1 ? 'player' : 'rival', slot, at, side * GRID_OFF));
+  }
+
   return {
     routeKey: route,
     route: built,
@@ -72,32 +102,27 @@ export function makeState({ route = 'pass', tier = 'normal', seed = 1 } = {}) {
     cfg,
     rng: seed | 0,
     tick: 0,
-    riders: [makeRider('player', 0, 3.5, { weapon: null })],
-    cars: [],
-    drops: [],
-    chopper: null,
-    heat: 0,
+    /** cars[0] is always the player. Where they started lives in `slot`. */
+    cars: [grid[FIELD - 1], ...grid.slice(0, FIELD - 1)],
+    lights: LIGHTS,
     clock: START_TIME * cfg.clock,
     elapsed: 0,
-    bonus: 0,
-    knocks: { rival: 0, gang: 0, cop: 0 },
     checkpoint: 0,
     checkNote: 0,
-    // Counters, not times: each one is ticked down and fires at zero. The gang
-    // starts a long way from zero because being jumped on the first corner
-    // teaches you nothing about the road.
-    spawn: { rival: 0, gang: 720, cop: 240, car: 0 },
-    prevMask: 0,
+    place: FIELD,
     finished: false,
     over: false,
     reason: '',
     shake: 0,
-    flash: 0,
+    prevMask: 0,
     events: [],
   };
 }
 
-export const player = (state) => state.riders[0];
+export const player = (state) => state.cars[0];
+
+/** Has the race actually started, or are the lights still on? */
+export const racing = (state) => state.lights <= 0;
 
 /** How far along, as a fraction. What the progress bar is. */
 export function progress(state) {
@@ -108,8 +133,8 @@ export function progress(state) {
  * The node under a given distance, and how far past it we are.
  *
  * Clamped at both ends rather than wrapping: this is a road from somewhere to
- * somewhere, not a circuit, and a rider who has run off the end of it should
- * stay pinned to the last piece of tarmac rather than reappear at the start.
+ * somewhere, not a circuit, and a car that has run off the end of it should stay
+ * pinned to the last piece of tarmac rather than reappear at the start.
  */
 export function nodeAt(route, s) {
   const at = s / SEG;
@@ -117,21 +142,18 @@ export function nodeAt(route, s) {
   return { i, t: Math.max(0, Math.min(1, at - i)) };
 }
 
-/** World position and heading of a point on the road, `x` metres off centre. */
+/** World position and heading of a point on the track, `x` metres off centre. */
 export function worldOf(route, s, x, lift = 0) {
   const { i, t } = nodeAt(route, s);
   const a = route.nodes[i];
   const b = route.nodes[i + 1];
-  const cx = a.x + (b.x - a.x) * t;
-  const cy = a.y + (b.y - a.y) * t;
-  const cz = a.z + (b.z - a.z) * t;
+  const bank = a.bank + (b.bank - a.bank) * t;
   const nx = a.nx + (b.nx - a.nx) * t;
   const nz = a.nz + (b.nz - a.nz) * t;
-  const bank = a.bank + (b.bank - a.bank) * t;
   return {
-    x: cx + nx * x,
-    y: cy + lift - bank * x * 0.12,
-    z: cz + nz * x,
+    x: a.x + (b.x - a.x) * t + nx * x,
+    y: a.y + (b.y - a.y) * t + lift - bank * x * 0.12,
+    z: a.z + (b.z - a.z) * t + nz * x,
     a: a.a + (b.a - a.a) * t,
     bank,
     slope: a.slope,
@@ -140,11 +162,11 @@ export function worldOf(route, s, x, lift = 0) {
   };
 }
 
-/** Is this point on the tarmac, on the verge, or in the scenery? */
+/** Is this point on the tarmac, on the kerb and grass, or in the gravel? */
 export function surfaceOf(x) {
   const off = Math.abs(x) - ROAD_HALF;
   if (off <= 0) return 'road';
-  if (off <= 3.2) return 'verge';
+  if (off <= VERGE) return 'verge';
   return 'rough';
 }
 
@@ -161,19 +183,33 @@ export function formatTime(ticks) {
   return `${m}:${String(s).padStart(2, '0')}.${String(h).padStart(2, '0')}`;
 }
 
+/** A gap between two cars, in seconds, the way a pit board writes one. */
+export function formatGap(seconds) {
+  const v = Math.abs(seconds);
+  if (!Number.isFinite(v) || v >= 100) return '--.-';
+  return v.toFixed(1);
+}
+
 /** Seconds on the clock, in the two digits an arcade cabinet would give you. */
 export function formatClock(seconds) {
   return String(Math.max(0, Math.ceil(seconds))).padStart(2, '0');
 }
 
+/** `1ST`, `2ND`, `3RD`. Shown big enough that it is the first thing you read. */
+export function ordinal(place) {
+  const n = Math.max(1, Math.round(place));
+  const suffix = n === 1 ? 'ST' : n === 2 ? 'ND' : n === 3 ? 'RD' : 'TH';
+  return `${n}${suffix}`;
+}
+
 /**
  * The number that goes on the score board.
  *
- * Your time, less what putting people down was worth. Working it out here rather
- * than in the simulation keeps the bonus honest: the clock you race against and
- * the time you are judged on are two different things, and mixing them would
- * mean a rider who fought could never be compared with one who did not.
+ * Just the time. There is no bonus and nothing to subtract: a race is won by
+ * being quicker than the others and the clock already knows who was. Where you
+ * finished goes on the board beside it, because two drivers on the same time did
+ * not have the same race, but it is not what the board is sorted by.
  */
 export function finalTicks(state) {
-  return Math.max(1, Math.round(state.elapsed - state.bonus * TICK_RATE));
+  return Math.max(1, Math.round(state.elapsed));
 }

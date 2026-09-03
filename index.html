@@ -22,18 +22,18 @@
     <canvas id="screen" tabindex="0"></canvas>
 
     <div id="touch" class="hidden">
-      <div id="stick" aria-label="Ride"><div id="knob"></div></div>
+      <div id="stick" aria-label="Steer"><div id="knob"></div></div>
       <button id="btnPause" type="button" aria-label="Pause">II</button>
       <div id="touchButtons">
-        <button id="btnFire" type="button">HIT</button>
-        <button id="btnPod" type="button">KICK</button>
+        <button id="btnFire" type="button">GAS</button>
+        <button id="btnPod" type="button">BRAKE</button>
       </div>
     </div>
 
     <div id="menu" class="overlay">
       <div class="panel">
         <h1>WEB<span>TRACK</span></h1>
-        <p class="tag">HTML / JavaScript &middot; one road, and everybody on it wants you off it</p>
+        <p class="tag">HTML / JavaScript &middot; eight cars, one clock, no second lap</p>
 
         <div class="row">
           <label>Route</label>
@@ -75,7 +75,7 @@
           <summary>Controls</summary>
           <table class="keys" id="keysTable">
             <thead>
-              <tr><th></th><th>Rider</th></tr>
+              <tr><th></th><th>Driver</th></tr>
             </thead>
             <tbody id="keysBody"></tbody>
             <tfoot>
@@ -87,27 +87,28 @@
           </table>
           <p id="bindHint" class="status">Click a key to change it.</p>
           <ul class="hints">
-            <li><b>The clock is the game.</b> You start with seventy-five
-              seconds and the gantry over the road every thirteen hundred metres
-              puts forty-eight more back. Nothing else ends a run early except
-              the police, and your elapsed time is what goes on the board.</li>
-            <li><b>Hit the side you are leaning towards.</b> Steer into somebody
-              and swing, and the fist goes their way. Let go of the bars and it
-              goes at whoever is nearest, which is what you want ninety times out
-              of a hundred.</li>
-            <li><b>A kick hits half again as hard and costs you the corner.</b>
-              It shoves them three times as far and takes twice as long to get
-              your hands back, and a third of a second is a long way at two
-              hundred.</li>
-            <li><b>Whatever they drop is yours.</b> Put a rider down carrying a
-              club and it lies in the road; ride over it and it is in your hand.
-              A club is twice a fist.</li>
-            <li><b>Everybody you knock down takes seconds off your time</b> - a
-              rival three, a gang member four, a policeman eight. That is why
-              fighting is faster than riding, right up until it is not.</li>
-            <li><b>The law counts.</b> Fight where they can see you and the stars
-              go up; at three there is a helicopter, and going down with a
-              patrol on top of you ends the run there and then.</li>
+            <li><b>You start eighth of eight.</b> Seven cars, ten kilometres and
+              about three minutes. Where you finish is the game; your time is
+              what goes on the board.</li>
+            <li><b>Grip is one number and you are always spending it.</b> A
+              corner takes what it needs first and the steering gets whatever is
+              left, so at the limit the wheel stops answering. That is not a bug
+              in the corner - it is the corner telling you to brake earlier.</li>
+            <li><b>Brake in a straight line, then turn.</b> The brakes are worth
+              four and a half g and the corner is worth three: you can have all
+              of one or all of the other, and asking for both at once gets you
+              neither and a lot of grass.</li>
+            <li><b>Sit behind somebody on the straight.</b> The tow is worth
+              nearly half your drag and about twenty km/h. It is the only thing
+              that will get you past a car as quick as yours, and it runs out at
+              about forty metres.</li>
+            <li><b>The kerbs are yours, the grass is not.</b> Two wheels on the
+              red and white costs you very little. Four wheels on the green costs
+              you three quarters of your grip and most of your afternoon.</li>
+            <li><b>The clock is not the opponent.</b> Seventy seconds to start
+              and forty more under every gantry - it is there so a race that has
+              gone wrong ends, not to race against. The other seven are the
+              race.</li>
           </ul>
         </details>
 

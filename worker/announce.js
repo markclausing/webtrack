@@ -7,8 +7,8 @@
  *
  * It says which game is talking, and that is not decoration. All five games post
  * into the same channel - the webhook is only an address and does not care who
- * is using it - so a bare "MJC 3:41.20" would be indistinguishable from a lap
- * time to anybody who was not already playing.
+ * is using it - so a bare "MJC 3:41.20" would be indistinguishable from
+ * webracing's lap times to anybody who was not already playing.
  */
 
 import { LEVELS, partsOf } from '../src/highscores.js';
@@ -20,6 +20,12 @@ const ROADS = {
   pass: 'over the pass',
   coast: 'along the boulevard',
   grand: 'the whole grand run',
+};
+
+const PLACED = {
+  1: ', and won it',
+  2: ', second',
+  3: ', third',
 };
 
 const AGAINST = {
@@ -68,11 +74,9 @@ function ordinal(n) {
 
 function line({ entry, level, place }) {
   const parts = partsOf(level);
-  const down = entry.down
-    ? `, ${entry.down} of them left on the tarmac`
-    : ', without touching anybody';
-  return `🏍️ **${entry.name}** rode ${ROADS[parts.route] || 'the road'} in `
-    + `**${time(entry.time)}**${AGAINST[parts.tier] ?? ''}${down} — ${ordinal(place)}`;
+  const placed = PLACED[entry.place] ?? (entry.place < 90 ? `, ${entry.place}th` : '');
+  return `🏎️ **${entry.name}** went ${ROADS[parts.route] || 'the road'} in `
+    + `**${time(entry.time)}**${AGAINST[parts.tier] ?? ''}${placed} — ${ordinal(place)}`;
 }
 
 /**
@@ -103,7 +107,7 @@ export function announcement(rows, gameUrl = GAME_URL) {
   return {
     username: 'WebTrack',
     embeds: [{
-      title: `🏍️ ${plural} in WebTrack`,
+      title: `🏎️ ${plural} in WebTrack`,
       url,
       description: shown.join('\n'),
       color: COLOUR,

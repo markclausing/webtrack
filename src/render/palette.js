@@ -19,19 +19,16 @@ import { md } from './raster.js';
 export const C = {
   road: md(74, 74, 82),
   roadAlt: md(86, 86, 94),
-  centre: md(228, 224, 180),
   kerbA: md(206, 60, 52),
   kerbB: md(232, 232, 228),
   shadow: md(28, 28, 34),
-  wreck: md(52, 48, 52),
-  spark: md(255, 220, 96),
-  blood: md(190, 40, 40),
   chrome: md(196, 200, 208),
   tyre: md(34, 34, 40),
   glass: md(96, 150, 176),
   metal: md(120, 124, 132),
-  club: md(126, 92, 56),
-  baton: md(232, 232, 236),
+  helmet: md(236, 236, 240),
+  crowd: md(160, 120, 150),
+  armco: md(206, 210, 214),
 };
 
 export const THEMES = {
@@ -76,23 +73,28 @@ export const THEMES = {
 };
 
 /**
- * The colours a rider is made of.
+ * The colours a car is painted.
  *
- * Each gang gets one, and they are picked so you can tell who is about to hit
- * you from a hundred metres away, in one glance, at this resolution - which
- * rules out anything subtle. The player is the only one in cream and burgundy.
+ * Eight, and they are picked so you can tell who is in front of you from two
+ * hundred metres away, at this resolution, in one glance - which rules out
+ * anything subtle and rules out two of anything. Red and orange are the two that
+ * come closest and they are kept apart on the grid.
+ *
+ * `body` is the tub and the engine cover, `wing` is the front and rear wings and
+ * is deliberately darker, and `trim` is the airbox and the helmet: the one part
+ * of the car you see from directly behind for three minutes at a time.
  */
-export const RIDERS = {
-  player: { body: md(160, 30, 40), skin: md(214, 168, 128), kit: md(226, 214, 190), helmet: md(230, 226, 210) },
-  rival: { body: md(40, 80, 160), skin: md(196, 150, 112), kit: md(60, 100, 190), helmet: md(230, 230, 236) },
-  gang: { body: md(30, 30, 36), skin: md(180, 140, 108), kit: md(60, 56, 60), helmet: md(120, 20, 24) },
-  cop: { body: md(236, 236, 240), skin: md(200, 158, 120), kit: md(30, 40, 90), helmet: md(240, 240, 244) },
-};
-
-export const CARS = [
-  md(180, 40, 44), md(220, 190, 60), md(60, 120, 190), md(230, 230, 230),
-  md(40, 130, 80), md(150, 90, 40), md(90, 90, 100), md(200, 110, 40),
+export const TEAM_COLOURS = [
+  { body: md(196, 24, 28), wing: md(120, 14, 18), trim: md(240, 224, 96) },   // ROSSO
+  { body: md(206, 210, 216), wing: md(120, 124, 132), trim: md(30, 60, 150) }, // ARGENT
+  { body: md(28, 76, 190), wing: md(16, 40, 110), trim: md(240, 240, 244) },   // AZUL
+  { body: md(24, 140, 72), wing: md(14, 80, 44), trim: md(240, 240, 120) },    // VERDE
+  { body: md(238, 150, 20), wing: md(140, 84, 12), trim: md(40, 40, 48) },     // AMBRA
+  { body: md(40, 40, 48), wing: md(20, 20, 24), trim: md(230, 190, 40) },      // NERO
+  { body: md(240, 240, 240), wing: md(150, 150, 156), trim: md(200, 30, 60) }, // BIANCO
+  { body: md(128, 50, 180), wing: md(70, 26, 100), trim: md(240, 230, 240) },  // VIOLA
 ];
 
-/** The gangs' cars, which are not civilian colours and are not meant to be. */
-export const GANG_CARS = [md(30, 30, 36), md(70, 20, 24), md(50, 40, 70)];
+/** Smoke off a locked tyre, and the dust a car picks up off the grass. */
+export const SMOKE = md(214, 214, 218);
+export const DUST = md(176, 158, 112);

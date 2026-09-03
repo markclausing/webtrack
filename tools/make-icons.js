@@ -8,10 +8,10 @@
 // dependencies, and the icons stay reproducible - run this again and you get the
 // same bytes.
 //
-// The picture is the road at dusk with a bike on it, in the colours the game
+// The picture is the track at dusk with a car on it, in the colours the game
 // actually uses. At thirty-two pixels there is room for a sky, a horizon, a
-// piece of tarmac and one dark shape on it, and that is exactly the icon: it is
-// what the game looks like, reduced until nothing else fits.
+// piece of tarmac and one shape on it, and that is exactly the icon: it is what
+// the game looks like, reduced until nothing else fits.
 
 import { deflateSync } from 'node:zlib';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -86,13 +86,13 @@ function mix(a, b, t) {
 }
 
 /**
- * The road, going away from you, under a sunset, with one bike on it.
+ * The track, going away from you, under a sunset, with one car on it.
  *
  * Everything in here is a shape rather than a drawing: a band for the sky, a
- * disc for the sun, a triangle for the tarmac and a lump for the rider. At
- * thirty-two pixels anything more careful is mud, and the three things that
- * survive being that small - the orange, the converging lines and the dark
- * silhouette - are exactly the three things the game is.
+ * disc for the sun, a triangle for the tarmac and a wide red slab with a wing on
+ * it. At thirty-two pixels anything more careful is mud, and the three things
+ * that survive being that small - the orange, the converging lines and the low
+ * wide shape sitting between two black wheels - are exactly what the game is.
  */
 function draw(size) {
   const px = new Uint8Array(size * size * 4);
@@ -116,7 +116,9 @@ function draw(size) {
   const road = rgb('#4a4a52');
   const line = rgb('#e4e0b4');
   const dark = rgb('#0a0908');
-  const lamp = rgb('#ce3c34');
+  const car = rgb('#c4181c');
+  const wing = rgb('#781216');
+  const lamp = rgb('#ff8a3d');
 
   const horizon = size * 0.46;
 
@@ -152,22 +154,34 @@ function draw(size) {
     }
   }
 
-  // The bike, from behind, low in the frame: a dark lump, a rider above it, and
-  // one red light. The light is the only colour on it and does all the work.
+  // The car, from behind, low in the frame: a wide dark-red slab between two
+  // black wheels, with a wing over the back of it. The wing is what stops it
+  // reading as a hatchback, and it is four pixels.
   const bx = size * 0.5;
-  const by = size * 0.78;
-  const bw = size * 0.15;
-  for (let y = -size * 0.1; y <= size * 0.08; y += 0.4) {
-    const t = (y + size * 0.1) / (size * 0.18);
-    const half = bw * (0.45 + t * 0.55);
-    for (let x = -half; x <= half; x += 0.4) set(bx + x, by + y, dark);
+  const by = size * 0.8;
+  const half = size * 0.2;
+  for (const side of [-1, 1]) {
+    for (let y = -size * 0.11; y <= 0; y += 0.4) {
+      for (let x = -size * 0.055; x <= size * 0.055; x += 0.4) {
+        set(bx + side * half + x, by + y, dark);
+      }
+    }
   }
-  for (let y = -size * 0.22; y < -size * 0.09; y += 0.4) {
-    const half = bw * 0.55;
-    for (let x = -half; x <= half; x += 0.4) set(bx + x, by + y, dark);
+  for (let y = -size * 0.085; y <= 0; y += 0.4) {
+    const t = (y + size * 0.085) / (size * 0.085);
+    const w = half * (0.55 + t * 0.35);
+    for (let x = -w; x <= w; x += 0.4) set(bx + x, by + y, car);
   }
-  for (let y = -size * 0.05; y <= -size * 0.01; y += 0.4) {
-    for (let x = -size * 0.035; x <= size * 0.035; x += 0.4) set(bx + x, by + y, lamp);
+  for (let y = -size * 0.05; y <= -size * 0.026; y += 0.4) {
+    for (let x = -size * 0.03; x <= size * 0.03; x += 0.4) set(bx + x, by + y, lamp);
+  }
+  // The rear wing, wider than the body and a shade darker.
+  for (let y = -size * 0.16; y <= -size * 0.125; y += 0.4) {
+    for (let x = -half * 0.95; x <= half * 0.95; x += 0.4) set(bx + x, by + y, wing);
+  }
+  // And the helmet, one dot of colour above all of it.
+  for (let y = -size * 0.145; y <= -size * 0.115; y += 0.4) {
+    for (let x = -size * 0.03; x <= size * 0.03; x += 0.4) set(bx + x, by + y, sun);
   }
 
   return px;

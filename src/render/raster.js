@@ -66,6 +66,16 @@ export class Raster {
     this.cam = { x: 0, y: 0, z: 0, sy: 0, cy: 1, sp: 0, cp: 1, sr: 0, cr: 1 };
     this.tris = 0;
     /**
+     * The focal length, which is the field of view, which moves with speed.
+     *
+     * It lives on the instance rather than in constants.js because the renderer
+     * changes it every frame: flat out the view is pulled wide so that the world
+     * goes past at the edges of the screen instead of through the middle of it.
+     * That single number is doing more for how fast this game feels than the
+     * speed itself is.
+     */
+    this.focal = FOCAL;
+    /**
      * A second colour, chequered one pixel at a time against the first.
      *
      * Three bits a channel means the gap between one grey and the next is a
@@ -97,7 +107,7 @@ export class Raster {
     const dx = x - c.x;
     const dy = y - c.y;
     const dz = z - c.z;
-    // Yaw first: into the direction the bike is facing.
+    // Yaw first: into the direction the car is facing.
     const rx = dx * c.cy - dz * c.sy;
     const rz = dx * c.sy + dz * c.cy;
     // Then pitch, then roll, both about the axes we now have.
@@ -202,15 +212,16 @@ export class Raster {
 
   /** Projects three camera-space vertices and fills the triangle between them. */
   fill(v, a, b, c, colour) {
+    const f = this.focal;
     const wa = 1 / v[a + 2];
     const wb = 1 / v[b + 2];
     const wc = 1 / v[c + 2];
-    let x0 = this.cx + v[a] * FOCAL * wa;
-    let y0 = this.cy - v[a + 1] * FOCAL * wa;
-    let x1 = this.cx + v[b] * FOCAL * wb;
-    let y1 = this.cy - v[b + 1] * FOCAL * wb;
-    let x2 = this.cx + v[c] * FOCAL * wc;
-    let y2 = this.cy - v[c + 1] * FOCAL * wc;
+    let x0 = this.cx + v[a] * f * wa;
+    let y0 = this.cy - v[a + 1] * f * wa;
+    let x1 = this.cx + v[b] * f * wb;
+    let y1 = this.cy - v[b + 1] * f * wb;
+    let x2 = this.cx + v[c] * f * wc;
+    let y2 = this.cy - v[c + 1] * f * wc;
     let w0 = wa; let w1 = wb; let w2 = wc;
 
     // Sorted top to bottom, so the two halves can be walked in one direction.

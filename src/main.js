@@ -11,22 +11,22 @@
  *
  * The menu is HTML because a menu should be: it has text you can select, buttons
  * a screen reader can find, and a table of times. The game is a canvas because
- * it has to be. Behind the menu the simulation is already running, with the
- * autopilot riding it, which is the oldest trick a coin-op ever pulled and still
- * the best argument for pressing start.
+ * it has to be. Behind the menu a race is already going on with nobody watching
+ * it, which is the oldest trick a coin-op ever pulled and still the best
+ * argument for pressing start.
  */
 
 import { Sound } from './audio.js';
 import { boardFor } from './config.js';
-import { BTN, TIERS } from './constants.js';
+import { BRAKE, BTN, GRIP, ROAD_HALF, SEG, TIERS, TOP_SPEED } from './constants.js';
 import { Highscores, makeId, NAME_LENGTH, placeOf } from './highscores.js';
 import {
   ACTIONS, InputDevices, keyLabel, loadBindings, PRESETS, saveBindings,
 } from './input.js';
 import { NameEntry } from './nameEntry.js';
 import { Renderer } from './render/renderer.js';
-import { finalTicks, formatTime, makeState, player, ROUTES } from './game/state.js';
-import { step } from './game/sim.js';
+import { finalTicks, formatTime, ordinal, player, ROUTES } from './game/state.js';
+import { makeRace, step } from './game/sim.js';
 import { isTouchDevice, TouchControls } from './touch.js';
 
 const TICK_MS = 1000 / 60;
@@ -121,39 +121,54 @@ function drain(state) {
 }
 
 /**
- * The rider on the menu screen.
+ * The car on the menu screen.
  *
- * Not an opponent and not a replay: the same simulation with a very stupid hand
- * on the bars. It holds the throttle open, aims for the middle of the road and
- * swings at anything that comes alongside, which is enough to look like somebody
- * playing badly - and looking like somebody playing badly is the point of an
- * attract screen.
+ * Not an opponent and not a replay: the same simulation with a driver in it that
+ * does the two things a driver does. It works out how fast it may be going from
+ * the corner it can see - the same sum the rivals do - and it aims at the apex.
+ * It is not quick, and it is not supposed to be: an attract screen wants to look
+ * like somebody playing, and somebody playing is somebody you can beat.
  */
 function autopilot(state) {
   const p = player(state);
-  let mask = BTN.UP;
-  const want = 0;
-  if (p.x > want + 1.2) mask |= BTN.LEFT;
-  if (p.x < want - 1.2) mask |= BTN.RIGHT;
-  // A car in the way is worth more than the middle of the road.
-  for (const c of state.cars) {
-    const gap = c.s - p.s;
-    if (gap < 4 || gap > 70) continue;
-    if (Math.abs(c.x - p.x) > 3) continue;
-    mask &= ~(BTN.LEFT | BTN.RIGHT);
-    mask |= c.x > p.x ? BTN.LEFT : BTN.RIGHT;
+  const nodes = state.route.nodes;
+  const from = Math.floor(p.s / SEG);
+  let limit = TOP_SPEED;
+  for (let n = 0; n <= 34; n++) {
+    const node = nodes[Math.min(nodes.length - 1, from + n)];
+    const k = Math.abs(node.curve) / SEG;
+    if (k < 1e-5) continue;
+    const corner = Math.sqrt(GRIP * 0.9 / k);
+    limit = Math.min(limit, Math.sqrt(corner * corner + 2 * BRAKE * 0.8 * Math.max(0, n * SEG - 8)));
   }
-  if ((state.tick % 47) === 0) mask |= BTN.FIRE;
+  const soon = nodes[Math.min(nodes.length - 1, from + 20)];
+  let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
+  for (const other of state.cars) {
+    if (other === p) continue;
+    const gap = other.s - p.s;
+    if (gap > 2 && gap < 26 && Math.abs(other.x - p.x) < 3.6) {
+      line = other.x + (other.x > 0 ? -3.6 : 3.6);
+    }
+  }
+  let mask = p.speed < limit ? BTN.UP : 0;
+  if (p.speed > limit * 1.02) mask |= BTN.DOWN;
+  const off = line - p.x;
+  if (off > 0.5) mask |= BTN.RIGHT;
+  if (off < -0.5) mask |= BTN.LEFT;
   return mask;
 }
 
 function attract() {
-  const state = makeState({ route, tier, seed: (Math.random() * 1e9) | 0 });
-  // Started a little way in and with the clock wound up, so the menu is never
-  // showing the same forty metres of road and never runs out of time behind a
-  // panel nobody is looking at.
-  player(state).s = Math.random() * (state.route.metres * 0.7);
-  player(state).speed = 45;
+  const state = makeRace({ route, tier, seed: (Math.random() * 1e9) | 0 });
+  // Started a long way in, at speed, with the lights already out and the clock
+  // wound up: the menu is never showing a standing start it will not finish, and
+  // never the same forty metres of track twice.
+  const at = Math.random() * (state.route.metres * 0.66) + 200;
+  for (const car of state.cars) {
+    car.s += at;
+    car.speed = 62;
+  }
+  state.lights = 0;
   state.clock = 9999;
   return state;
 }
@@ -162,7 +177,7 @@ function attract() {
 
 function startRun() {
   sound.wake();
-  game.state = makeState({ route, tier, seed: (Date.now() & 0x7fffffff) });
+  game.state = makeRace({ route, tier, seed: (Date.now() & 0x7fffffff) });
   game.playing = true;
   game.paused = false;
   game.acc = 0;
@@ -199,17 +214,14 @@ function finish(state) {
 function showResult(state) {
   const p = player(state);
   const done = state.finished;
-  document.getElementById('overTitle').textContent = done ? 'YOU MADE IT'
-    : state.reason === 'busted' ? 'BUSTED' : 'OUT OF TIME';
-  const knocked = state.knocks.rival + state.knocks.gang + state.knocks.cop;
+  document.getElementById('overTitle').textContent = done
+    ? (state.place === 1 ? 'WINNER' : `FINISHED ${ordinal(state.place)}`)
+    : 'OUT OF TIME';
   document.getElementById('overText').textContent = done
-    ? `${formatTime(finalTicks(state))} - ${formatTime(state.elapsed)} on the road, `
-      + `less ${state.bonus} seconds for the ${knocked} you put down.`
-    : state.reason === 'busted'
-      ? `They had you on the ground with a patrol car alongside, ${(p.s / 1000).toFixed(1)} `
-        + `kilometres in. There is no bail in this game.`
-      : `The clock went at ${(p.s / 1000).toFixed(1)} kilometres. `
-        + `Checkpoints are the only thing that puts seconds back.`;
+    ? `${formatTime(finalTicks(state))}, ${ordinal(state.place)} of eight, from `
+      + `${ordinal(p.slot + 1)} on the grid.`
+    : `The clock went at ${(p.s / 1000).toFixed(1)} kilometres, ${ordinal(state.place)} `
+      + 'of eight. Checkpoints are the only thing that puts seconds back.';
   overBox.classList.remove('hidden');
 }
 
@@ -273,9 +285,9 @@ pick('talk', (value) => sound.voice(value === 'on'));
 function renderSkill() {
   const cfg = TIERS[tier];
   document.getElementById('skillBlurb').textContent
-    = `Clock ${Math.round(cfg.clock * 100)}%, their punches ${Math.round(cfg.damage * 100)}%, `
-    + `and ${cfg.foes < 1 ? 'fewer' : cfg.foes > 1 ? 'more' : 'the usual number of'} `
-    + 'people looking for you. Each setting keeps its own list.';
+    = `Clock ${Math.round(cfg.clock * 100)}%, your grip ${Math.round(cfg.grip * 100)}%, `
+    + `and the other seven driving at ${Math.round(cfg.ai * 100)}% of what they can do. `
+    + 'Each setting keeps its own list.';
 }
 
 // --- The score board ----------------------------------------------------------
@@ -342,12 +354,13 @@ document.getElementById('hiscoreLetters').addEventListener('click', (e) => {
 document.getElementById('hiscoreOk').addEventListener('click', () => nameEntry.confirm());
 
 /**
- * Only a finished run counts.
+ * Only a finished race counts.
  *
- * A board of times cannot hold a run that stopped halfway, because there is no
+ * A board of times cannot hold a race that stopped halfway, because there is no
  * number to compare: somebody who gave up after four hundred metres has a
- * shorter elapsed time than anybody who finished. So the board is the finishers'
- * board, and everything else goes on the result card and nowhere else.
+ * shorter elapsed time than anybody who got to the flag. So the board is the
+ * finishers' board, and everything else goes on the result card and nowhere
+ * else.
  */
 function offerRecord(state) {
   if (pending.open) return true;
@@ -357,7 +370,7 @@ function offerRecord(state) {
     id: makeId(),
     name: lastName(),
     time: finalTicks(state),
-    down: state.knocks.rival + state.knocks.gang + state.knocks.cop,
+    place: state.place,
     metres: Math.round(state.route.metres),
     at: Date.now(),
   };
@@ -426,7 +439,7 @@ function renderScores(r, t, freshPlace = 0) {
       ['result', formatTime(rows[i].time)],
       // Labelled rather than bare. A column of "4"s next to a column of times is
       // a column nobody can read without being told what it is.
-      ['stage', `${rows[i].down} DOWN`],
+      ['stage', rows[i].place > 90 ? '--' : ordinal(rows[i].place)],
       ['when', new Date(rows[i].at).toLocaleDateString()],
     ]) {
       const td = document.createElement('td');
@@ -437,11 +450,11 @@ function renderScores(r, t, freshPlace = 0) {
     body.appendChild(tr);
   }
   document.getElementById('scoresNote').textContent = rows.length
-    ? 'Your time from the line to the end of the road, less the seconds everybody '
-      + 'you put down was worth. Only a finished run goes on the board, and each '
-      + 'route and setting keeps its own.'
-    : 'Nothing here yet. Get to the end of this road on this setting and the list '
-      + 'is yours.';
+    ? 'Your time from the lights to the flag, with where you finished beside it. '
+      + 'Only a race you got to the end of goes on the board, and each circuit and '
+      + 'setting keeps its own.'
+    : 'Nothing here yet. Get to the flag on this circuit on this setting and the '
+      + 'list is yours.';
 }
 
 // --- Changing the keys ---------------------------------------------------------
@@ -451,12 +464,12 @@ function renderScores(r, t, freshPlace = 0) {
 // here and "pod" means nothing at all.
 
 const KEY_LABELS = {
-  up: 'Throttle',
+  up: 'Accelerate',
   down: 'Brake',
-  left: 'Lean left',
-  right: 'Lean right',
-  fire: 'Punch / club',
-  switch: 'Kick',
+  left: 'Steer left',
+  right: 'Steer right',
+  fire: 'Accelerate (2)',
+  switch: 'Brake (2)',
 };
 
 let binding = null;

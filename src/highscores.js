@@ -11,13 +11,13 @@
  * shape of a score. Football keeps a scoreline. The shooter keeps a run, which
  * only goes up. Here it is a time, and a time is the awkward one: smaller wins,
  * so every comparison in the file runs the other way, and a board sorted by the
- * wrong sign looks perfectly plausible until somebody notices the worst run is
+ * wrong sign looks perfectly plausible until somebody notices the slowest lap is
  * top. Everything else - merging, clearing, the three letters, the Worker that
  * holds it - is the same file the other four run.
  *
- * There is a list per route and per setting, because a time on the pass and a
- * time along the sea front are two different numbers about two different roads,
- * and the setting changes how long the clock gives you.
+ * There is a list per circuit and per setting, because a time on the pass and a
+ * time along the sea front are two different numbers about two different tracks,
+ * and the setting changes both the clock and how hard the other seven try.
  *
  * Nothing in here touches the simulation, and the store is injectable so the
  * tests can run it without a browser.
@@ -30,7 +30,7 @@
  * five do: all of them live on the same github.io domain, and one key would mean
  * lap times landing in a shooter's table.
  */
-export const KEY = 'webtrack.highscores.v1';
+export const KEY = 'webtrack.highscores.v2';
 
 export const ROUTE_KEYS = ['pass', 'coast', 'grand'];
 export const TIERS = ['easy', 'normal', 'hard'];
@@ -44,9 +44,9 @@ export const NAME_LENGTH = 3;
 export const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-';
 
 /**
- * Nobody finishes a route in under ten seconds, and nobody who took two hours
- * over one was still riding. Both bounds exist to keep a corrupt row or a
- * dishonest one off the board rather than to judge anybody's riding.
+ * Nobody gets round in under ten seconds, and nobody who took an hour over it
+ * was still racing. Both bounds exist to keep a corrupt row or a dishonest one
+ * off the board rather than to judge anybody's driving.
  */
 const QUICKEST = 600;          // ticks
 const SLOWEST = 60 * 60 * 60;
@@ -72,16 +72,17 @@ export function cleanEntry(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const time = Math.round(Number(raw.time));
   if (!Number.isFinite(time) || time < QUICKEST || time > SLOWEST) return null;
-  const down = Math.round(Number(raw.down));
+  const place = Math.round(Number(raw.place));
   const at = Number(raw.at);
   return {
     id: String(raw.id || '').slice(0, 40) || makeId(),
     name: cleanName(raw.name),
     time,
-    // How many people you put on the tarmac getting there. Not part of the
-    // ordering, and on the board because it is the other half of the story: two
-    // riders on the same time did not have the same run.
-    down: Number.isFinite(down) ? Math.max(0, Math.min(999, down)) : 0,
+    // Where you finished. Not part of the ordering, and on the board because it
+    // is the other half of the story: two drivers on the same time did not have
+    // the same race, and a quick time from the back of a beaten field is a
+    // different afternoon from a slow one spent leading.
+    place: Number.isFinite(place) ? Math.max(1, Math.min(99, place)) : 99,
     metres: clampNumber(raw.metres, 0, MAX_METRES),
     at: Number.isFinite(at) && at > 0 ? at : Date.now(),
   };
@@ -102,14 +103,14 @@ export function makeId() {
 /**
  * Quickest first.
  *
- * A tie goes to whoever put more people down, which is almost never used and is
- * there for a reason: two identical times mean the one who also had a fight is
- * the better run, and the board should not pretend it cannot tell. After that it
- * goes to whoever got there first.
+ * A tie goes to whoever finished higher up, which is almost never used and is
+ * there for a reason: two identical times mean the one who also won the race is
+ * the better drive, and the board should not pretend it cannot tell. After that
+ * it goes to whoever got there first.
  */
 export function compare(a, b) {
   if (a.time !== b.time) return a.time - b.time;
-  if (a.down !== b.down) return b.down - a.down;
+  if (a.place !== b.place) return a.place - b.place;
   return a.at - b.at;
 }
 

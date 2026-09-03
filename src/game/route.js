@@ -20,8 +20,14 @@
 
 import { CHECKPOINT_EVERY } from '../constants.js';
 
-/** How far out, in metres from the centreline, each ground ring sits. */
-export const RINGS = [12.2, 30, 95, 340];
+/**
+ * How far out, in metres from the centreline, each ground ring sits.
+ *
+ * The first one is where the run-off ends and the barrier stands. Everything
+ * between the kerb and it is grass you can put a car on and get away with, which
+ * is what makes a mistake a mistake rather than an accident.
+ */
+export const RINGS = [15.6, 32, 95, 340];
 
 /** Deterministic and local: route building must not touch the simulation's rng. */
 function seeded(seed) {
@@ -47,33 +53,41 @@ function sections(kind, rnd) {
   const push = (n, curve, slope, tag = '') => out.push({ n, curve, slope, tag });
 
   if (kind === 'mountain') {
-    // Out of the valley on a straight, so the first thing you do is get on the
-    // throttle rather than wonder which way the road goes.
-    push(70, 0, 0.01, 'start');
+    // Out of the valley on a straight, so the first thing anybody does is get on
+    // the throttle rather than wonder which way the road goes. It is also the
+    // grid, and a grid wants somewhere for eight cars to sort themselves out.
+    push(80, 0, 0.008, 'start');
     for (let i = 0; i < 8; i++) {
-      const hard = rnd() < 0.42;
       const dir = rnd() < 0.5 ? -1 : 1;
-      // Hairpins climb; the straights between them are where you catch up.
-      push(26 + Math.floor(rnd() * 22), dir * (hard ? 0.052 : 0.026), 0.05 + rnd() * 0.06);
-      push(30 + Math.floor(rnd() * 40), dir * 0.006, 0.02);
-      push(24 + Math.floor(rnd() * 26), -dir * (hard ? 0.045 : 0.022), -0.02 + rnd() * 0.05);
-      push(40 + Math.floor(rnd() * 60), 0, -0.06 + rnd() * 0.1);
+      const shape = rnd();
+      // Three kinds of corner, and they are three different gears. A hairpin is
+      // the one that decides the lap: everybody arrives at it far too fast and
+      // whoever gets on the power first leaves it in front.
+      const hard = shape < 0.3 ? 0.115 : shape < 0.62 ? 0.068 : 0.032;
+      push(18 + Math.floor(rnd() * 14), dir * hard, 0.05 + rnd() * 0.05);
+      push(24 + Math.floor(rnd() * 34), dir * 0.006, 0.02);
+      push(20 + Math.floor(rnd() * 22), -dir * (hard * 0.75), -0.02 + rnd() * 0.05);
+      // And a straight, because a corner is only worth anything if there is
+      // somewhere to use what you gained in it.
+      push(44 + Math.floor(rnd() * 62), 0, -0.06 + rnd() * 0.1);
     }
-    // And down the other side, fast, which is where the time is.
+    // Down the other side, quick, which is where the time is and where the
+    // brakes are asked the hardest question of the day.
     push(90, 0.004, -0.09);
-    push(60, -0.03, -0.07);
-    push(120, 0.012, -0.05);
+    push(46, -0.052, -0.05);
+    push(120, 0.014, -0.05);
   } else {
     // The sea front. Long, open and almost flat: the curves are there to stop
     // you holding the throttle wide, not to catch you out.
-    push(60, 0, 0, 'start');
+    push(80, 0, 0, 'start');
     for (let i = 0; i < 7; i++) {
       const dir = rnd() < 0.5 ? -1 : 1;
-      push(70 + Math.floor(rnd() * 70), dir * (0.004 + rnd() * 0.012), (rnd() - 0.5) * 0.02);
-      push(40 + Math.floor(rnd() * 30), -dir * (0.01 + rnd() * 0.02), (rnd() - 0.5) * 0.03);
-      push(50 + Math.floor(rnd() * 60), 0, (rnd() - 0.5) * 0.02);
+      // Flat out, flat out, and then one that is not.
+      push(80 + Math.floor(rnd() * 80), dir * (0.003 + rnd() * 0.01), (rnd() - 0.5) * 0.02);
+      push(26 + Math.floor(rnd() * 22), -dir * (0.045 + rnd() * 0.03), (rnd() - 0.5) * 0.03);
+      push(60 + Math.floor(rnd() * 70), 0, (rnd() - 0.5) * 0.02);
     }
-    push(120, 0.006, 0);
+    push(140, 0.005, 0);
   }
   return out;
 }
@@ -102,7 +116,7 @@ function ground(kind, i, y, curve, rnd, noise) {
   // Coast: sea to the left of the boulevard, town rising to the right.
   const shelf = 4 + noise(i * 0.09) * 3;
   return {
-    l: [y - 0.4, y - shelf, 0],
+    l: [y - 1.4 - noise(i * 0.3) * 0.8, y - shelf, 0],
     r: [y + 0.5 + wob(1.1, 0.7), y + 2.2 + wob(0.4, 3), y + 9 + wob(0.16, 16)],
     far: [0, y + 40 + noise(i * 0.05 + 4) * 60],
     sea: true,
@@ -155,7 +169,11 @@ export function buildLeg(kind, seed) {
       x += dx * 6;
       z += dz * 6;
       y += slope * 6;
-      if (kind === 'coast') y = Math.max(4.5, y);
+      // The sea front stays a sea front. Left to wander it climbs sixteen
+      // metres above the water inside a kilometre, and from a camera two and a
+      // half metres up you then spend the lap looking down a cliff at a beach
+      // with no sea on the other side of it.
+      if (kind === 'coast') y = Math.max(4.5, Math.min(9.5, y));
 
       nodes.push({
         i: n,
@@ -165,8 +183,8 @@ export function buildLeg(kind, seed) {
         nx: dz, nz: -dx,          // the right-hand vector, in the ground plane
         curve,
         slope,
-        // Banking, into the corner. Small: this is a road, not a velodrome.
-        bank: -curve * 5.5,
+        // Banking, into the corner. Small: this is a circuit, not a bowl.
+        bank: -curve * 3.2,
         g: ground(kind, n, y, curve, rnd, noise),
       });
     }
@@ -192,35 +210,45 @@ function scatter(kind, nodes, rnd) {
 
   for (let i = 4; i < nodes.length; i++) {
     const n = nodes[i];
+
+    // Marker posts, both sides, every twenty-four metres, everywhere.
+    //
+    // The single cheapest thing in the game for how fast it feels. At three
+    // hundred and fifty they arrive eight times a second at the edges of the
+    // screen, and the eye reads a regular thing going past far more readily than
+    // it reads a number in the corner. Take them out and the car feels like it
+    // has lost fifty km/h.
+    if (i % 4 === 0) {
+      add(i, { kind: 'post', side: -1, off: 16.4, s: 1, r: 0 });
+      add(i, { kind: 'post', side: 1, off: 16.4, s: 1, r: 0 });
+    }
+
     if (kind === 'mountain') {
       // Trees on the low side, rock on the high side: that is what a cut through
       // a hill looks like, and it also tells you which way the road is about to
       // go before you can see the bend.
       const low = n.g.l[1] < n.g.r[1] ? -1 : 1;
       if (rnd() < 0.5) {
-        add(i, { kind: 'pine', side: low, off: 15 + rnd() * 26, s: 0.8 + rnd() * 0.9, r: rnd() * 6.28 });
+        add(i, { kind: 'pine', side: low, off: 19 + rnd() * 26, s: 0.8 + rnd() * 0.9, r: rnd() * 6.28 });
       }
       if (rnd() < 0.34) {
-        add(i, { kind: 'pine', side: low, off: 30 + rnd() * 55, s: 0.9 + rnd() * 1.2, r: rnd() * 6.28 });
+        add(i, { kind: 'pine', side: low, off: 34 + rnd() * 55, s: 0.9 + rnd() * 1.2, r: rnd() * 6.28 });
       }
       if (rnd() < 0.2) {
-        add(i, { kind: 'rock', side: -low, off: 13.5 + rnd() * 9, s: 0.7 + rnd() * 1.4, r: rnd() * 6.28 });
+        add(i, { kind: 'rock', side: -low, off: 18 + rnd() * 9, s: 0.7 + rnd() * 1.4, r: rnd() * 6.28 });
       }
       if (rnd() < 0.06) {
-        add(i, { kind: 'crag', side: -low, off: 26 + rnd() * 40, s: 2 + rnd() * 4, r: rnd() * 6.28 });
-      }
-      if (i % 9 === 0) {
-        add(i, { kind: 'post', side: low, off: 11.4, s: 1, r: 0 });
+        add(i, { kind: 'crag', side: -low, off: 30 + rnd() * 40, s: 2 + rnd() * 4, r: rnd() * 6.28 });
       }
     } else {
       if (i % 7 === 0) {
-        add(i, { kind: 'palm', side: -1, off: 12.5 + rnd() * 2, s: 0.9 + rnd() * 0.5, r: rnd() * 6.28 });
+        add(i, { kind: 'palm', side: -1, off: 17.5 + rnd() * 2, s: 0.9 + rnd() * 0.5, r: rnd() * 6.28 });
       }
       if (rnd() < 0.3) {
-        add(i, { kind: 'palm', side: 1, off: 13 + rnd() * 6, s: 0.9 + rnd() * 0.6, r: rnd() * 6.28 });
+        add(i, { kind: 'palm', side: 1, off: 18 + rnd() * 6, s: 0.9 + rnd() * 0.6, r: rnd() * 6.28 });
       }
       if (rnd() < 0.13) {
-        add(i, { kind: 'block', side: 1, off: 34 + rnd() * 30, s: 1 + rnd() * 2.6, r: rnd() * 0.6 - 0.3 });
+        add(i, { kind: 'block', side: 1, off: 38 + rnd() * 30, s: 1 + rnd() * 2.6, r: rnd() * 0.6 - 0.3 });
       }
       // Out on the water. Far enough that they read as scenery, near enough
       // that you can tell a hull from a buoy.
@@ -230,13 +258,17 @@ function scatter(kind, nodes, rnd) {
       if (rnd() < 0.05) {
         add(i, { kind: 'buoy', side: -1, off: 45 + rnd() * 70, s: 1, r: 0 });
       }
-      if (i % 11 === 0) {
-        add(i, { kind: 'post', side: -1, off: 11.4, s: 1, r: 0 });
-      }
+    }
+
+    // Grandstands over the start, on both sides, because a grid with nobody
+    // watching it is not a grid, it is a car park.
+    if (i > 6 && i < 30 && i % 4 === 0) {
+      add(i, { kind: 'stand', side: -1, off: 24, s: 1, r: 0 });
+      add(i, { kind: 'stand', side: 1, off: 24, s: 1, r: 0 });
     }
     // The gantry is the checkpoint. It is placed on the node the clock is
-    // actually reading, not near it, because a gate you ride under half a
-    // second before the seconds arrive is a gate that is lying to you.
+    // actually reading, not near it, because a gate you go under half a second
+    // before the seconds arrive is a gate that is lying to you.
     if (i > 0 && i % CHECKPOINT_EVERY === 0) {
       add(i, { kind: 'arch', side: 0, off: 0, s: 1, r: 0 });
     }
@@ -309,11 +341,15 @@ export function buildRoute(key) {
   const sea = seaAt ? seaAt.y - 4.5 : 0;
   for (const n of nodes) {
     if (!n.g.sea) continue;
-    // Sand from the kerb out to thirty metres, and water from there to the
-    // horizon. Putting the waterline that close is a lie about geography and
-    // the right call about a video game: the sea has to be something you ride
-    // beside, not something you can see in the distance.
-    n.g.l = [n.g.l[0], sea, sea];
+    // The waterline sits just outside the barrier: a few metres of sand off the
+    // kerb and then sea all the way to the horizon.
+    //
+    // That is a lie about geography and the right call about a video game. From
+    // a camera two and a half metres above the tarmac, water that starts thirty
+    // metres out is a blue stripe three pixels tall near the horizon - correct,
+    // and worth nothing. Bringing it in to the edge of the run-off is what makes
+    // the boulevard a sea front rather than a road with a rumour of a sea.
+    n.g.l = [sea, sea, sea];
     n.g.far = [sea, n.g.far[1]];
   }
 

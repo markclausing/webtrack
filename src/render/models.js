@@ -3,27 +3,32 @@
  *
  * The rule these are built to is the one the whole look rests on: if you cannot
  * say what it is from three polygons, it does not need more than five. A palm
- * tree is a trunk and three fronds. A rock is a pyramid. A car is a box with a
- * smaller box on it and two red squares on the back, and the two red squares
- * are doing more work than the rest of it put together, because they are how you
- * know at two hundred metres that the thing ahead is slower than you.
+ * tree is a trunk and three fronds. A rock is a pyramid. A grandstand is a slab
+ * at an angle with a roof over it.
+ *
+ * The car is the exception and is allowed to be, because it is the thing you
+ * look at for three minutes without a break and the thing that has to be
+ * recognisable at two hundred metres. It gets about twenty faces: a wedge, two
+ * wings, four wheels standing away from the body, and a helmet. Twenty is not
+ * many - the machine this is imitating drew fifty a car and thought it was
+ * showing off - and every one of them is doing something. Take the front wing
+ * off and it stops being a racing car; take the wheels in and it becomes a
+ * saloon.
  *
  * Nothing here is a sprite. Every one of these is real geometry standing in the
  * world, so it turns as you go round it, it is hidden by a crest, and it grows
- * as you arrive. That is the difference between this and the road games these
- * machines actually ran, and it is the one place where not being a Mega Drive
- * is allowed to show.
+ * as you arrive.
  */
 
-import { C, CARS, RIDERS } from './palette.js';
+import { C, DUST, SMOKE, TEAM_COLOURS } from './palette.js';
 import { shade } from './raster.js';
 
 /**
  * Puts local coordinates into the world.
  *
- * Roll first, then scale, then heading. Roll before heading because a bike
- * leans about its own axis, not about the world's, and doing it the other way
- * round makes a bike in a left-hander lean into the scenery.
+ * Roll first, then scale, then heading. Roll before heading because a car rolls
+ * about its own axis, not about the world's, and doing it the other way round
+ * makes a car in a left-hander lean into the scenery.
  */
 class Placer {
   constructor() {
@@ -60,7 +65,7 @@ class Placer {
 
 const put = new Placer();
 
-/** A flat box: four sides and a lid. Five faces is a building, a crate, a bus. */
+/** A flat box: four sides and a lid. Five faces is a building, a crate, a stand. */
 function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
   const dark = tint(shade(colour, 0.68));
   const side = tint(shade(colour, 0.84));
@@ -74,7 +79,7 @@ function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
 
 // --- Scenery -----------------------------------------------------------------
 
-export function drawProp(rt, prop, x, y, z, tint, theme, spin = 0) {
+export function drawProp(rt, prop, x, y, z, tint, theme) {
   const s = prop.s || 1;
   put.set(x, y, z, prop.r || 0, 0, s);
   switch (prop.kind) {
@@ -116,14 +121,29 @@ export function drawProp(rt, prop, x, y, z, tint, theme, spin = 0) {
       break;
     }
     case 'post':
-      put.face(rt, tint(C.kerbB), [-0.14, 0, 0, 0.14, 0, 0, 0.14, 1.1, 0, -0.14, 1.1, 0]);
-      put.face(rt, tint(C.kerbA), [-0.14, 0.75, 0.01, 0.14, 0.75, 0.01, 0.14, 1.02, 0.01, -0.14, 1.02, 0.01]);
+      // A distance marker. Two faces, and between them they are worth more to
+      // the feeling of speed than anything else in this file.
+      put.face(rt, tint(C.kerbB), [-0.13, 0, 0, 0.13, 0, 0, 0.13, 1.15, 0, -0.13, 1.15, 0]);
+      put.face(rt, tint(C.kerbA), [-0.13, 0.78, 0.01, 0.13, 0.78, 0.01,
+        0.13, 1.06, 0.01, -0.13, 1.06, 0.01]);
       break;
+    case 'stand': {
+      // Seating on the slope, a roof over it, and a band of colour where the
+      // people are. Nobody is modelled: at this size a crowd is a texture, and
+      // there are no textures, so a crowd is a stripe.
+      const frame = tint(shade(theme.ridge, 0.8));
+      put.face(rt, frame, [-6, 0, -0.6, 6, 0, -0.6, 6, 4.6, 5.4, -6, 4.6, 5.4]);
+      put.face(rt, tint(C.crowd), [-6, 1.4, 1.2, 6, 1.4, 1.2, 6, 3.4, 3.6, -6, 3.4, 3.6]);
+      put.face(rt, tint(shade(theme.ridge, 0.6)), [-6, 4.6, 5.4, 6, 4.6, 5.4, 6, 4.6, -0.4, -6, 4.6, -0.4]);
+      put.face(rt, tint(C.metal), [-6, 6.6, -0.6, 6, 6.6, -0.6, 6, 6.9, 4.4, -6, 6.9, 4.4]);
+      put.face(rt, frame, [-6, 4.6, -0.5, -5.7, 4.6, -0.5, -5.7, 6.7, -0.5, -6, 6.7, -0.5]);
+      put.face(rt, frame, [5.7, 4.6, -0.5, 6, 4.6, -0.5, 6, 6.7, -0.5, 5.7, 6.7, -0.5]);
+      break;
+    }
     case 'block':
       box(rt, tint, theme.ridge, -3.4, 3.4, 0, 5.5, -3.4, 3.4);
-      // Windows: two dark bands, which at this size is a building with people
-      // in it rather than a grey box.
-      put.face(rt, tint(C.glass), [-3.0, 2.0, -3.45, 3.0, 2.0, -3.45, 3.0, 3.2, -3.45, -3.0, 3.2, -3.45]);
+      put.face(rt, tint(C.glass), [-3.0, 2.0, -3.45, 3.0, 2.0, -3.45,
+        3.0, 3.2, -3.45, -3.0, 3.2, -3.45]);
       break;
     case 'boat': {
       const hull = tint(C.kerbB);
@@ -140,27 +160,25 @@ export function drawProp(rt, prop, x, y, z, tint, theme, spin = 0) {
       put.face(rt, tint(shade(C.kerbA, 0.7)), [0, 1.5, 0, 0.5, 0, 0.5, 0, 0, -0.6]);
       break;
     case 'arch': {
-      const post = tint(C.metal);
-      box(rt, tint, C.metal, -12.6, -11.4, 0, 7.2, -0.4, 0.4);
-      box(rt, tint, C.metal, 11.4, 12.6, 0, 7.2, -0.4, 0.4);
-      put.face(rt, tint(C.kerbA), [-12.6, 7.2, 0, 12.6, 7.2, 0, 12.6, 9.4, 0, -12.6, 9.4, 0]);
-      put.face(rt, post, [-12.6, 7.0, 0.05, 12.6, 7.0, 0.05, 12.6, 7.2, 0.05, -12.6, 7.2, 0.05]);
+      box(rt, tint, C.metal, -17, -15.6, 0, 7.6, -0.4, 0.4);
+      box(rt, tint, C.metal, 15.6, 17, 0, 7.6, -0.4, 0.4);
+      put.face(rt, tint(C.kerbA), [-17, 7.6, 0, 17, 7.6, 0, 17, 9.8, 0, -17, 9.8, 0]);
+      put.face(rt, tint(C.metal), [-17, 7.4, 0.05, 17, 7.4, 0.05,
+        17, 7.6, 0.05, -17, 7.6, 0.05]);
       break;
     }
     default:
       break;
   }
-  if (spin) drawRotor(rt, x, y, z, spin, tint);
 }
 
 /**
- * The dark patch under a vehicle.
+ * The dark patch under a car.
  *
- * Four polygons of bike floating a few centimetres above four polygons of road
- * do not look like a bike on a road; they look like a bike near a road. One flat
- * hexagon of shadow fixes it completely, and it is the cheapest thing in the
- * renderer. Lifted three centimetres so it wins the depth test against the
- * tarmac it is painted on.
+ * Twenty polygons of racing car floating a few centimetres above four polygons
+ * of tarmac do not look like a car on a track; they look like a car near one.
+ * One flat hexagon of shadow fixes it completely, and it is the cheapest thing
+ * in the renderer.
  */
 export function drawShadow(rt, x, y, z, yaw, wide, long, tint) {
   put.set(x, y + 0.03, z, yaw, 0, 1);
@@ -176,145 +194,109 @@ export function drawShadow(rt, x, y, z, yaw, wide, long, tint) {
   ]);
 }
 
-// --- Vehicles ----------------------------------------------------------------
+// --- The car -------------------------------------------------------------------
+
+/** Half the track, half the wheelbase, and the height of the airbox. */
+const HALF = 0.88;
+const AXLE = 1.5;
 
 /**
- * A car, from any angle, in about a dozen faces.
+ * A single seater, from any angle, in about twenty faces.
  *
- * The lights are the point. Red at the back and white at the front is how you
- * read, in the half second you have, whether the thing in your lane is going
- * your way or coming the other way, and no amount of shape does that job at
- * this resolution.
+ * Built from the back forwards, because the back is what you look at. The rear
+ * wing is the widest thing on it and sits highest, which is what makes a car two
+ * hundred metres up the road read as a racing car and not as a dot; the four
+ * wheels standing out in the air are what stop it reading as a saloon; and the
+ * helmet is how you tell at a glance that there is somebody in it.
  */
-export function drawCar(rt, car, x, y, z, yaw, tint, braking = false) {
-  const colour = CARS[car.paint % CARS.length];
-  const long = car.long || 2.3;
-  const wide = car.wide || 0.95;
+export function drawRacer(rt, car, x, y, z, yaw, tint) {
+  const pal = TEAM_COLOURS[car.team % TEAM_COLOURS.length];
   put.set(x, y, z, yaw, car.roll || 0, 1);
-  box(rt, tint, colour, -wide, wide, 0.34, 1.18, -long, long);
-  box(rt, tint, shade(colour, 0.9), -wide * 0.86, wide * 0.86, 1.18, 1.74, -long * 0.45, long * 0.42);
-  const glass = tint(C.glass);
-  put.face(rt, glass, [-wide * 0.8, 1.24, long * 0.44, wide * 0.8, 1.24, long * 0.44,
-    wide * 0.7, 1.7, long * 0.4, -wide * 0.7, 1.7, long * 0.4]);
-  const tyre = tint(C.tyre);
-  for (const zz of [-long * 0.62, long * 0.62]) {
-    put.face(rt, tyre, [-wide - 0.06, 0, zz - 0.42, -wide - 0.06, 0, zz + 0.42,
-      -wide - 0.06, 0.62, zz + 0.42, -wide - 0.06, 0.62, zz - 0.42]);
-    put.face(rt, tyre, [wide + 0.06, 0, zz + 0.42, wide + 0.06, 0, zz - 0.42,
-      wide + 0.06, 0.62, zz - 0.42, wide + 0.06, 0.62, zz + 0.42]);
-  }
-  const lamp = tint(braking ? C.spark : C.kerbA);
-  put.face(rt, braking ? tint(C.kerbA) : lamp, [-wide + 0.1, 0.62, -long - 0.02, -wide + 0.45, 0.62, -long - 0.02,
-    -wide + 0.45, 0.92, -long - 0.02, -wide + 0.1, 0.92, -long - 0.02]);
-  put.face(rt, braking ? tint(C.kerbA) : lamp, [wide - 0.45, 0.62, -long - 0.02, wide - 0.1, 0.62, -long - 0.02,
-    wide - 0.1, 0.92, -long - 0.02, wide - 0.45, 0.92, -long - 0.02]);
-  const head = tint(C.kerbB);
-  put.face(rt, head, [-wide + 0.1, 0.66, long + 0.02, -wide + 0.5, 0.66, long + 0.02,
-    -wide + 0.5, 0.94, long + 0.02, -wide + 0.1, 0.94, long + 0.02]);
-  put.face(rt, head, [wide - 0.5, 0.66, long + 0.02, wide - 0.1, 0.66, long + 0.02,
-    wide - 0.1, 0.94, long + 0.02, wide - 0.5, 0.94, long + 0.02]);
-}
 
-/**
- * A rider, on a bike, doing whatever they are doing.
- *
- * The arm is the only part that is not a fixed model, because the arm is the
- * game. `swing` runs from 0 to 1 and puts the fist out to the side it is aimed
- * at; at full stretch it is roughly where the hit is tested, which is not a
- * coincidence - a swing you can see land is a swing you can learn to time.
- */
-export function drawRider(rt, r, x, y, z, yaw, tint) {
-  const pal = RIDERS[r.pal] || RIDERS.rival;
-  const lean = r.lean || 0;
-  put.set(x, y, z, yaw, lean, 1);
-
-  const tyre = tint(C.tyre);
-  const metal = tint(C.metal);
   const body = tint(pal.body);
-  const kit = tint(pal.kit);
-  const skin = tint(pal.skin);
-  const helmet = tint(pal.helmet);
+  const dark = tint(shade(pal.body, 0.72));
+  const wing = tint(pal.wing);
+  const wingLit = tint(shade(pal.wing, 1.25));
+  const trim = tint(pal.trim);
+  const tyre = tint(C.tyre);
+  const rim = tint(C.chrome);
 
-  // Wheels, as a tread you see from behind and a disc you see from the side.
-  for (const zz of [-0.66, 0.86]) {
-    put.face(rt, tyre, [-0.11, 0.04, zz, 0.11, 0.04, zz, 0.11, 0.68, zz, -0.11, 0.68, zz]);
-    put.face(rt, shade(tyre, 0.8), [0, 0.04, zz - 0.34, 0, 0.36, zz - 0.36, 0, 0.68, zz,
-      0, 0.36, zz + 0.36, 0, 0.04, zz + 0.34]);
-  }
-  // Engine and tank. A big twin has a lot of metal between the wheels and it is
-  // most of the silhouette.
-  box(rt, tint, C.metal, -0.3, 0.3, 0.4, 0.82, -0.5, 0.5);
-  box(rt, tint, pal.body, -0.26, 0.26, 0.82, 1.02, -0.12, 0.58);
-  put.face(rt, metal, [-0.44, 1.06, 0.6, 0.44, 1.06, 0.6, 0.44, 1.14, 0.66, -0.44, 1.14, 0.66]);
-
-  // The rider: legs, back, shoulders, head. Seen from behind almost always, so
-  // the back is the face that gets the colour.
-  put.face(rt, kit, [-0.34, 0.42, -0.44, 0.34, 0.42, -0.44, 0.34, 0.96, -0.34, -0.34, 0.96, -0.34]);
-  put.face(rt, body, [-0.36, 0.92, -0.4, 0.36, 0.92, -0.4, 0.32, 1.62, -0.3, -0.32, 1.62, -0.3]);
-  put.face(rt, shade(body, 0.8), [-0.32, 1.62, -0.3, 0.32, 1.62, -0.3, 0.28, 1.66, 0.16, -0.28, 1.66, 0.16]);
-  put.face(rt, helmet, [-0.17, 1.62, -0.28, 0.17, 1.62, -0.28, 0.17, 1.96, -0.24, -0.17, 1.96, -0.24]);
-  put.face(rt, shade(helmet, 0.82), [0.17, 1.62, -0.28, 0.17, 1.62, 0.14, 0.17, 1.94, 0.12, 0.17, 1.96, -0.24]);
-  put.face(rt, shade(helmet, 0.82), [-0.17, 1.62, 0.14, -0.17, 1.62, -0.28, -0.17, 1.96, -0.24, -0.17, 1.94, 0.12]);
-
-  // Arms. The idle pair reach for the bars; the swinging one goes out sideways
-  // and takes the shoulder with it.
-  const swing = r.swing || 0;
-  const side = r.swingSide || 0;
-  for (const arm of [-1, 1]) {
-    const out = arm === side ? swing : 0;
-    const hx = arm * (0.36 + out * 1.05);
-    const hy = 1.1 + out * 0.16 - out * out * 0.2;
-    const hz = 0.52 - out * 0.72;
-    put.face(rt, kit, [arm * 0.3, 1.5, -0.24, arm * 0.36, 1.46, -0.2, hx, hy + 0.1, hz, hx, hy, hz]);
-    put.face(rt, skin, [hx - 0.09, hy - 0.08, hz, hx + 0.09, hy - 0.08, hz,
-      hx + 0.09, hy + 0.12, hz, hx - 0.09, hy + 0.12, hz]);
-    // What is in the hand, if anything.
-    if (out > 0.15 && r.weapon) {
-      const club = tint(r.weapon === 'baton' ? C.baton : C.club);
-      put.face(rt, club, [hx - 0.05, hy - 0.02, hz, hx + 0.05, hy - 0.02, hz,
-        hx + 0.05 + arm * 0.5, hy + 0.16, hz - 0.1, hx - 0.05 + arm * 0.5, hy + 0.16, hz - 0.1]);
+  // Wheels: tread you see from behind, disc you see from the side. They stand
+  // clear of the body, which is the whole silhouette of an open wheeler.
+  for (const zz of [-AXLE, AXLE]) {
+    for (const side of [-1, 1]) {
+      const wx = side * HALF;
+      put.face(rt, tyre, [wx - 0.18, 0.04, zz - 0.36, wx + 0.18, 0.04, zz - 0.36,
+        wx + 0.18, 0.72, zz - 0.36, wx - 0.18, 0.72, zz - 0.36]);
+      put.face(rt, tyre, [wx + 0.18, 0.04, zz + 0.36, wx - 0.18, 0.04, zz + 0.36,
+        wx - 0.18, 0.72, zz + 0.36, wx + 0.18, 0.72, zz + 0.36]);
+      put.face(rt, shade(tyre, 0.82), [wx + side * 0.19, 0.04, zz - 0.33,
+        wx + side * 0.19, 0.4, zz - 0.4, wx + side * 0.19, 0.72, zz,
+        wx + side * 0.19, 0.4, zz + 0.4, wx + side * 0.19, 0.04, zz + 0.33]);
+      put.face(rt, rim, [wx + side * 0.2, 0.3, zz - 0.12, wx + side * 0.2, 0.46, zz,
+        wx + side * 0.2, 0.3, zz + 0.12, wx + side * 0.2, 0.14, zz]);
     }
   }
-}
 
-/** A rider who is no longer on the bike: sliding, and briefly an obstacle. */
-export function drawDown(rt, r, x, y, z, yaw, tint) {
-  const pal = RIDERS[r.pal] || RIDERS.rival;
-  put.set(x, y, z, yaw, r.spin || 0, 1);
-  put.face(rt, tint(shade(pal.body, 0.8)), [-0.9, 0.12, -0.5, 0.9, 0.12, -0.5, 0.9, 0.12, 0.5, -0.9, 0.12, 0.5]);
-  put.face(rt, tint(C.metal), [-1.1, 0.05, 0.6, 1.1, 0.05, 0.6, 1.1, 0.42, 0.9, -1.1, 0.42, 0.9]);
-  put.face(rt, tint(pal.helmet), [-0.2, 0.12, -0.8, 0.2, 0.12, -0.8, 0.2, 0.44, -0.8, -0.2, 0.44, -0.8]);
-}
+  // The tub, from the nose back, and the sidepods either side of it.
+  put.face(rt, body, [-0.16, 0.22, 2.35, 0.16, 0.22, 2.35, 0.44, 0.54, 0.9, -0.44, 0.54, 0.9]);
+  put.face(rt, dark, [-0.16, 0.22, 2.35, -0.44, 0.54, 0.9, -0.44, 0.2, 0.9, -0.16, 0.14, 2.35]);
+  put.face(rt, dark, [0.44, 0.54, 0.9, 0.16, 0.22, 2.35, 0.16, 0.14, 2.35, 0.44, 0.2, 0.9]);
+  box(rt, tint, pal.body, -0.46, 0.46, 0.18, 0.56, -1.1, 0.9);
+  box(rt, tint, shade(pal.body, 0.9), -0.9, -0.5, 0.16, 0.66, -0.9, 0.7);
+  box(rt, tint, shade(pal.body, 0.9), 0.5, 0.9, 0.16, 0.66, -0.9, 0.7);
 
-/** A club lying in the road, waiting for somebody to ride over it. */
-export function drawDrop(rt, x, y, z, yaw, tint, bob) {
-  put.set(x, y + bob, z, yaw, 0, 1);
-  put.face(rt, tint(C.chrome), [-0.12, 0.1, -0.7, 0.12, 0.1, -0.7, 0.12, 0.1, 0.7, -0.12, 0.1, 0.7]);
-  put.face(rt, tint(C.spark), [-0.12, 0.1, 0.4, 0.12, 0.1, 0.4, 0.12, 0.5, 0.4, -0.12, 0.5, 0.4]);
+  // The cockpit, the airbox behind the driver's head, and the head.
+  put.face(rt, tint(C.tyre), [-0.34, 0.58, 0.86, 0.34, 0.58, 0.86,
+    0.32, 0.6, 0.16, -0.32, 0.6, 0.16]);
+  put.face(rt, trim, [-0.2, 0.6, 0.2, 0.2, 0.6, 0.2, 0.17, 1.04, -0.1, -0.17, 1.04, -0.1]);
+  put.face(rt, tint(shade(pal.trim, 0.8)), [-0.17, 1.04, -0.1, 0.17, 1.04, -0.1,
+    0.2, 0.98, -1.0, -0.2, 0.98, -1.0]);
+  put.face(rt, tint(C.helmet), [-0.16, 0.62, 0.48, 0.16, 0.62, 0.48,
+    0.16, 0.92, 0.42, -0.16, 0.92, 0.42]);
+
+  // The engine cover, tapering to nothing over the gearbox.
+  put.face(rt, body, [-0.4, 0.6, -0.2, 0.4, 0.6, -0.2, 0.2, 0.48, -1.9, -0.2, 0.48, -1.9]);
+  put.face(rt, dark, [-0.4, 0.6, -0.2, -0.2, 0.48, -1.9, -0.2, 0.2, -1.9, -0.44, 0.2, -0.2]);
+  put.face(rt, dark, [0.2, 0.48, -1.9, 0.4, 0.6, -0.2, 0.44, 0.2, -0.2, 0.2, 0.2, -1.9]);
+
+  // The wings. Wide, flat and dark, and the reason the car is legible from a
+  // long way back.
+  put.face(rt, wingLit, [-0.95, 0.16, 2.5, 0.95, 0.16, 2.5, 0.95, 0.24, 2.05, -0.95, 0.24, 2.05]);
+  put.face(rt, wing, [-0.95, 0.1, 2.48, 0.95, 0.1, 2.48, 0.95, 0.16, 2.5, -0.95, 0.16, 2.5]);
+  put.face(rt, wingLit, [-0.82, 0.78, -2.1, 0.82, 0.78, -2.1, 0.82, 1.02, -2.32, -0.82, 1.02, -2.32]);
+  put.face(rt, wing, [-0.82, 0.78, -2.1, -0.82, 1.02, -2.32, -0.86, 1.02, -2.32, -0.86, 0.78, -2.1]);
+  put.face(rt, wing, [-0.86, 0.5, -2.34, -0.7, 0.5, -2.34, -0.7, 1.08, -2.34, -0.86, 1.08, -2.34]);
+  put.face(rt, wing, [0.7, 0.5, -2.34, 0.86, 0.5, -2.34, 0.86, 1.08, -2.34, 0.7, 1.08, -2.34]);
+  // And one red light in the middle of it, which is what a wet grand prix looks
+  // like from behind and what a tow looks like here.
+  put.face(rt, tint(C.kerbA), [-0.1, 0.6, -2.36, 0.1, 0.6, -2.36,
+    0.1, 0.74, -2.36, -0.1, 0.74, -2.36]);
 }
 
 /**
- * A police helicopter, hanging over the road when the heat is up.
+ * Smoke off the tyres, or dust off the grass.
  *
- * It never touches you. It is a light in the sky and a noise, and its whole job
- * is to tell you that what happens on the ground for the next half minute is
- * going to be worse.
+ * Three flat squares behind the back wheels, growing and rising. There is no
+ * particle system and no transparency: at this resolution a puff of light grey
+ * that gets bigger for half a second is a locked tyre, and anything more careful
+ * would be invisible.
  */
-export function drawChopper(rt, x, y, z, yaw, spin, tint) {
+export function drawSmoke(rt, car, x, y, z, yaw, tint, rough, tick) {
+  const colour = tint(rough ? DUST : SMOKE);
   put.set(x, y, z, yaw, 0, 1);
-  box(rt, tint, C.kerbB, -1.1, 1.1, -0.9, 0.9, -1.6, 1.8);
-  put.face(rt, tint(C.glass), [-0.9, -0.6, 1.85, 0.9, -0.6, 1.85, 0.7, 0.7, 1.5, -0.7, 0.7, 1.5]);
-  put.face(rt, tint(C.metal), [-0.22, -0.1, -1.6, 0.22, -0.1, -1.6, 0.22, 0.35, -5.4, -0.22, 0.35, -5.4]);
-  put.face(rt, tint(C.kerbA), [-0.1, 0.35, -5.4, 0.1, 0.35, -5.4, 0.1, 1.6, -5.0, -0.1, 1.6, -5.0]);
-  drawRotor(rt, x, y + 1.1, z, spin, tint);
-}
-
-/** Two blurred blades, which is what a rotor is when it is turning. */
-function drawRotor(rt, x, y, z, spin, tint) {
-  const colour = tint(C.metal);
-  for (const off of [0, Math.PI / 2]) {
-    const a = spin + off;
-    put.set(x, y, z, a, 0, 1);
-    put.face(rt, colour, [-0.18, 0, -5.6, 0.18, 0, -5.6, 0.18, 0, 5.6, -0.18, 0, 5.6]);
+  for (let i = 0; i < 3; i++) {
+    const age = ((tick * 0.09 + i * 0.33) % 1);
+    const size = 0.35 + age * 1.5;
+    const back = -1.8 - age * 5.5;
+    const lift = 0.15 + age * 1.1;
+    for (const side of [-HALF, HALF]) {
+      put.face(rt, colour, [
+        side - size, lift - size * 0.5, back,
+        side + size, lift - size * 0.5, back,
+        side + size, lift + size * 0.5, back,
+        side - size, lift + size * 0.5, back,
+      ]);
+    }
   }
 }

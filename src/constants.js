@@ -3,151 +3,189 @@
  *
  * Metres and seconds throughout, converted to km/h only on the way to the
  * screen. The simulation runs at a fixed sixty ticks a second and never reads
- * the clock, so a slow machine plays the same race as a fast one - it just
+ * the clock, so a slow machine drives the same race as a fast one - it just
  * draws fewer of the frames.
  *
- * The bike is a big twin, not a superbike, and the numbers say so: it takes a
- * long time to get going, it does not want to change direction, and once it is
- * moving it does not want to stop. That is the whole character of the thing, and
- * most of what makes hitting somebody at a hundred and eighty feel like
- * something happened.
+ * The car is a ground-effect single seater and the numbers say so: it arrives at
+ * a corner far faster than it can go round one, it stops harder than anything
+ * else on the road, and everything it does depends on how much grip it has left
+ * over after the corner has taken its share. That last idea is the whole game,
+ * and it is four lines of arithmetic in sim.js - see GRIP.
  */
 
 export const TICK_RATE = 60;
 export const DT = 1 / TICK_RATE;
 
-/** The five bits an input mask is made of. Same set as the other four games. */
+/** The six bits an input mask is made of. Same set as the other four games. */
 export const BTN = { UP: 1, DOWN: 2, LEFT: 4, RIGHT: 8, FIRE: 16, SWITCH: 32 };
 
-// --- The road ----------------------------------------------------------------
+// --- The circuit -------------------------------------------------------------
 
-/** Distance between two road nodes. Everything about the world is built on it. */
+/** Distance between two track nodes. Everything about the world is built on it. */
 export const SEG = 6;
-/** Half the tarmac, in metres. Eighteen metres across is a boulevard, not a lane. */
-export const ROAD_HALF = 9;
-/** How far past the tarmac you can still ride before it turns into scenery. */
-export const VERGE = 3.2;
-/** The painted rumble strip, which is the first metre and a bit of that. */
-export const RUMBLE = 1.4;
-/** Nodes drawn ahead of the camera. Past this the world is fog. */
-export const DRAW_AHEAD = 150;
-/** And behind, so the road does not vanish out of the mirror on a crest. */
+/** Half the tarmac, in metres. Fourteen across is a grand prix track. */
+export const ROAD_HALF = 7;
+/** How far past the tarmac you can still be before it is scenery. */
+export const VERGE = 3.4;
+/** The painted kerb, which is the first metre and a half of that. */
+export const RUMBLE = 1.5;
+/** Nodes drawn ahead of the camera. Past this the world is haze. */
+export const DRAW_AHEAD = 165;
+/** And behind, so the track does not vanish out of the mirror on a crest. */
 export const DRAW_BEHIND = 6;
 
-// --- The bike ----------------------------------------------------------------
-
-export const TOP_SPEED = 74;        // m/s on tarmac, flat, throttle pinned
-export const ACCEL = 11.5;          // m/s^2 at a standstill, tailing off with speed
-export const BRAKE = 26;
-export const DRAG = 0.00042;        // quadratic, and what actually sets the top speed
-export const ROLL_DRAG = 1.1;       // linear, so a coasting bike comes to rest
-export const GRAVITY = 9.81;
-/** How much of the slope you feel. Full gravity on a 1-in-8 climb is too cruel. */
-export const SLOPE_PULL = 0.55;
-
-/** Sideways metres per second at full lock, and how quickly the bike gets there. */
-export const STEER_SPEED = 15.5;
-export const STEER_RATE = 5.2;
-/** A bike at walking pace does not lean. Steering scales in over this speed. */
-export const STEER_FLOOR = 6;
-
-/** Off the tarmac: dirt and sand hold you back and the bars fight you. */
-export const OFFROAD_DRAG = 0.62;
-export const OFFROAD_TOP = 0.45;
-
-// --- Fighting ----------------------------------------------------------------
-
-export const HEALTH = 100;
-/** How far to the side an arm reaches, and how far up and down the road. */
-export const REACH_SIDE = 5.4;
-export const REACH_LONG = 7.5;
-
-/** Ticks between swings, per attack. A kick leaves you open for longer. */
-export const SWING_COOL = 26;
-export const KICK_COOL = 44;
-/** Ticks the arm is actually out. The hit lands on the first of them. */
-export const SWING_TIME = 12;
-export const KICK_TIME = 18;
-
-export const DMG_FIST = 11;
-export const DMG_CLUB = 23;
-export const DMG_KICK = 17;
-/** A kick shoves; a club rattles. Metres per second of sideways push. */
-export const SHOVE_FIST = 3.5;
-export const SHOVE_CLUB = 5;
-export const SHOVE_KICK = 11;
-
-/** A rider who has taken this much of a wobble is going down. */
-export const WOBBLE_MAX = 100;
-export const WOBBLE_RECOVER = 34;   // per second, once nobody is hitting you
-/** Ticks on the floor before you are back on the bike. The real cost of a crash. */
-export const DOWN_TIME = 150;
-export const PLAYER_DOWN_TIME = 120;
-/** How fast you are going when you get back on. Not from a standstill: the real
- * cost of going down is the two seconds and the speed you had, not a minute of
- * winding a big twin back up to two hundred from nothing. */
-export const REMOUNT_SPEED = 22;
-
-/** Clubs are not bought, they are taken. Ticks one lies in the road. */
-export const DROP_LIFE = 420;
-
-// --- Traffic, rivals and the law ---------------------------------------------
-
-/** Civilian traffic, going your way, at a speed that makes it an obstacle. */
-export const TRAFFIC_MIN = 22;
-export const TRAFFIC_MAX = 34;
-/** Hitting the back of a car. Most of your speed and a good deal of your skin. */
-export const CRASH_DMG = 26;
-
-export const RIVAL_SPEED = 62;
-export const GANG_SPEED = 64;
-export const COP_SPEED = 70;
+// --- The car -----------------------------------------------------------------
 
 /**
- * How hard the law looks at you, 0 to 1. Fighting raises it; behaving lowers it.
+ * The speed the car actually reaches, and the speed the engine is pulling for.
  *
- * A landed punch is worth a good deal less than putting somebody on the tarmac,
- * because a punch at two hundred kilometres an hour is something a witness might
- * have seen and a body sliding down the road is not in doubt. The cooling rate
- * is the number that matters most: at this setting a clean minute takes you from
- * the helicopter back to nothing, which is short enough that behaving is a real
- * option and long enough that it costs you the fight you were winning.
+ * They are two numbers because they are two things. DRIVE is where the
+ * acceleration curve runs out; TOP_SPEED is where that curve meets the drag and
+ * the car stops gaining, which is a hundred and ninety km/h lower than you would
+ * guess and is why setting one number and hoping produced a car that would not
+ * go over two hundred and ninety. TOP_SPEED is also what the camera, the rev
+ * counter and the sound normalise against, so it has to be the speed you see.
  */
-export const HEAT_PER_HIT = 0.026;
-export const HEAT_PER_DOWN = 0.16;
-export const HEAT_PER_COP = 0.3;
-export const HEAT_COOL = 0.013;     // per second
-/** Above this a patrol is sent after you, and above the second, a helicopter. */
-export const HEAT_PATROL = 0.24;
-export const HEAT_CHOPPER = 0.5;
+export const TOP_SPEED = 97;        // m/s on the straight: 350 km/h
+export const DRIVE = 116;           // where the engine gives up pulling
+export const ACCEL = 21;            // m/s^2 off the line, tailing off with speed
+export const BRAKE = 44;            // about four and a half g, which is a wing car
+export const DRAG = 0.00034;        // quadratic, and what actually sets the top speed
+export const ROLL_DRAG = 1.4;       // linear, so a coasting car comes to rest
+export const GRAVITY = 9.81;
+/** How much of the gradient you feel. Full gravity on a climb is too cruel. */
+export const SLOPE_PULL = 0.5;
+
+/**
+ * Lateral grip, in metres per second squared. The most important number here.
+ *
+ * A corner of curvature k asks for v squared times k of sideways acceleration to
+ * get round it. Below this the car goes where it is pointed and whatever is left
+ * over is available for steering; above it the car runs to the outside of the
+ * corner and scrubs off speed doing it. That is the entire driving model, and
+ * everything that feels like driving comes out of it: braking points, the way a
+ * fast corner punishes an extra ten km/h far more than a slow one does, and why
+ * lifting in the middle of one gives you the front end back.
+ *
+ * Thirty-two is a shade over three g, which is what a wing and slick tyres are
+ * worth. Off the tarmac you get a fraction of it, which is why the grass ends
+ * your corner rather than widening it.
+ */
+export const GRIP = 32;
+export const GRIP_VERGE = 0.62;
+export const GRIP_ROUGH = 0.24;
+/** Speed scrubbed off per unit of grip you asked for and did not have. */
+export const SCRUB = 0.34;
+
+/** Sideways metres per second at full lock, and how quickly the car gets there. */
+export const STEER_SPEED = 17;
+export const STEER_RATE = 8.5;
+/** A car at walking pace does not turn. Steering scales in over this speed. */
+export const STEER_FLOOR = 5;
+
+/** Rolling resistance off the tarmac: grass and gravel. */
+export const OFFROAD_DRAG = 0.9;
+export const OFFROAD_TOP = 0.42;
+
+/**
+ * The tow.
+ *
+ * Sitting in the hole another car punches in the air is worth this much of its
+ * drag, and it is the largest single thing you can do about the car in front. It
+ * reaches about forty metres and needs you roughly behind them, which is what
+ * makes the last third of a straight interesting instead of a formality.
+ */
+export const TOW_RANGE = 42;
+export const TOW_WIDTH = 3.4;
+export const TOW_DRAG = 0.55;       // how much of your drag disappears, at best
+
+// --- Contact -----------------------------------------------------------------
+
+/** Car bodies, for the shoving: half a car wide and a car and a bit long. */
+export const BODY_X = 1.9;
+export const BODY_S = 4.6;
+/** Metres per second of shove when two cars touch, and what it costs the pair. */
+export const NUDGE = 6.5;
+export const NUDGE_COST = 0.965;
+/** Closing speed above which contact is not contact but an accident. */
+export const SPIN_AT = 26;
+/** Ticks of a spin, and what is left of your speed at the end of one. */
+export const SPIN_TIME = 105;
+export const SPIN_KEEP = 0.12;
+
+/**
+ * The barrier, in metres from the centreline.
+ *
+ * Eight metres of run-off between the kerb and it. That is enough that a corner
+ * you got slightly wrong is a moment on the grass and a lost second, and not
+ * enough that one you got properly wrong is anything other than over.
+ */
+export const WALL_AT = 15;
+export const WALL_KEEP = 0.42;
+
+// --- The field ---------------------------------------------------------------
+
+/** How many cars are in the race, including you. */
+export const FIELD = 8;
+/** Metres between rows on the grid, and how far off centre a grid slot sits. */
+export const GRID_GAP = 11;
+export const GRID_OFF = 2.6;
+/** How long the lights hold before they go out. */
+export const LIGHTS = 200;          // ticks
+
+/** What a rival will do, before the skill setting has its say. */
+export const AI_TOP = 0.965;        // fraction of your top speed
+export const AI_GRIP = 0.94;        // fraction of your grip, so you can out-brake them
+/** How far ahead they look for the corner, in metres, when deciding to brake. */
+export const AI_LOOK = 190;
 
 // --- The clock ---------------------------------------------------------------
 
 /**
  * Seconds on the clock at the start, and what a checkpoint gives you back.
  *
- * A checkpoint every thirteen hundred metres worth forty-eight seconds means the
- * clock is asking for a hundred kilometres an hour on average, against a bike
- * that will do two hundred and thirty. That gap is the whole design of the
- * thing: it is enough slack to stop and have a fight, and not enough to have
- * three.
+ * A checkpoint every thirteen hundred metres worth forty seconds asks for about
+ * a hundred and twenty kilometres an hour on average, against a car that will do
+ * three hundred and fifty. That gap is deliberate: the clock is not the
+ * opponent, the other seven cars are, and the clock is only there so that a race
+ * which has gone wrong does not go on for ever.
  */
-export const START_TIME = 75;
-export const CHECKPOINT_TIME = 48;
+export const START_TIME = 70;
+export const CHECKPOINT_TIME = 40;
 /** Checkpoints, in nodes. One every thirteen hundred metres or so. */
 export const CHECKPOINT_EVERY = 220;
 
-/** Seconds knocked off your final time for putting somebody down. */
-export const BONUS_RIVAL = 3;
-export const BONUS_GANG = 4;
-export const BONUS_COP = 8;
-
-/** What the three settings change. Easy is a longer clock and a softer world. */
+/** What the three settings change. */
 export const TIERS = {
-  easy: { clock: 1.35, damage: 0.7, foes: 0.75, label: 'Easy' },
-  normal: { clock: 1, damage: 1, foes: 1, label: 'Normal' },
-  hard: { clock: 0.82, damage: 1.3, foes: 1.35, label: 'Hard' },
+  easy: { clock: 1.3, ai: 0.94, grip: 1.08, label: 'Easy' },
+  normal: { clock: 1, ai: 1, grip: 1, label: 'Normal' },
+  hard: { clock: 0.86, ai: 1.045, grip: 0.95, label: 'Hard' },
 };
+
+// --- The gearbox -------------------------------------------------------------
+
+/**
+ * Seven speeds, for the dial and the noise and nothing else.
+ *
+ * The car does not actually have a gearbox: the simulation has one number for
+ * speed and no torque curve, and giving it one would be a day of work you could
+ * not see. What you can hear is the note dropping every time the needle sweeps
+ * round, and that is worth having, so the ratios exist to say which gear a given
+ * speed is in and how far up the range it is.
+ */
+export const GEARS = [12, 23, 36, 50, 64, 80, 97];
+
+/** Which gear a speed is in, from 1, and how far through it, from 0 to 1. */
+export function gearAt(speed) {
+  for (let i = 0; i < GEARS.length; i++) {
+    if (speed < GEARS[i] || i === GEARS.length - 1) {
+      const from = i === 0 ? 0 : GEARS[i - 1];
+      const span = Math.max(1, GEARS[i] - from);
+      return { gear: i + 1, rev: Math.max(0, Math.min(1, (speed - from) / span)) };
+    }
+  }
+  return { gear: 1, rev: 0 };
+}
 
 // --- Drawing -----------------------------------------------------------------
 
@@ -162,14 +200,27 @@ export const TIERS = {
  */
 export const SCREEN_W = 320;
 export const SCREEN_H = 224;
-/** Field of view, as the focal length of a screen this wide. */
-export const FOCAL = 235;
-/** Nothing nearer than this is drawn, because the maths stops working at zero. */
-export const NEAR = 0.6;
 
-/** Where the camera sits relative to the bike: behind it and above it. */
-export const CAM_BACK = 8.2;
-export const CAM_HIGH = 3.1;
-export const CAM_AHEAD = 24;        // what it looks at, up the road
+/**
+ * Field of view, as the focal length of a screen this wide.
+ *
+ * It moves with speed, and that is the largest single thing in this file for how
+ * fast the game feels. Standing still the view is calm and long; flat out it is
+ * pulled wide, so the kerbs go past at the edges of the screen rather than
+ * through the middle of it. The eye reads that as velocity far more readily than
+ * it reads a number changing in the corner.
+ */
+export const FOCAL = 250;
+export const FOCAL_FAST = 178;
+/** Nothing nearer than this is drawn, because the maths stops working at zero. */
+export const NEAR = 0.55;
+
+/** Where the camera sits relative to the car: behind it and above it. */
+export const CAM_BACK = 8.6;
+export const CAM_HIGH = 2.55;
+export const CAM_AHEAD = 26;        // what it looks at, up the track
+/** And where it goes flat out: lower, and closer in. */
+export const CAM_BACK_FAST = 7.4;
+export const CAM_HIGH_FAST = 1.95;
 /** How lazily the camera follows. Low enough to swing, high enough to keep up. */
-export const CAM_LAG = 0.13;
+export const CAM_LAG = 0.16;

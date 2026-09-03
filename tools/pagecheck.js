@@ -195,8 +195,8 @@ ok('the menu is showing and the score table was filled in',
   && byId.get('scoresNote').textContent.length > 20);
 ok('the controls table has a row for every action',
   byId.get('keysBody').children.length === 6);
-ok('the route blurb says something about the route',
-  byId.get('routeBlurb').textContent.includes('switchbacks'));
+ok('the route blurb says something about the circuit',
+  byId.get('routeBlurb').textContent.includes('mountain'));
 
 // --- Pressing start ----------------------------------------------------------------
 
@@ -215,7 +215,8 @@ byId.get('start').fire('click');
 ok('the menu goes away when the run starts', byId.get('menu').classes.has('hidden'));
 
 // The throttle, held. The loop reads the keyboard through the shared input
-// module, so this is the same path a key press takes.
+// module, so this is the same path a key press takes. The lights are still on
+// for the first three seconds of it, which is part of what is being checked.
 for (const fn of winListeners.get('keydown') || []) fn({ code: 'KeyW', key: 'w', preventDefault() {} });
 
 const screen = byId.get('screen');
@@ -224,7 +225,7 @@ const started = Date.now();
 pump(240);
 const drawn = (screen.drawn || 0) - before;
 ok(`four seconds of the loop drew ${drawn} frames in ${Date.now() - started}ms`, drawn > 200);
-ok('and the run is still going',
+ok('and the race is still going',
   byId.get('gameover').classes.has('hidden') && byId.get('menu').classes.has('hidden'));
 
 // Escape pauses, and pressing it again does not leave the game in a state where
