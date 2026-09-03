@@ -26,12 +26,11 @@
  */
 
 import {
-  ACCEL, AI_GRIP, AI_LOOK, AI_TOP, BODY_S, BODY_X, BRAKE, BTN,
-  CHECKPOINT_TIME, DRAG, DRIVE, DT, GRAVITY, GRIP, GRIP_ROUGH, GRIP_VERGE, NUDGE, NUDGE_COST,
-  OFFROAD_DRAG, OFFROAD_TOP, PIT_SPEED, PIT_TIME, PIT_X, ROAD_HALF, ROLL_DRAG, SCRUB, SEG,
-  SLOPE_PULL, SPIN_AT,
-  SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
-  TOW_RANGE, TOW_WIDTH, TYRE_FLOOR, TYRE_WEAR, WALL_AT, WALL_KEEP,
+  ACCEL, AI_DEFEND, AI_GRIP, AI_LOOK, AI_MIRROR, AI_SPREAD, AI_TOP, BODY_S, BODY_X, BRAKE,
+  BTN, CHECKPOINT_TIME, DRAG, DRIVE, DT, GRAVITY, GRIP, GRIP_ROUGH, GRIP_VERGE, NUDGE,
+  NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROAD_HALF, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL,
+  SPIN_AT, SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
+  TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP,
 } from '../constants.js';
 import { nextRandom, randRange } from '../util.js';
 import { makeState, nodeAt, nodeStep, player, racing, surfaceOf } from './state.js';
@@ -70,7 +69,6 @@ export function step(state, mask = 0) {
 
   tow(state);
   contacts(state);
-  pits(state);
   laps(state);
   order(state);
   checkpoints(state);
@@ -135,15 +133,6 @@ function control(state, p, mask) {
 function drive(state, car) {
   if (car.done) return;
 
-  // Four wheels off and nothing happening. The clock does not stop for it, which
-  // is the entire cost of a pit stop and the reason it is a decision.
-  if (car.pitT > 0) {
-    car.speed = 0;
-    car.vx = 0;
-    car.slide = 0;
-    return;
-  }
-
   if (car.spinT > 0) {
     // Round it goes. No control, and the tyres take most of what is left of the
     // speed with them.
@@ -168,25 +157,17 @@ function drive(state, car) {
   if (car.speed < 0.4 && racing(state)) ctl.throttle = true;
   const { i } = nodeAt(state.route, car.s);
   const node = state.route.nodes[i];
-  const surf = surfaceOf(car.x, node);
+  const surf = surfaceOf(car.x);
 
   // What is under the tyres. Off the tarmac you lose most of the grip and a
   // great deal of the speed, which is what makes running wide a mistake rather
-  // than a wider line. The pit lane is tarmac like any other.
-  const hold = surf === 'road' || surf === 'pit' ? 1 : surf === 'verge' ? GRIP_VERGE : GRIP_ROUGH;
-  // What is left of the tyres. Fresh they give everything; gone, four fifths.
-  const rubber = TYRE_FLOOR + (1 - TYRE_FLOOR) * car.tyre;
-  const grip = GRIP * state.cfg.grip * hold * rubber * (car.gripScale || 1);
-  // In the lane the engine simply will not pull past the limit. A penalty for
-  // exceeding it would be a second rule to explain and a second thing to be
-  // annoyed by; a limiter is what the car actually has.
-  const pull = surf === 'pit' ? PIT_SPEED
-    : (car.power || DRIVE) * (surf === 'rough' ? OFFROAD_TOP : 1);
+  // than a wider line.
+  const hold = surf === 'road' ? 1 : surf === 'verge' ? GRIP_VERGE : GRIP_ROUGH;
+  const grip = GRIP * state.cfg.grip * hold * (car.gripScale || 1);
+  const pull = (car.power || DRIVE) * (surf === 'rough' ? OFFROAD_TOP : 1);
 
   let acc = 0;
   if (ctl.throttle) acc += ACCEL * Math.max(0, 1 - car.speed / Math.max(8, pull));
-  // And if you arrived at three hundred, it takes it off you.
-  if (surf === 'pit' && car.speed > PIT_SPEED) acc -= BRAKE * 0.8;
   if (ctl.brake) acc -= BRAKE * (0.4 + 0.6 * hold);
   // The tow: less air in front of you is less drag, and it is the only thing
   // that will drag you past somebody on a straight.
@@ -226,14 +207,6 @@ function drive(state, car) {
 
   car.s += car.speed * DT;
 
-  // The tyres, charged for lateral load squared. A driver who was smooth for two
-  // laps has something left for the third; one who leant on them does not.
-  if (state.rules.wear) {
-    const load = need / Math.max(1, grip);
-    car.tyre = Math.max(0, car.tyre - TYRE_WEAR * DT
-      * (0.06 + load * load * 1.5 + car.slide * 0.02 + (surf === 'road' ? 0 : 1.4)));
-  }
-
   // Which way the car is pointed, for drawing. It follows where the car is
   // actually going rather than where it is asked to go, so a car running wide is
   // visibly pointing at the apex it is not going to make.
@@ -250,45 +223,6 @@ function spin(state, car) {
   car.slide = 1;
   if (car === player(state)) state.shake = 1;
   state.events.push({ t: 'spin', mine: car === player(state) });
-}
-
-// --- The pit lane ----------------------------------------------------------------
-
-/**
- * Stopping, and getting going again.
- *
- * A stop is four wheels stationary in the box for two and a half seconds and a
- * new set of tyres at the end of it. The clock does not stop and neither does
- * anybody else, which together with the length of the lane is the whole price -
- * about nine seconds against a lap of the pass, against tyres worth about two
- * and a half a lap. On a three lap race that is a mistake and on a four lap race
- * it is a question, which is the only reason to have it.
- */
-function pits(state) {
-  if (!state.rules.wear) return;
-  for (const car of state.cars) {
-    if (car.pitCool > 0) car.pitCool--;
-    if (car.pitT > 0) {
-      car.pitT--;
-      if (car.pitT === 0) {
-        car.tyre = 1;
-        car.stops++;
-        car.wantPit = false;
-        // Or the car finishes the stop standing on the box at no speed at all,
-        // which is the condition for starting one, and the afternoon becomes a
-        // tyre change that never ends.
-        car.pitCool = 420;
-        state.events.push({ t: 'tyres', mine: car === player(state) });
-      }
-      continue;
-    }
-    if (car.done || car.pitCool > 0 || car.speed > 3) continue;
-    const node = state.route.nodes[nodeAt(state.route, car.s).i];
-    if (!node.pitBox) continue;
-    if (surfaceOf(car.x, node) !== 'pit') continue;
-    car.pitT = PIT_TIME;
-    state.events.push({ t: 'pitin', mine: car === player(state) });
-  }
 }
 
 // --- Laps ----------------------------------------------------------------------
@@ -425,15 +359,6 @@ function think(state, car) {
   const limit = safeSpeed(state, car);
   const wide = ROAD_HALF - 1.4;
 
-  // Tyres. A rival stops when the set has genuinely gone and there is enough
-  // race left to be worth it, and not otherwise - which is the same sum the
-  // player is being asked to do, and means the field does not all dive in at
-  // once because a lap counter said so.
-  if (state.rules.wear && !car.wantPit && car.stops === 0
-    && car.tyre < 0.42 && state.laps - car.lap >= 2) {
-    car.wantPit = true;
-  }
-
   if (car.think > 0) car.think--;
   else {
     car.think = 10 + Math.floor(nextRandom(state) * 14);
@@ -448,10 +373,20 @@ function think(state, car) {
     const block = inTheWay(state, car);
     if (block) car.line = Math.max(-wide, Math.min(wide, block));
 
+    // And somebody in the mirrors is worth more than either. It moves part of
+    // the way across to cover the side they are coming down - part, so there is
+    // always a way past, and only on the approach, because covering the inside
+    // of a corner you are already in means going off the outside of it.
+    const chaser = behind(state, car);
+    if (chaser) {
+      const cover = car.line + (chaser.x - car.line) * AI_DEFEND;
+      car.line = Math.max(-wide, Math.min(wide, cover));
+    }
+
     // And every so often one of them gets it wrong, because a field that never
     // does is a field you are racing against a spreadsheet.
-    if (nextRandom(state) < 0.006 * (2 - state.cfg.ai)) {
-      car.wrong = 40 + Math.floor(nextRandom(state) * 50);
+    if (nextRandom(state) < 0.004 * (2 - state.cfg.ai)) {
+      car.wrong = 34 + Math.floor(nextRandom(state) * 40);
       car.wrongTo = (nextRandom(state) < 0.5 ? -1 : 1) * MISTAKE;
     }
   }
@@ -462,15 +397,8 @@ function think(state, car) {
     line += car.wrongTo;
   }
 
-  // Into the lane, if that is where this one is going.
-  const aim = pitAim(state, car);
-  let want = limit;
-  if (aim) {
-    line = aim.line;
-    want = Math.min(limit, aim.speed);
-  }
-
   const off = line - car.x;
+  const want = limit;
   car.ctl = {
     throttle: car.speed < want,
     brake: car.speed > want * 1.02 + 0.5,
@@ -488,8 +416,7 @@ function think(state, car) {
  * code drives the pass and the boulevard.
  */
 function safeSpeed(state, car, share = AI_GRIP) {
-  const rubber = TYRE_FLOOR + (1 - TYRE_FLOOR) * car.tyre;
-  const grip = GRIP * state.cfg.grip * share * rubber * (car.gripScale || 1);
+  const grip = GRIP * state.cfg.grip * share * (car.gripScale || 1);
   const brake = BRAKE * 0.82;
   let limit = TOP_SPEED;
   const from = nodeAt(state.route, car.s).i;
@@ -509,32 +436,6 @@ function safeSpeed(state, car, share = AI_GRIP) {
 }
 
 /**
- * Where a car that has decided to stop should be, and how fast.
- *
- * Shared by the rivals and the reference driver, because the awkward half of it
- * is the same for both: the box has to be braked for from a long way out, and a
- * car that arrives at it still doing eighty simply drives past it and has to go
- * round again. The distance is measured the long way round the lap so that
- * approaching the line from behind gives a large gap rather than a negative one.
- */
-function pitAim(state, car) {
-  if (!car.wantPit || car.stops > 0) return null;
-  const route = state.route;
-  const here = route.nodes[nodeAt(route, car.s).i];
-  if (!here.pit) return null;
-  const box = route.pitBox * SEG;
-  const gap = (((box - car.s) % route.metres) + route.metres) % route.metres;
-  // Crawling rather than stopping until the box is actually underneath, so a
-  // car that has misjudged the braking rolls the last few metres instead of
-  // standing still in the lane for the rest of the afternoon.
-  const closing = gap < 34;
-  return {
-    line: PIT_X,
-    speed: closing ? Math.max(gap < 4 ? 0 : 3, gap * 0.7 - 1) : PIT_SPEED,
-  };
-}
-
-/**
  * A hand on the wheel: the reference driver.
  *
  * The same two sums the rivals do - how fast may I be going for what is coming,
@@ -551,16 +452,9 @@ function pitAim(state, car) {
 export function driveLine(state, share = 0.95) {
   const p = player(state);
   const route = state.route;
-  let limit = safeSpeed(state, p, share);
+  const limit = safeSpeed(state, p, share);
   const soon = nodeStep(route, nodeAt(route, p.s).i, 20);
 
-  // It stops when the set has gone and there is a lap left to use a new one on,
-  // which is the same call the rivals make and the same one the player is being
-  // asked to make.
-  if (state.rules.wear && !p.wantPit && p.stops === 0
-    && p.tyre < 0.42 && state.laps - p.lap >= 2) {
-    p.wantPit = true;
-  }
 
   // The apex, and then anybody slow enough to be in the way of it.
   let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
@@ -572,18 +466,33 @@ export function driveLine(state, share = 0.95) {
     }
   }
 
-  const aim = pitAim(state, p);
-  if (aim) {
-    line = aim.line;
-    limit = Math.min(limit, aim.speed);
-  }
-
   let mask = p.speed < limit ? BTN.UP : 0;
   if (p.speed > limit * 1.02 + 0.5) mask |= BTN.DOWN;
   const off = line - p.x;
   if (off > 0.5) mask |= BTN.RIGHT;
   if (off < -0.5) mask |= BTN.LEFT;
   return mask;
+}
+
+/**
+ * Whoever is close enough behind to be a threat, if anybody is.
+ *
+ * Only cars that are actually catching up: somebody sitting two lengths back at
+ * the same speed is not attacking, and a car that weaved about because of them
+ * would be slower for no reason and would look like it was panicking.
+ */
+function behind(state, car) {
+  let close = null;
+  let closest = AI_MIRROR;
+  for (const other of state.cars) {
+    if (other === car || other.done) continue;
+    const gap = car.s - other.s;
+    if (gap <= 0 || gap > closest) continue;
+    if (other.speed < car.speed - 1) continue;
+    closest = gap;
+    close = other;
+  }
+  return close;
 }
 
 /** Where to go to get round somebody who is slower and in front. */
@@ -679,9 +588,13 @@ export function seedField(state) {
       car.gripScale = 1;
       continue;
     }
-    const pace = 1 - car.slot * 0.006;
+    // Pole is the quickest and the back of the grid the slowest, by about one
+    // per cent end to end. That is deliberately almost nothing: a field spread
+    // by four per cent is a field in which the front row is half a minute up the
+    // road by the flag and you are racing two cars rather than seven.
+    const pace = 1 - car.slot * AI_SPREAD;
     car.power = DRIVE * AI_TOP * state.cfg.ai * pace;
-    car.gripScale = AI_GRIP * state.cfg.ai * pace * randRange(state, 0.995, 1.02);
+    car.gripScale = AI_GRIP * state.cfg.ai * pace * randRange(state, 0.997, 1.01);
     car.think = Math.floor(nextRandom(state) * 12);
   }
   order(state);

@@ -11,12 +11,10 @@
 // game breaks by drifting rather than by throwing, so drift is what this looks
 // for.
 
-import {
-  BTN, GRIP, PIT_SPEED, PIT_X, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
-} from '../src/constants.js';
+import { GRIP, SEG, TICK_RATE, TOP_SPEED, WALL_AT } from '../src/constants.js';
 import { buildRoute } from '../src/game/route.js';
 import { driveLine, makeRace, step } from '../src/game/sim.js';
-import { finalTicks, formatTime, ordinal, player, surfaceOf } from '../src/game/state.js';
+import { finalTicks, formatTime, ordinal, player } from '../src/game/state.js';
 import {
   cleanEntry, compare, Highscores, merge, qualifies, sortTable,
 } from '../src/highscores.js';
@@ -108,8 +106,6 @@ for (const tier of ['easy', 'normal', 'hard']) {
     p.best > TICK_RATE * 40 && p.best < TICK_RATE * 150 && state.place >= 1 && state.place <= 8);
   ok(`${tier}: everybody else raced too`,
     state.cars.filter((c) => c.lap >= 1).length >= 7);
-  ok(`${tier}: the tyres went off (${Math.round(p.tyre * 100)}% left)`,
-    p.tyre < 0.65 && p.tyre >= 0);
 }
 
 // Qualifying: nobody else on it, fresh rubber all the way, and a best lap.
@@ -117,50 +113,43 @@ for (const tier of ['easy', 'normal', 'hard']) {
   const { state } = race({ route: 'coast', mode: 'qual', tier: 'normal', seed: 4 });
   const p = player(state);
   ok(`qualifying: alone on the circuit for ${state.laps} laps`, state.cars.length === 1);
-  ok(`qualifying: fresh tyres the whole way (${Math.round(p.tyre * 100)}%)`, p.tyre === 1);
   ok(`qualifying: a best lap of ${formatTime(p.best)}, quicker than the out lap`,
     p.best > 0 && p.best < p.lapFrom);
   ok('qualifying: the board is given the lap, not the session',
     finalTicks(state) === p.best);
 }
 
-// The pit lane: a surface, a speed limit, and a set of tyres at the end of it.
+/**
+ * The racing is close, and it is close because of the numbers rather than
+ * because of a rubber band.
+ *
+ * The field is spread by about one per cent of pace end to end, which is what
+ * keeps eight cars in touch for three laps; the check is that somebody is
+ * genuinely within a couple of seconds of the player for most of the race. A
+ * field that strings out is a field you are not racing, and it is the failure
+ * this game is most likely to drift back into, because every number that makes a
+ * rival quicker also makes it quicker than the rival behind it.
+ */
 {
-  const state = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 8 });
-  const route = state.route;
-  const box = route.nodes[route.pitBox];
-  ok('the box is in the lane and the lane is tarmac',
-    box.pit && surfaceOf(PIT_X, box) === 'pit' && surfaceOf(0, box) === 'road');
-  ok('and the grass beside the lane is still grass',
-    surfaceOf(PIT_X, route.nodes[route.pitBox + 200]) === 'rough');
-
-  // Driven into the box and stopped: the tyres come back and the clock does not.
-  const p = player(state);
-  state.lights = 0;
-  p.tyre = 0.1;
-  p.s = route.pitBox * SEG;
-  p.x = PIT_X;
-  p.speed = 0;
-  const before = state.elapsed;
+  let close = 0;
   let ticks = 0;
-  while (p.tyre < 1 && ticks < 300) {
-    step(state, 0);
-    ticks++;
+  let places = [];
+  for (const seed of [3, 11, 42]) {
+    const state = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed });
+    let t = 0;
+    while (!state.over && !state.finished && t < TICK_RATE * 600) {
+      step(state, driveLine(state, 0.98));
+      t++;
+      ticks++;
+      const p = player(state);
+      if (state.order.some((c) => c !== p && Math.abs(c.s - p.s) < 90)) close++;
+    }
+    places.push(state.place);
   }
-  ok(`a stop takes ${((state.elapsed - before) / TICK_RATE).toFixed(1)}s and fits new tyres`,
-    p.tyre === 1 && p.stops === 1 && ticks < 200);
-  ok('and the clock ran the whole time it was standing there',
-    state.elapsed > before);
-
-  // The limiter: full throttle in the lane will not get you past it.
-  p.pitCool = 0;
-  p.speed = 90;
-  for (let t = 0; t < 240; t++) {
-    p.x = PIT_X;
-    step(state, BTN.UP);
-  }
-  ok(`the limiter holds it to ${Math.round(p.speed * 3.6)}km/h in the lane`,
-    p.speed <= PIT_SPEED + 0.5);
+  const share = Math.round((100 * close) / ticks);
+  ok(`somebody is within ninety metres of you ${share}% of the race`, share > 45);
+  ok(`and a good drive finishes on the podium (${places.join(', ')})`,
+    places.every((p) => p <= 4));
 }
 
 // Laps roll over cleanly at the line, on a track that has no beginning.

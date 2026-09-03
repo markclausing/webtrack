@@ -278,10 +278,10 @@ pick('skill', (value) => {
 function renderMode() {
   document.getElementById('modeBlurb').textContent = mode === 'qual'
     ? 'An empty circuit and a long clock. Three laps, and the quickest single one '
-      + 'is what the board keeps. Fresh tyres the whole way.'
-    : 'Seven other cars and a standing start from the back row. The tyres are '
-      + 'good for about two laps of leaning on them, and the board keeps the whole '
-      + 'race rather than your best lap.';
+      + 'is what the board keeps. Nobody in the way and nobody to blame.'
+    : 'Seven other cars and a standing start from the back row. They are within a '
+      + 'per cent of each other and of you, they will shut the door, and the board '
+      + 'keeps the whole race rather than your best lap.';
 }
 pick('sound', (value) => sound.enable(value === 'on'));
 pick('talk', (value) => sound.voice(value === 'on'));

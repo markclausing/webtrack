@@ -32,7 +32,7 @@
 import {
   CAM_AHEAD, CAM_BACK, CAM_BACK_FAST, CAM_HIGH, CAM_HIGH_FAST, CAM_LAG, CHECKPOINT_TIME,
   DRAW_AHEAD, DRAW_BEHIND, FOCAL, FOCAL_FAST, gearAt, GRID_GAP, GRID_OFF, LIGHTS,
-  PIT_EDGE, ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TOP_SPEED, WALL_AT,
+  ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TOP_SPEED, WALL_AT,
 } from '../constants.js';
 import { RINGS } from '../game/route.js';
 import {
@@ -255,44 +255,16 @@ export class Renderer {
         tint(C.road),
       );
       rt.dither = 0;
-
-      // The pit lane: the infield run-off, in tarmac, with a solid white line
-      // between it and the track instead of a kerb. It is drawn before the kerbs
-      // so the line can be laid over the top of it.
-      if (a.pit) {
-        rt.quad(
-          a.x + a.nx * edge, roadY(a, edge), a.z + a.nz * edge,
-          a.x + a.nx * PIT_EDGE, groundY(a, 1, PIT_EDGE), a.z + a.nz * PIT_EDGE,
-          b.x + b.nx * PIT_EDGE, groundY(b, 1, PIT_EDGE), b.z + b.nz * PIT_EDGE,
-          b.x + b.nx * edge, roadY(b, edge), b.z + b.nz * edge,
-          tint(shade(C.road, 1.08)),
-        );
-        // The box, in the team's own paint, so you can see where to aim from a
-        // long way down the lane.
-        if (a.pitBox || nodeStep(route, i, -1).pitBox) {
-          rt.quad(
-            a.x + a.nx * 9.4, roadY(a, 9.4) + 0.04, a.z + a.nz * 9.4,
-            a.x + a.nx * 13.8, groundY(a, 1, 13.8) + 0.04, a.z + a.nz * 13.8,
-            b.x + b.nx * 13.8, groundY(b, 1, 13.8) + 0.04, b.z + b.nz * 13.8,
-            b.x + b.nx * 9.4, roadY(b, 9.4) + 0.04, b.z + b.nz * 9.4,
-            tint(TEAM_COLOURS[0].body),
-          );
-        }
-      }
-
       // Kerbs. Red and white, one node each, which at three hundred and fifty is
-      // sixteen stripes a second going past at the edge of the screen. Down the
-      // pit straight the inside one is a solid white line instead: that is what
-      // separates a lane from a track, and a kerb there would say "drive on me".
+      // sixteen stripes a second going past at the edge of the screen.
       const kerb = tint((i % 2) < 1 ? C.kerbA : C.kerbB);
       for (const side of [-1, 1]) {
-        const paint = a.pit && side > 0 ? tint(C.kerbB) : kerb;
         rt.quad(
           a.x + a.nx * side * ROAD_HALF, roadY(a, side * ROAD_HALF), a.z + a.nz * side * ROAD_HALF,
           a.x + a.nx * side * edge, roadY(a, side * edge), a.z + a.nz * side * edge,
           b.x + b.nx * side * edge, roadY(b, side * edge), b.z + b.nz * side * edge,
           b.x + b.nx * side * ROAD_HALF, roadY(b, side * ROAD_HALF), b.z + b.nz * side * ROAD_HALF,
-          paint,
+          kerb,
         );
       }
 
@@ -518,8 +490,8 @@ export class Renderer {
    *
    * Six things, and which six depends on what you came out to do. Qualifying
    * wants the lap you are on, the lap you just did and the best you have
-   * managed; a grand prix wants where you are, who is in front and how long the
-   * tyres have left. The clock, the speed and the gear are the same either way.
+   * managed; a grand prix wants where you are and who is in front. The clock,
+   * the speed, the gear and the map are the same either way.
    *
    * Everything is in the corner an arcade cabinet put it in, and the biggest
    * thing on the screen is whichever number you are actually playing for.
@@ -576,28 +548,10 @@ export class Renderer {
     rt.text('KM/H', W - 42, SCREEN_H - 12, HUD_DIM);
     rt.text(`${gear}`, W - 18, SCREEN_H - 24, WARN, 2);
 
-    // Bottom left: the tyres, and then the last lap or the man in front.
-    //
-    // The tyres get the top of the panel and a number as well as a bar, because
-    // by the third lap it is the thing deciding your race and a thin green line
-    // tucked under the lap counter was not saying so.
-    const tall = state.rules.wear ? 42 : 30;
-    rt.panel(4, SCREEN_H - tall - 4, 104, tall, HUD_BACK,
-      state.rules.wear && p.tyre < 0.25 ? BAD : HUD_EDGE);
-    let row = SCREEN_H - tall;
-    if (state.rules.wear) {
-      const gone = p.tyre < 0.25;
-      rt.text('TYRE', 8, row, gone && (state.tick % 26) < 13 ? BAD : HUD_DIM);
-      rt.text(`${Math.round(p.tyre * 100)}%`, 34, row,
-        p.tyre > 0.55 ? HUD_TEXT : p.tyre > 0.25 ? WARN : BAD);
-      rt.rect(60, row + 1, 44, 5, shade(HUD_EDGE, 0.5));
-      rt.rect(60, row + 1, Math.round(44 * p.tyre), 5,
-        p.tyre > 0.55 ? GOOD : p.tyre > 0.25 ? WARN : BAD);
-      if (p.pitT > 0) rt.text('IN THE PITS', 8, row + 10, WARN);
-      else if (p.wantPit) rt.text('PIT THIS LAP', 8, row + 10, WARN);
-      else if (gone) rt.text('TYRES GONE', 8, row + 10, (state.tick % 26) < 13 ? BAD : HUD_DIM);
-      row += 20;
-    }
+    // Bottom left: the last lap, or the man in front and how long it would take
+    // to get there.
+    rt.panel(4, SCREEN_H - 34, 104, 30, HUD_BACK, HUD_EDGE);
+    const row = SCREEN_H - 30;
     if (qual) {
       rt.text('LAST', 8, row, HUD_DIM);
       rt.text(p.last ? formatTime(p.last) : '-:--.--', 34, row,

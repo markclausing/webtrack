@@ -4,8 +4,8 @@
 
 A polygon racing game in the browser, in the spirit of the first generation of
 them. Three closed circuits, eight single seaters, and two ways to go out: put a
-lap in on an empty track, or start eighth of eight with a set of tyres that will
-not last the distance.
+lap in on an empty track, or start eighth of eight against seven cars that are
+within one per cent of you and will shut the door.
 
 Whichever you drive, the time goes on a shared board.
 
@@ -48,11 +48,10 @@ pauses.
 ## Two ways out
 
 **Qualifying** is an empty circuit, three laps and a long clock. Only one number
-survives it: your quickest single lap. Fresh tyres the whole way, nobody in your
-mirrors, and nothing to blame.
+survives it: your quickest single lap. Nobody in your mirrors and nothing to
+blame.
 
-**Grand Prix** is seven other cars, a standing start from the back row, tyres
-that will not last the distance and a pit lane to do something about it. The
+**Grand Prix** is seven other cars and a standing start from the back row. The
 board keeps the whole race rather than your best lap, because a quick lap in a
 race you lost is a consolation and not a result.
 
@@ -82,50 +81,44 @@ asking for both at once gets you neither and a lot of grass.
 
 ![Asking for more grip than there is](docs/screenshots/corner.png)
 
-**Tyres go off, and they go off faster if you lean on them.** Wear is charged for
-cornering load squared, so two smooth laps leave you something for the third and
-two ragged ones do not. A dead set is worth nearly half your grip — about eight
-seconds a lap — and the meter in the bottom corner goes red and starts flashing
-long before you have to think about it. Only in the race; qualifying is always on
-fresh rubber.
-
-**So there is a pit lane, and whether to use it is the only strategic decision in
-the game.** It is the inside of the start straight: cross the white line onto it,
-obey the limiter, stop on the box for a second and a third, and the tyres are
-new. The whole detour costs about thirteen seconds. Eight a lap against thirteen
-once means it pays with two laps left to run and does not with one — which is why
-the pass is four laps rather than three: over three the answer is always no, and
-a decision with one answer is not a decision. The clock does not stop while you
-are standing there, and neither does anybody else.
-
-![Stopped on the box, on nineteen per cent](docs/screenshots/pits.png)
-
 **Sit behind somebody on the straight.** The tow removes nearly half your drag
 and is worth about twenty km/h. It reaches forty metres and needs you roughly
 behind them, which is what makes the last third of a straight interesting instead
 of a formality.
 
 **The kerbs are yours; the grass is not.** Two wheels on the red and white costs
-you very little. Four wheels on the green costs three quarters of your grip. The
-pit lane is tarmac like any other, which is why it needed no new rules — only a
-surface, a limiter and a box to stand on.
+you very little. Four wheels on the green costs three quarters of your grip.
 
 **There is a map in the corner.** It is the one thing the view out of the cockpit
 cannot give you: where the next corner but one goes, and where the other seven
 are when they are not in front of you.
 
-![Into the lane, on thirty-three per cent](docs/screenshots/pitlane.png)
+**They will shut the door on you.** A rival with somebody in its mirrors moves
+part of the way across to cover the side you are coming down — part, so there is
+always a way past, and only on the approach, because covering the inside of a
+corner it is already in means going off the outside of it. Make them commit, then
+go the other way.
 
 **They are given slightly less grip and slightly less top end than you, and
-nothing else.** No rubber band, no catching you up when you crash, no pulling
-away when you do not. A rival that cheated would be one you could not learn, and
-learning where they brake is the only way past seven of them in three laps.
+nothing else.** One and a half per cent of grip, which is about a second a lap:
+enough to come through the field if you take every one of them, and nowhere near
+enough if you throw one away. No rubber band, no catching you up when you crash,
+no pulling away when you do not. A rival that cheated would be one you could not
+learn, and learning where they brake is the only way past seven of them in three
+laps.
+
+**And they stay in touch with each other.** The field is spread by about one per
+cent of pace from pole to the back row, end to end. That number is doing more for
+the racing than any other in the file: at four per cent the front row was half a
+minute up the road by the flag and you were racing two cars rather than seven. As
+it stands somebody is within ninety metres of you for about eighty per cent of a
+race, which is a thing the test suite measures and would notice going away.
 
 ## Three circuits
 
 **The pass** is 4.3 km through the mountains, climbing fifty metres and giving it
 all back — three kinds of corner, all of them third gear or lower, with enough
-between them to use what you gained. Four laps. **The boulevard** is 5.7 km of
+between them to use what you gained. Three laps. **The boulevard** is 5.7 km of
 sea front: flat, open, and quick enough that the corners which do matter matter a
 great deal. Three laps. **The grand circuit** is 8.2 km out of the hills, down to
 the water and back up again, and it is two laps because one of them is already a
@@ -295,9 +288,9 @@ Three things, none of which need a browser:
   is not there is a bump on the piece of track everybody drives most. Then it
   drives each of them with the game's own reference driver and asks the questions
   a bug would answer wrongly: is anybody outside the barriers, did the field race,
-  did the laps count, did the tyres go off, does the pit lane have tarmac on it
-  and a limiter over it — and the one that is about the game
-  rather than the code, **is braking later still quicker**. It runs the same
+  did the laps count, is somebody still within ninety metres of you for most of
+  the race — and the one that is about the game rather than the code, **is
+  braking later still quicker**. It runs the same
   driver at three levels of commitment and fails if it is not. A driving model
   that gets that wrong is broken however finite its numbers are, and nothing else
   here would notice.

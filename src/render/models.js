@@ -144,18 +144,6 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0) {
       put.face(rt, frame, [5.7, 4.6, -0.5, 6, 4.6, -0.5, 6, 6.7, -0.5, 5.7, 6.7, -0.5]);
       break;
     }
-    case 'garage': {
-      // A bay with a dark opening and a strip of colour over it. Four faces, and
-      // the only one doing any work is the dark one: an opening is what makes a
-      // row of boxes read as somewhere cars go into.
-      const wall = tint(shade(theme.ridge, 1.1));
-      put.face(rt, wall, [-4.4, 0, 0, 4.4, 0, 0, 4.4, 5, 0, -4.4, 5, 0]);
-      put.face(rt, tint(C.tyre), [-3.4, 0, -0.05, 3.4, 0, -0.05, 3.4, 3.4, -0.05, -3.4, 3.4, -0.05]);
-      put.face(rt, tint(C.kerbA), [-4.4, 3.6, -0.1, 4.4, 3.6, -0.1, 4.4, 4.4, -0.1, -4.4, 4.4, -0.1]);
-      put.face(rt, tint(shade(theme.ridge, 0.7)), [-4.6, 5, 0.4, 4.6, 5, 0.4,
-        4.6, 5.3, -1.6, -4.6, 5.3, -1.6]);
-      break;
-    }
     case 'block':
       box(rt, tint, theme.ridge, -3.4, 3.4, 0, 5.5, -3.4, 3.4);
       put.face(rt, tint(C.glass), [-3.0, 2.0, -3.45, 3.0, 2.0, -3.45,

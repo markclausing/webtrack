@@ -129,41 +129,67 @@ export const WALL_KEEP = 0.42;
  * The two ways to go out.
  *
  * Qualifying is you and an empty circuit and one number that matters: the
- * quickest single lap you managed. A grand prix is seven other cars, the same
- * number of laps, tyres that will not last them, and one number that matters
- * rather less than where you finished.
+ * quickest single lap you managed. A grand prix is seven other cars over the
+ * same number of laps, and one number that matters rather less than where you
+ * finished.
  *
  * They are two games on one track and they want two boards, because a lap on
  * empty tarmac and a lap spent trying to get past somebody are not comparable
  * and never will be.
  */
 export const MODES = {
-  qual: { label: 'Qualifying', field: 1, wear: 0, clock: 1.5 },
-  gp: { label: 'Grand Prix', field: 8, wear: 1, clock: 1 },
+  qual: { label: 'Qualifying', field: 1, clock: 1.5 },
+  gp: { label: 'Grand Prix', field: 8, clock: 1 },
 };
 
 /** How many cars are in a grand prix, including you. */
 export const FIELD = 8;
-/**
- * And how many laps each circuit is worth.
- *
- * Four on the short one, and the number is chosen against the tyres rather than
- * against the clock: over three laps a set lasts and stopping is always a
- * mistake, so the pit lane is scenery. Over four it is a question, which is what
- * a pit lane is for.
- */
-export const LAPS = { pass: 4, coast: 3, grand: 2 };
+/** And how many laps each circuit is worth. The long one is worth fewer. */
+export const LAPS = { pass: 3, coast: 3, grand: 2 };
 /** Metres between rows on the grid, and how far off centre a grid slot sits. */
 export const GRID_GAP = 11;
 export const GRID_OFF = 2.6;
 /** How long the lights hold before they go out. */
 export const LIGHTS = 200;          // ticks
 
-/** What a rival will do, before the skill setting has its say. */
-export const AI_TOP = 0.965;        // fraction of your top speed
-export const AI_GRIP = 0.94;        // fraction of your grip, so you can out-brake them
+/**
+ * What a rival will do, before the skill setting has its say.
+ *
+ * These two numbers are the difficulty of the game and very little else is. They
+ * are close to one on purpose: a rival with ninety-four per cent of your grip is
+ * a rival you drive past on the second corner and never see again, and a race
+ * you have won by the end of the first lap is not a race. At ninety-eight and a
+ * half you have an edge worth about a second a lap, which over three laps is
+ * three seconds - enough to come through the field if you take every one of
+ * them, and not nearly enough if you throw one away.
+ */
+export const AI_TOP = 0.992;        // fraction of your top speed
+export const AI_GRIP = 0.985;       // fraction of your grip, so you can out-brake them
 /** How far ahead they look for the corner, in metres, when deciding to brake. */
 export const AI_LOOK = 190;
+
+/**
+ * How much the field is spread out, end to end, by pace alone.
+ *
+ * Small, and that is what keeps them in touch. At four per cent the front row
+ * was half a minute up the road by the flag and the race was two separate races;
+ * at one per cent all eight are within a few seconds all afternoon and there is
+ * always somebody to have a go at.
+ */
+export const AI_SPREAD = 0.0016;    // per grid slot
+
+/**
+ * How hard a rival will defend.
+ *
+ * A car with somebody in its mirrors moves across to cover the side they are
+ * coming down, but only part of the way and only when it has grip to spare -
+ * which means it cannot do it in the middle of a corner, which is where you get
+ * past it. Without this they hold their line and an overtake is a matter of
+ * having a faster car; with it, it is a matter of putting them somewhere they
+ * did not want to be first.
+ */
+export const AI_DEFEND = 0.62;      // how far across they will come
+export const AI_MIRROR = 26;        // metres of mirror they look into
 
 // --- The clock ---------------------------------------------------------------
 
@@ -180,53 +206,6 @@ export const START_TIME = 70;
 export const CHECKPOINT_TIME = 40;
 /** Checkpoints, in nodes. One every thirteen hundred metres or so. */
 export const CHECKPOINT_EVERY = 220;
-
-// --- Tyres -------------------------------------------------------------------
-
-/**
- * What is left of the grip when the tyres have gone, and how fast they go.
- *
- * Twenty per cent is a lot - it is about ten km/h off every corner - and it
- * arrives gradually enough that you do not notice it happening, only that the
- * lap you drove on the last lap does not work any more. Wear is charged for
- * lateral load squared, so the driver who was smooth for two laps has something
- * left for the third and the one who leant on them does not. That is the whole
- * mechanic and it is three lines.
- *
- * The rate is set so a race ends at about a quarter of a set rather than at
- * none of one. Tyres that reach zero on the second of three laps are not a
- * mechanic, they are a countdown - the third lap is then the same third lap
- * whatever you did with the first two, and the decision the wear was there to
- * create never gets made.
- */
-export const TYRE_FLOOR = 0.55;
-export const TYRE_WEAR = 0.008;
-
-// --- The pit lane --------------------------------------------------------------
-
-/**
- * Where the pits are, in nodes either side of the start line, and what using
- * them costs.
- *
- * The lane is not a separate piece of road: it is the run-off on the infield
- * side of the track, made of tarmac for the length of the pits, with a white
- * line down it and a speed limit on it. That keeps every existing rule - the
- * grip, the barrier, the collisions, the lap counter - working unchanged, and it
- * is what a pit lane looks like from a car anyway.
- *
- * The whole detour costs about thirteen seconds against a lap of the pass, and a
- * dead set costs about eight a lap. So one stop pays if there are two laps left
- * to spend the new tyres on and does not if there is one, which is the decision
- * the lane exists to create. Stop because the tyres have gone, not because there
- * is a pit lane.
- */
-export const PIT_FROM = -38;        // nodes before the line where the lane starts
-export const PIT_TO = 12;           // and where it rejoins
-export const PIT_BOX = -16;         // the node your crew is standing on
-export const PIT_X = 11.6;          // the middle of the lane, on the infield side
-export const PIT_EDGE = 14.6;       // its outer edge, just inside the barrier
-export const PIT_SPEED = 32;        // 115 km/h, and the engine will not pull past it
-export const PIT_TIME = 80;        // a second and two thirds of four wheels off
 
 /** What the three settings change. */
 export const TIERS = {

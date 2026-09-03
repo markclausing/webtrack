@@ -27,7 +27,7 @@
  * actually there.
  */
 
-import { CHECKPOINT_EVERY, PIT_BOX, PIT_FROM, PIT_TO, SEG } from '../constants.js';
+import { CHECKPOINT_EVERY, SEG } from '../constants.js';
 
 /**
  * How far out, in metres from the centreline, each ground ring sits.
@@ -240,7 +240,7 @@ export function turn(from, to) {
  * circuit be both, and is why the grand circuit can climb out of the hills and
  * arrive at the coast without a line across the world where it changes its mind.
  */
-function ground(y, curve, warm, wob, infield, isPit) {
+function ground(y, curve, warm, wob, infield) {
   const lean = Math.max(-1, Math.min(1, curve * 22));
   // The outside: hillside, or water.
   const mL = [y + 0.6 + wob(0.7) * 1.4, y + 6 * (1 + lean) + wob(0.3) * 8,
@@ -249,15 +249,12 @@ function ground(y, curve, warm, wob, infield, isPit) {
   const cL = [SEA, SEA, SEA];
 
   // The infield: down off the verge and then flat, wherever the track happens to
-  // be at the time. Beside the pits it stays level for thirty metres first,
-  // because that is the paddock and the garages have to stand on something.
-  const r = isPit
-    ? [y + 0.15, y - 0.4, lerp(y, infield, 0.8)]
-    : [
-      y + 0.5 + wob(0.9) * 1.1,
-      lerp(y, infield, 0.55) + wob(0.37) * 2.4,
-      infield + wob(0.13) * 3,
-    ];
+  // be at the time.
+  const r = [
+    y + 0.5 + wob(0.9) * 1.1,
+    lerp(y, infield, 0.55) + wob(0.37) * 2.4,
+    infield + wob(0.13) * 3,
+  ];
 
   const mix3 = (a, b) => [lerp(a[0], b[0], warm), lerp(a[1], b[1], warm), lerp(a[2], b[2], warm)];
   return {
@@ -344,14 +341,6 @@ export function buildRoute(key) {
   for (let i = 0; i < count; i++) mean += height[i];
   const infield = mean / count - 9;
 
-  // Which nodes have a pit lane beside them, worked out once. The window
-  // straddles the start line, so it is a wrapped range rather than a pair of
-  // bounds - the sort of thing that is much easier to answer once here than
-  // three times over in the simulation.
-  const pit = new Uint8Array(count);
-  for (let k = PIT_FROM; k <= PIT_TO; k++) pit[((k % count) + count) % count] = 1;
-  const pitBox = ((PIT_BOX % count) + count) % count;
-
   const nodes = [];
   for (let i = 0; i < count; i++) {
     const t = i / count;
@@ -374,9 +363,7 @@ export function buildRoute(key) {
       // Banking, into the corner. Small: this is a circuit, not a bowl.
       bank: -curve * 3.2,
       warm,
-      pit: pit[i] === 1,
-      pitBox: i === pitBox,
-      g: ground(y, curve, warm, wob, infield, pit[i] === 1),
+      g: ground(y, curve, warm, wob, infield),
     });
   }
 
@@ -388,7 +375,6 @@ export function buildRoute(key) {
     metres: count * SEG,
     steepest,
     infield,
-    pitBox,
     // Which nodes stop the clock. The line, and one on the far side of the lap,
     // so a long circuit is not one enormous held breath.
     checkpoints: checkpointsFor(count),
@@ -477,16 +463,11 @@ function scatter(nodes, rnd) {
   }
 
   // The grandstands go where the grid is, which on a circuit is where the start
-  // line is - and node zero is now a place you come back to twice a lap rather
-  // than somewhere you leave once. Only on the outside: the inside of the track
-  // there is the pit lane.
+  // line is - and node zero is a place you come back to every lap rather than
+  // somewhere you leave once.
   for (let i = -22; i < 14; i += 4) {
     add(i, { kind: 'stand', side: -1, off: 24, s: 1, r: 0, align: true });
-  }
-
-  // And the garages, in a row behind the pit wall, facing the lane.
-  for (let i = PIT_FROM + 6; i < PIT_TO - 4; i += 3) {
-    add(i, { kind: 'garage', side: 1, off: 19.5, s: 1, r: Math.PI, align: true });
+    add(i, { kind: 'stand', side: 1, off: 24, s: 1, r: Math.PI, align: true });
   }
 
   // The gantry is the checkpoint. It is placed on the node the clock is actually
