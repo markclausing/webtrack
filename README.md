@@ -289,6 +289,22 @@ screen running faster than the simulation, which is fine — the world is drawn
 where it is between ticks rather than where the last one left it, so a 120Hz
 panel gets smoother motion than a 60Hz one rather than a stutter.
 
+### On a phone
+
+A thumbstick bottom left, throttle and brake bottom right, pause where it can be
+reached and not hit by accident. `npm run test:touch` works out where all of that
+lands on real device sizes and complains if it lands on the picture.
+
+The playfield is ten by seven and a phone is not, so where the dead space falls
+decides everything. **Sideways**, it falls down both sides as letterbox bars —
+145 pixels of them on an iPhone 15, 163 on a Pixel — and those bars are exactly
+where a thumb wants to be, so the controls are sized to fit inside them. They
+cover 0–9% of the picture instead of the 11–23% they used to, and what they used
+to cover was the two corners the head-up display lives in. **Standing up**, the
+picture goes to the top of the screen rather than the middle, so the dead space
+is one band underneath it, which is where the thumbs already are: the controls
+clear the picture entirely.
+
 ## The look
 
 Everything you can see is polygons standing in the world — no sprites, no

@@ -51,6 +51,17 @@ html, body {
   image-rendering: crisp-edges;
 }
 
+/* Standing up, the picture goes to the top rather than the middle.
+   A ten-by-seven playfield in a nine-by-nineteen window is a third of the screen
+   whatever you do with it, so the only question is where the other two thirds
+   go. Centred, they go half above the picture and half below, and both halves
+   are wasted: you look up at nothing and your thumbs rest on nothing. At the top
+   it is one space, it is under the picture, and it is exactly where the thumbs
+   already are. */
+@media (orientation: portrait) {
+  #screen { object-position: center top; }
+}
+
 .overlay {
   position: absolute;
   inset: 0;
@@ -276,9 +287,17 @@ details .keys { margin-top: 0; }
 }
 
 /* --- touch controls ---
-   The playfield is fitted into the space above these rather than behind them:
-   a thumb parked over the wave you are about to fly into is no way to play.
-   The renderer is told how much room to leave. */
+   Small and hard into the corners, which is not a style choice.
+   The picture is letterboxed to ten by seven, so on a phone held sideways there
+   are bars down both sides - a hundred and forty-five pixels of them on a
+   fifteen, a hundred and sixty on a Pixel - and those bars are exactly where a
+   thumb wants to be. Sized to fit inside them, the controls cover nought to nine
+   per cent of the picture instead of the eleven to twenty-three they used to,
+   and what they used to cover was the corners the head-up display lives in.
+   Standing up they fall below the picture entirely.
+   The comments here once described a different game in this series: there is no
+   fire button, no pod and no wave, and the element ids are all that is left of
+   them. */
 
 #touch {
   position: absolute;
@@ -310,11 +329,13 @@ details .keys { margin-top: 0; }
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 42%;
-  height: 170px;
-  /* No tint of its own. In landscape the playfield reaches into this corner,
-     and a faintly lit quarter of the screen reads as a bug rather than as a
-     control: the knob is the only part of the stick worth drawing. */
+  /* Was forty-two per cent of the window, which on a phone held sideways is
+     three hundred and fifty pixels and reached a third of the way across the
+     road. A fixed width fits in the letterbox bar. */
+  width: 150px;
+  height: 140px;
+  /* No tint of its own: a faintly lit corner of the screen reads as a bug
+     rather than as a control, and the knob is the only part worth drawing. */
   background: transparent;
 }
 
@@ -333,8 +354,8 @@ details .keys { margin-top: 0; }
 
 #touchButtons {
   position: absolute;
-  right: max(18px, env(safe-area-inset-right));
-  bottom: max(30px, calc(env(safe-area-inset-bottom) + 18px));
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(18px, calc(env(safe-area-inset-bottom) + 10px));
   display: flex;
   align-items: flex-end;
   gap: 12px;
@@ -348,22 +369,22 @@ details .keys { margin-top: 0; }
   border-width: 3px;
 }
 
-/* FIRE is held for whole stages at a time, so it is the big one and it sits
-   nearest the thumb; POD is a tap you make a few times a stage and sits above
-   and inside, where a tap can reach it without letting go of the trigger. */
+/* The throttle is held for whole laps at a time, so it is the big one and it
+   sits nearest the thumb; the brake is above and inside it, where a thumb can
+   reach it without letting go of the gas. */
 #btnFire {
-  width: 100px;
-  height: 100px;
-  font-size: 15px;
+  width: 84px;
+  height: 84px;
+  font-size: 13px;
   background: rgba(255, 202, 77, 0.72);
   color: #17110a;
   border-color: rgba(255, 255, 255, 0.55);
 }
 
 #btnPod {
-  width: 68px;
-  height: 68px;
-  margin-bottom: 26px;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 22px;
   background: rgba(178, 40, 48, 0.72);
   color: #f2e9de;
   border-color: rgba(255, 255, 255, 0.4);
@@ -371,16 +392,21 @@ details .keys { margin-top: 0; }
 
 #touchButtons button.pressed { filter: brightness(1.35); transform: scale(0.94); }
 
-/* Pause, for a device with no Escape key. Top middle, small and quiet: the
-   score lives in the left corner and the stage name in the right, and this is
-   the one control you must never hit by accident while dodging. */
+/* Pause, for a device with no Escape key. Small and quiet, and kept off the
+   picture in both orientations, which took moving it.
+   Top middle is where it was, and top middle of a letterboxed picture is the
+   lap clock - the biggest number on the screen and the one you are reading on
+   the way into a corner. Sideways it goes to the top left instead, which is the
+   letterbox bar. Standing up there is no bar, so it goes into the empty space
+   under the picture, between the stick and the pedals. */
 #btnPause {
   position: absolute;
-  left: 50%;
+  left: max(6px, env(safe-area-inset-left));
   top: max(6px, env(safe-area-inset-top));
-  transform: translateX(-50%);
-  width: 46px;
-  height: 34px;
+  width: 48px;
+  /* Forty-four is the smallest target Apple and Google will both defend, and a
+     pause button you miss while braking is a pause button that did not pause. */
+  height: 44px;
   padding: 0;
   font-size: 13px;
   font-weight: bold;
@@ -392,6 +418,19 @@ details .keys { margin-top: 0; }
 }
 
 #btnPause:active { background: rgba(255, 138, 61, 0.6); color: #0d0b09; }
+
+@media (orientation: portrait) {
+  /* Straight under the picture rather than down among the pedals.
+     Standing up the picture is the full width of the window and ten by seven, so
+     it is exactly 70vw tall and ends there - which is a number the stylesheet can
+     have without measuring anything. Down at the bottom instead, it collided with
+     the brake on a phone as narrow as an SE. */
+  #btnPause {
+    left: 50%;
+    top: calc(70vw + 16px);
+    transform: translateX(-50%);
+  }
+}
 
 /* --- The score board ----------------------------------------------------- */
 
