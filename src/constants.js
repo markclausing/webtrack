@@ -277,16 +277,17 @@ export function gearAt(speed) {
  * twelve that machine could make, and there is not a texture anywhere.
  */
 /**
- * Four hundred by two hundred and eighty.
+ * Four hundred and eighty by three hundred and thirty-six.
  *
- * A quarter more than the 320 x 224 a Mega Drive put on a television, in the
- * same ten by seven shape, and about the most that can be added without the
- * pixels stopping being pixels. It costs half again as many of them to fill -
- * a hundred and twelve thousand against seventy-two - which the software
- * rasteriser has the room for and the look has the tolerance for.
+ * Half again the 320 x 224 a Mega Drive put on a television, in the same ten by
+ * seven shape. A hundred and sixty-one thousand pixels against seventy-two,
+ * which the software rasteriser has the room for - the frame is still a third of
+ * its budget - and which the look still tolerates, because what makes this read
+ * as sixteen-bit is the flat shading and the nine-bit palette rather than the
+ * count of pixels.
  */
-export const SCREEN_W = 400;
-export const SCREEN_H = 280;
+export const SCREEN_W = 480;
+export const SCREEN_H = 336;
 
 /**
  * Field of view, as the focal length of a screen this wide.
@@ -297,8 +298,8 @@ export const SCREEN_H = 280;
  * through the middle of it. The eye reads that as velocity far more readily than
  * it reads a number changing in the corner.
  */
-export const FOCAL = 312;
-export const FOCAL_FAST = 222;
+export const FOCAL = 374;
+export const FOCAL_FAST = 266;
 /** Nothing nearer than this is drawn, because the maths stops working at zero. */
 export const NEAR = 0.55;
 

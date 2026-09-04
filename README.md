@@ -222,13 +222,13 @@ billboards, no textures anywhere. Go round a bend and the palm tree turns,
 because it is actually there.
 
 The renderer is about five hundred lines and does not use the GPU. It transforms,
-clips, projects and fills every triangle by hand into a `Uint32Array` at 400 ×
-280 — a quarter more than the 320 × 224 a Mega Drive put on a television, in the
-same ten by seven shape, and about the most that can be added before the pixels
-stop being pixels — and blows the result up to fit the window with the smoothing
-turned off. That is not the slow way round: three thousand flat triangles over a
-hundred and twelve thousand pixels is about two milliseconds, which leaves
-fourteen of the sixteen a frame gets.
+clips, projects and fills every triangle by hand into a `Uint32Array` at 480 ×
+336 — half again the 320 × 224 a Mega Drive put on a television, in the same ten
+by seven shape — and blows the result up to fit the window with the smoothing
+turned off. That is not the slow way round: four thousand flat triangles over a
+hundred and sixty thousand pixels is under two and a half milliseconds, which
+leaves fourteen of the sixteen a frame gets. What makes this read as sixteen-bit
+is the flat shading and the nine-bit palette, not the count of pixels.
 
 Doing it in software buys the one thing a modern pipeline will not give you,
 which is the actual look:
