@@ -1,5 +1,10 @@
 # The score board
 
+Deployed at **https://webtrack.vibecoach.workers.dev**, which is the address in
+`src/config.js`. It answers `GET /highscores` and `POST /highscores`, holds one
+Durable Object, posts new times to Discord, and has an admin key set for taking
+rows off again.
+
 Two commands and the board is shared:
 
 ```sh
@@ -37,6 +42,12 @@ posted; a run that missed the board, or one arriving for the second time from a
 second device, is not. The same channel can take all five games - the message
 says which one it came from.
 
+It is a secret and it is treated as one: it lives in `wrangler secret`, never in
+this repository, and anybody holding the URL can post into that channel as this
+game. What it says is checked by `npm run test:board`, which runs the wording
+through every case without a network anywhere near it - which is what
+`announce.js` was held apart from the Worker for in the first place.
+
 ## The broom
 
 A public list with no accounts on it collects something you would rather it did
@@ -54,7 +65,9 @@ curl -X POST -H "x-admin-key: KEY" https://webtrack.your-name.workers.dev/highsc
 ```
 
 With no `ADMIN_KEY` set, both doors return 404 - which is the right default for
-anybody who deploys this and never reads this file.
+anybody who deploys this and never reads this file. This deployment has one, and
+a copy is in `worker/.admin-key`, which `.gitignore` has covered since before
+there was a key to put in it.
 
 ## What it will and will not accept
 
