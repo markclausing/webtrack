@@ -47,6 +47,21 @@ export function shade(c, s) {
   return md((c & 255) * s, ((c >> 8) & 255) * s, ((c >> 16) & 255) * s);
 }
 
+/**
+ * The four by four ordered dither, in the order Bayer put them in.
+ *
+ * Sixteen thresholds arranged so that whichever fraction of them is below a
+ * given level, the pixels that light up are as far apart as they can be. That
+ * is the whole of it, and it is why a checkerboard of two blues looks like a
+ * third blue rather than like a checkerboard.
+ */
+const BAYER = new Uint8Array([
+  0, 8, 2, 10,
+  12, 4, 14, 6,
+  3, 11, 1, 9,
+  15, 7, 13, 5,
+]);
+
 export class Raster {
   constructor(width, height) {
     this.w = width;
@@ -127,21 +142,52 @@ export class Raster {
     out[at + 2] = pz;
   }
 
-  /** Wipes the frame. The sky is bands, which is how these machines did skies. */
+  /**
+   * Wipes the frame, and paints the sky into it.
+   *
+   * Bands, which is how these machines did skies - but with the joins between
+   * them chequered rather than cut. Five flat stripes read as five flat stripes;
+   * the same five with twenty rows of ordered dither between each pair read as
+   * one gradient, out of exactly the same five colours, which is the trick the
+   * hardware used and the only one available to a renderer with no more colours
+   * to give.
+   *
+   * Ordered rather than random: a Bayer matrix puts the pixels in a repeating
+   * pattern that the eye averages, where noise would crawl about between frames
+   * and look like the sky was fizzing.
+   */
   begin(bands) {
     this.depth.fill(0);
     this.tris = 0;
     const { pix, w, h } = this;
+    const pattern = this.pattern || (this.pattern = new Uint32Array(4));
     let at = 0;
-    for (let y = 0; y < h; y++) {
-      // Bands are given as [heightFraction, colour] and painted top down.
-      let colour = bands[bands.length - 1][1];
+
+    for (let y = 0; y < h; y++, at += w) {
       const f = y / h;
-      for (let i = 0; i < bands.length; i++) {
-        if (f < bands[i][0]) { colour = bands[i][1]; break; }
+      let i = 0;
+      while (i < bands.length - 1 && f >= bands[i][0]) i++;
+      const colour = bands[i][1];
+      // How many rows until this band gives way to the next one.
+      const rows = (bands[i][0] - f) * h;
+      const next = i + 1 < bands.length ? bands[i + 1][1] : colour;
+      // The fade is a share of the band it belongs to rather than a fixed
+      // number of rows, so a thin band near the horizon is not entirely made of
+      // dither while a deep one at the top of the sky gets a long enough run to
+      // be a gradient.
+      const from = i > 0 ? bands[i - 1][0] : 0;
+      const fade = Math.max(3, Math.min(h * 0.13, (bands[i][0] - from) * h * 0.8));
+
+      if (next === colour || rows > fade || rows < 0) {
+        pix.fill(colour, at, at + w);
+        continue;
       }
-      pix.fill(colour, at, at + w);
-      at += w;
+      // Four pixels of pattern, repeated across the row: the matrix only has
+      // four columns, so the row only has four different answers in it.
+      const t = (1 - rows / fade) * 16;
+      const row = (y & 3) * 4;
+      for (let k = 0; k < 4; k++) pattern[k] = BAYER[row + k] < t ? next : colour;
+      for (let x = 0; x < w; x++) pix[at + x] = pattern[x & 3];
     }
   }
 

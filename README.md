@@ -222,9 +222,15 @@ which is the actual look:
   is drawn with every other pixel missing, which is how these machines did
   transparency and the only honest way to do it — a solid light-grey polygon over
   the car is a white slab, and looks like a bug because it is one.
-- **The sky is bands and the haze is one colour.** Everything distant fades to
-  the colour the bottom of the sky is painted, so the horizon is a join you
-  cannot see rather than a line.
+- **The sky is bands, chequered where they meet.** Five flat stripes read as
+  five flat stripes; the same five with twenty rows of ordered dither between
+  each pair read as one gradient, out of exactly the same five colours. That is
+  the trick the hardware used and the only one available to a renderer with no
+  more colours to give. Ordered rather than random, because noise crawls between
+  frames and makes the sky look like it is fizzing.
+- **The haze is one colour.** Everything distant fades to the colour the bottom
+  of the sky is painted, so the horizon is a join you cannot see rather than a
+  line.
 - **There is no terrain model.** For every node of track in front of you the
   renderer walks outwards — tarmac, kerb, run-off, barrier, hillside, distance —
   and puts down a quad at each step. A mountain is the outermost of those a long
