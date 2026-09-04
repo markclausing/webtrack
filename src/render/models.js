@@ -150,16 +150,32 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
         0.13, 1.06, 0.01, -0.13, 1.06, 0.01]);
       break;
     case 'stand': {
-      // Seating on the slope, a roof over it, and a band of colour where the
-      // people are. Nobody is modelled: at this size a crowd is a texture, and
-      // there are no textures, so a crowd is a stripe.
-      const frame = tint(shade(theme.ridge, 0.8));
-      put.face(rt, frame, [-6, 0, -0.6, 6, 0, -0.6, 6, 4.6, 5.4, -6, 4.6, 5.4]);
-      put.face(rt, tint(C.crowd), [-6, 1.4, 1.2, 6, 1.4, 1.2, 6, 3.4, 3.6, -6, 3.4, 3.6]);
-      put.face(rt, tint(shade(theme.ridge, 0.6)), [-6, 4.6, 5.4, 6, 4.6, 5.4, 6, 4.6, -0.4, -6, 4.6, -0.4]);
-      put.face(rt, tint(C.metal), [-6, 6.6, -0.6, 6, 6.6, -0.6, 6, 6.9, 4.4, -6, 6.9, 4.4]);
-      put.face(rt, frame, [-6, 4.6, -0.5, -5.7, 4.6, -0.5, -5.7, 6.7, -0.5, -6, 6.7, -0.5]);
-      put.face(rt, frame, [5.7, 4.6, -0.5, 6, 4.6, -0.5, 6, 6.7, -0.5, 5.7, 6.7, -0.5]);
+      // A grandstand: long along the track, facing across it, and solid.
+      //
+      // It used to be a set of separate plates - a slope, a roof and a canopy
+      // floating two metres above that on two thin legs - which from any
+      // distance read as flat polygons hanging in the air rather than as a
+      // building. Everything here now meets something else: back wall to roof,
+      // roof to posts, posts to fascia. Nothing is left over on its own.
+      //
+      // Built facing local +z. Nobody is modelled: at this size a crowd is a
+      // texture, there are no textures, so a crowd is a stripe.
+      const wall = tint(shade(theme.ridge, 0.72));
+      const side = tint(shade(theme.ridge, 0.6));
+      const deck = tint(shade(theme.ridge, 0.94));
+      put.face(rt, wall, [-9, 0, -5, 9, 0, -5, 9, 8.4, -5, -9, 8.4, -5]);
+      put.face(rt, deck, [-9, 1, 0, 9, 1, 0, 9, 6.4, -4.6, -9, 6.4, -4.6]);
+      put.face(rt, tint(C.crowd), [-8.4, 2.2, -1.4, 8.4, 2.2, -1.4,
+        8.4, 5.2, -3.4, -8.4, 5.2, -3.4]);
+      put.face(rt, wall, [-9, 0, 0, 9, 0, 0, 9, 1, 0, -9, 1, 0]);
+      put.face(rt, side, [-9, 0, 0, -9, 0, -5, -9, 7.4, -5, -9, 1, 0]);
+      put.face(rt, side, [9, 0, -5, 9, 0, 0, 9, 1, 0, 9, 7.4, -5]);
+      put.face(rt, tint(C.metal), [-9.4, 8.4, -5.2, 9.4, 8.4, -5.2,
+        9.4, 7.6, 0.8, -9.4, 7.6, 0.8]);
+      for (const at of [-8.6, 8.6]) {
+        put.face(rt, side, [at - 0.3, 1, 0.4, at + 0.3, 1, 0.4,
+          at + 0.3, 7.7, 0.6, at - 0.3, 7.7, 0.6]);
+      }
       break;
     }
     case 'block':

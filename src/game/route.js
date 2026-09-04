@@ -584,9 +584,17 @@ function scatter(nodes, rnd) {
   // The grandstands go where the grid is, which on a circuit is where the start
   // line is - and node zero is a place you come back to every lap rather than
   // somewhere you leave once.
-  for (let i = -22; i < 14; i += 4) {
-    add(i, { kind: 'stand', side: -1, off: 24, s: 1, r: 0, align: true });
-    add(i, { kind: 'stand', side: 1, off: 24, s: 1, r: Math.PI, align: true });
+  // Turned a quarter, because a grandstand is long along the track and faces
+  // across it - the other way round it is a wall standing in the road with its
+  // seats pointing up the straight at nobody. And stood on the track's own
+  // height, or a circuit that climbs leaves them hanging in the air beside it.
+  for (let i = -22; i < 18; i += 6) {
+    add(i, {
+      kind: 'stand', side: -1, off: 26, s: 1, r: Math.PI / 2, align: true, flat: true,
+    });
+    add(i, {
+      kind: 'stand', side: 1, off: 26, s: 1, r: -Math.PI / 2, align: true, flat: true,
+    });
   }
 
   // Flair: the things you look at rather than drive past.
