@@ -521,8 +521,8 @@ function scatter(nodes, rnd) {
     // it reads a number in the corner. Take them out and the car feels like it
     // has lost fifty km/h.
     if (i % 4 === 0) {
-      add(i, { kind: 'post', side: -1, off: 16.4, s: 1, r: 0, align: true });
-      add(i, { kind: 'post', side: 1, off: 16.4, s: 1, r: 0, align: true });
+      add(i, { kind: 'post', side: -1, off: 16.4, s: 1, r: 0, align: true, flat: true });
+      add(i, { kind: 'post', side: 1, off: 16.4, s: 1, r: 0, align: true, flat: true });
     }
 
     // Floodlights, alternating sides every seventy metres, leaning out over the
@@ -535,7 +535,8 @@ function scatter(nodes, rnd) {
       // the one on the left is turned round - the other way about had both of
       // them leaning out over the scenery.
       add(i, {
-        kind: 'mast', side, off: 17.5, s: 1, r: side < 0 ? Math.PI : 0, align: true,
+        kind: 'mast', side, off: 16.4, s: 1, r: side < 0 ? Math.PI : 0,
+        align: true, flat: true,
       });
     }
 

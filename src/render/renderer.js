@@ -485,10 +485,16 @@ export class Renderer {
           // gantry is a wall across the road if it is left pointing at world
           // north, and the track only points at world north twice a lap.
           // `lift` is for the things that are not standing on anything.
+          // `flat` stands a prop at the height of the track rather than on
+          // whatever the ground is doing out there. A floodlight beside a
+          // boulevard belongs level with the road; the ground at that distance
+          // on the seaward side is the sea, and a lamp post standing in it is
+          // a lamp post standing in the sea.
+          const foot = prop.flat
+            ? roadY(a, off)
+            : groundY(a, Math.sign(off) || 1, Math.abs(off));
           drawProp(rt, prop,
-            a.x + a.nx * off,
-            groundY(a, Math.sign(off) || 1, Math.abs(off)) + (prop.lift || 0),
-            a.z + a.nz * off,
+            a.x + a.nx * off, foot + (prop.lift || 0), a.z + a.nz * off,
             tint, local, prop.align ? a.a : 0, state.tick, night);
         }
       }
