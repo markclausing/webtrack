@@ -425,15 +425,21 @@ export class Renderer {
       // The barrier: a rail on posts, all the way round, both sides. It is what
       // turns a road into a circuit, and it is the second best thing in the game
       // for the feeling of speed after the marker posts.
-      if (away < 640) {
+      //
+      // Drawn at the height of the track rather than on the ground it stands
+      // over. A barrier beside a road is at the height of the road by
+      // definition; taken off the terrain it slid down the beach on the sea
+      // front and left the edge of the track dropping into nothing. On the
+      // bridge there is none, because there the railing is the barrier.
+      if (away < 640 && a.bridge === undefined) {
         for (const side of [-1, 1]) {
           const at = side * WALL_AT;
           const ax = a.x + a.nx * at;
           const az = a.z + a.nz * at;
           const bx = b.x + b.nx * at;
           const bz = b.z + b.nz * at;
-          const ay = groundY(a, side, WALL_AT);
-          const by = groundY(b, side, WALL_AT);
+          const ay = roadY(a, at);
+          const by = roadY(b, at);
           rt.quad(ax, ay + 0.5, az, bx, by + 0.5, bz, bx, by + 1.05, bz, ax, ay + 1.05, az,
             tint((i % 8) < 4 ? C.armco : C.kerbA));
           rt.quad(ax, ay + 0.5, az, ax, ay + 1.05, az, bx, by + 1.05, bz, bx, by + 0.5, bz,
@@ -449,10 +455,14 @@ export class Renderer {
         const far = nodeStep(route, i, every);
         for (const side of [-1, 1]) {
           const colour = bandColour(local, a, side, kind, i, this.surf);
+          // The infield band reaches as far as it has to to close the middle of
+          // the loop; the outward one stops at the horizon ring, because outside
+          // the loop there is nothing to close.
+          const out = kind === 'far' && side > 0 ? route.horizon : outer;
           rt.quad(
             a.x + a.nx * side * inner, groundY(a, side, inner), a.z + a.nz * side * inner,
-            a.x + a.nx * side * outer, groundY(a, side, outer), a.z + a.nz * side * outer,
-            far.x + far.nx * side * outer, groundY(far, side, outer), far.z + far.nz * side * outer,
+            a.x + a.nx * side * out, groundY(a, side, out), a.z + a.nz * side * out,
+            far.x + far.nx * side * out, groundY(far, side, out), far.z + far.nz * side * out,
             far.x + far.nx * side * inner, groundY(far, side, inner), far.z + far.nz * side * inner,
             tint(colour),
           );
@@ -463,8 +473,8 @@ export class Renderer {
       // cheapest thing in the game that makes the sea look wet.
       if (a.g.wet > 0.6 && (((i % 2) + 2) % 2) === 0 && away < 620) {
         const far = nodeStep(route, i, 2);
-        const w0 = RINGS[0] + Math.sin(i * 0.7 + this.surf) * 1.6;
-        const w1 = RINGS[0] + Math.sin((i + 2) * 0.7 + this.surf) * 1.6;
+        const w0 = RINGS[1] + Math.sin(i * 0.7 + this.surf) * 2.2;
+        const w1 = RINGS[1] + Math.sin((i + 2) * 0.7 + this.surf) * 2.2;
         rt.quad(
           a.x - a.nx * w0, a.g.l[1] + 0.06, a.z - a.nz * w0,
           a.x - a.nx * (w0 + 2.8), a.g.l[1] + 0.06, a.z - a.nz * (w0 + 2.8),
@@ -957,7 +967,10 @@ function lerp(a, b, t) {
 function bandColour(theme, node, side, kind, i, surf) {
   // Under the bridge it is water on both sides; everywhere else the sea is only
   // ever on the outside of the loop.
-  if (node.g.wet > 0.5 && (side < 0 || node.g.bay > 0.5) && kind !== 'verge') {
+  // Water from the second ring outwards. The band between the barrier and it is
+  // the bank the barrier stands on, and is sand or grass whatever is beyond it.
+  if (node.g.wet > 0.5 && (side < 0 || node.g.bay > 0.5)
+    && kind !== 'verge' && kind !== 'near') {
     const ripple = Math.sin(i * 0.5 + surf * 2) > 0.4;
     const water = ripple ? shade(theme.water, 1.18) : theme.water;
     // Eased in over the last half of the change, so the ground arrives at the

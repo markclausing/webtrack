@@ -245,7 +245,11 @@ function ground(y, lean, warm, wob, infield) {
   const mL = [y + 0.6 + wob(9) * 1.4, y + 6 * (1 + lean) + wob(5) * 8,
     y + 30 * (1 + lean) + wob(3) * 30];
   const mFarL = y + 58 + wob(2) * 62;
-  const cL = [SEA, SEA, SEA];
+  // The run-off is level with the road out to the barrier and the ground falls
+  // away beyond it. It used to go straight from the kerb to sea level, which
+  // put the barrier - drawn on the ground - nine metres down the beach with the
+  // edge of the track dropping into nothing beside it.
+  const cL = [y - 0.4, SEA, SEA];
 
   // The infield: down off the verge and then flat, wherever the track happens to
   // be at the time.
@@ -467,9 +471,26 @@ export function buildRoute(key) {
     };
   }
 
+  // How far the infield has to reach to close the middle of the loop.
+  //
+  // The rings are fixed distances from the centreline, and the outermost is
+  // three hundred and forty metres - which on a circuit six hundred metres
+  // across is plenty and on one twelve hundred metres across leaves a hole in
+  // the middle of it that you look through at the sky. The infield side is given
+  // whatever it needs: the furthest any node is from the middle of the loop.
+  let midX = 0;
+  let midZ = 0;
+  for (const n of nodes) {
+    midX += n.x / count;
+    midZ += n.z / count;
+  }
+  let horizon = 0;
+  for (const n of nodes) horizon = Math.max(horizon, Math.hypot(n.x - midX, n.z - midZ));
+
   return {
     key,
     nodes,
+    horizon: horizon * 1.08,
     bridgeFrom: from,
     bridgeWater: water,
     props: scatter(nodes, seeded(plan.seed ^ 0x3a71)),
