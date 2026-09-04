@@ -283,9 +283,15 @@ clips, projects and fills every triangle by hand into a `Uint32Array` at 640 ×
 448 — twice the 320 × 224 a Mega Drive put on a television, in the same ten by
 seven shape, which is past what that machine could do and about what a Saturn
 ran Virtua Fighter 2 at — and blows the result up to fit the window with the
-smoothing turned off. That is not the slow way round: six thousand flat triangles
-over two hundred and eighty-seven thousand pixels is under four milliseconds,
-which leaves twelve of the sixteen a frame gets.
+smoothing turned off — by the browser, which is the important word. The canvas is 640 ×
+448 and CSS stretches it, so the blow-up belongs to the compositor and costs
+nothing. It used to be done here, one `drawImage` a frame from the buffer onto a
+window-sized canvas: two and a third million pixels of nearest-neighbour scaling
+in JavaScript, sixty times a second, and it cost more than everything else in
+the frame put together. Six thousand flat triangles over two hundred and
+eighty-seven thousand pixels is under four milliseconds; the scaling was another
+thirteen, and none of it was visible to any tool in this repository, because the
+headless harness stubs the canvas out and its `drawImage` does nothing at all.
 
 What makes this read as sixteen-bit was never the pixel count. It is the flat
 shading, the palette, and the fact that a tree is three polygons — and

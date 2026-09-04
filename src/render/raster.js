@@ -453,11 +453,17 @@ export class Raster {
     return 6 * scale;
   }
 
-  /** Hands the finished frame to a canvas, blown up, unsmoothed. */
-  blit(ctx, buffer) {
-    buffer.putImageData(this.image, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(buffer.canvas, 0, 0, ctx.canvas.width, ctx.canvas.height);
+  /**
+   * Hands the finished frame to the canvas.
+   *
+   * One putImageData and nothing else. It used to go through an offscreen buffer
+   * and a drawImage that stretched it to the size of the window, which is a
+   * couple of million pixels of scaling done by hand every frame; the canvas is
+   * the size of the picture now and the browser stretches it in the compositor.
+   *
+   */
+  blit(ctx) {
+    ctx.putImageData(this.image, 0, 0);
   }
 }
 

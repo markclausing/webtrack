@@ -112,8 +112,12 @@ class El {
     return {
       canvas: self,
       imageSmoothingEnabled: false,
-      putImageData() {},
-      drawImage() { self.drawn = (self.drawn || 0) + 1; },
+      // The frame counter. It used to hang off drawImage, which is what the
+      // renderer used to blow the picture up onto a window-sized canvas; the
+      // canvas is the size of the picture now and the browser does the blowing
+      // up, so a finished frame is one putImageData and nothing else.
+      putImageData() { self.drawn = (self.drawn || 0) + 1; },
+      drawImage() {},
     };
   }
 }

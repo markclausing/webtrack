@@ -109,10 +109,8 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.rt = new Raster(SCREEN_W, SCREEN_H);
-    const off = document.createElement('canvas');
-    off.width = SCREEN_W;
-    off.height = SCREEN_H;
-    this.buffer = off.getContext('2d');
+    this.canvas.width = SCREEN_W;
+    this.canvas.height = SCREEN_H;
     this.cam = null;
     this.surf = 0;
   }
@@ -122,11 +120,29 @@ export class Renderer {
     this.cam = null;
   }
 
-  size(width, height) {
-    // Whole pixels only, and never smaller than the buffer, so the blow-up is a
-    // clean multiple wherever it can be and the pixels stay square.
-    this.canvas.width = Math.max(SCREEN_W, Math.round(width));
-    this.canvas.height = Math.max(SCREEN_H, Math.round(height));
+  /**
+   * The canvas is the size of the picture, and the browser stretches it.
+   *
+   * It used to be the size of the window, and the frame was blown up onto it by
+   * hand every time. That is one drawImage of six hundred and forty by four
+   * hundred and forty-eight onto two thousand by eleven hundred and fifty - two
+   * and a third million pixels of nearest-neighbour scaling, in JavaScript, sixty
+   * times a second - and it cost more than everything else in the frame put
+   * together. It was also invisible to every measurement in this repository,
+   * because the headless harness stubs the canvas out and its drawImage does
+   * nothing at all: three thousand triangles and seventeen milliseconds, and
+   * none of the seventeen anywhere the tools could see it.
+   *
+   * Sized to the buffer instead, the scaling belongs to the compositor, which
+   * does it on the graphics hardware for nothing. `object-fit: contain` in the
+   * stylesheet keeps it in proportion and letterboxes the rest.
+   *
+   * The arguments are ignored and kept: `fit()` still calls this on every resize,
+   * and there is nothing left for it to do.
+   */
+  size() {
+    this.canvas.width = SCREEN_W;
+    this.canvas.height = SCREEN_H;
   }
 
   draw(state, { chrome = true } = {}) {
@@ -153,7 +169,7 @@ export class Renderer {
     this.cars(state, theme, p);
 
     if (chrome) this.hud(state, p);
-    rt.blit(this.ctx, this.buffer);
+    rt.blit(this.ctx);
   }
 
   /**
@@ -163,7 +179,7 @@ export class Renderer {
    * report how long the frame took, which is not known until the frame is over.
    */
   show() {
-    this.rt.blit(this.ctx, this.buffer);
+    this.rt.blit(this.ctx);
   }
 
   /**

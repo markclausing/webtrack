@@ -30,9 +30,10 @@ html, body {
   place-items: center;
 }
 
-/* The playfield is a fixed shape and the renderer letterboxes itself into
-   whatever it is given, so the canvas simply takes the whole window and the
-   game paints the bars itself. */
+/* The canvas holds the picture at its own size and the window stretches it.
+   The comment that used to be here said the renderer letterboxed itself, which
+   it did not: it stretched the frame to whatever shape the window was, so on
+   anything that was not ten by seven the picture was quietly the wrong shape. */
 #screen {
   width: 100vw;
   height: 100vh;
@@ -40,6 +41,14 @@ html, body {
   display: block;
   background: #080706;
   outline: none;
+  /* The canvas is 640 x 448 and the browser stretches it. contain keeps it in
+     proportion and letterboxes the rest against the background above; pixelated
+     stops it being smoothed on the way up, which is the whole look. Done here
+     rather than with a drawImage in the frame loop because the compositor does
+     it on the graphics hardware and the frame loop did it in JavaScript. */
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .overlay {
