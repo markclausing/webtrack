@@ -122,6 +122,10 @@ function frame(now) {
       }
     }
     sound.update(game.state);
+    // How much of the next tick has already gone by. On a screen faster than
+    // sixty the loop draws frames with no tick in them at all, and without this
+    // the world stands still in every one of them.
+    game.state.alpha = game.acc / TICK_MS;
     renderer.draw(game.state);
     if (game.meter) meter(dt, steps);
     return;
@@ -138,6 +142,7 @@ function frame(now) {
       game.demo.events.length = 0;
       if (game.demo.over || game.demo.finished) game.demo = attract();
     }
+    game.demo.alpha = game.acc / TICK_MS;
     renderer.draw(game.demo, { chrome: false });
   }
 }
@@ -146,11 +151,21 @@ function frame(now) {
  * The frame meter, drawn straight onto the finished picture.
  *
  * Three numbers and one of them is the point. `ms` is how long the whole frame
- * took including everything the browser did with it; `x1` or `x2` is how many
- * simulation steps went into it. A steady x1 is a game running at speed. An x1
- * and x2 alternating is a game that has run out of frame, and it is the one
- * failure that looks like a fault in the road rather than a fault in the clock -
- * the car appears to shiver, and nothing about the car is wrong.
+ * took including everything the browser did with it; the `x` is how many
+ * simulation steps went into it.
+ *
+ *   x1                  a game running at speed
+ *   x2 and x1 by turns  a game that has run out of frame
+ *   x0 and x1 by turns  a screen running faster than sixty
+ *
+ * The last of those is fine and used not to be: the world is drawn where it is
+ * between ticks now rather than where the last tick left it, so a fast panel
+ * gets smoother motion out of it rather than a stutter.
+ *
+ * All three look identical from the cockpit - the car appears to shiver - and
+ * none of them has anything to do with the car, which is the whole reason this
+ * is here. Both of the first two were found with it, in one screenshot each,
+ * after a good deal of measuring the road.
  */
 const meterTimes = [];
 function meter(dt, steps) {

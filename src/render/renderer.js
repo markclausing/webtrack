@@ -32,7 +32,7 @@
 import {
   CAM_AHEAD, CAM_BACK, CAM_BACK_FAST, CAM_HIGH, CAM_HIGH_FAST, CAM_LAG, CHECKPOINT_TIME,
   DRAW_AHEAD, DRAW_BEHIND, FOCAL, FOCAL_FAST, gearAt, GRID_GAP, GRID_OFF, LIGHTS,
-  ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TOP_SPEED, WALL_AT,
+  ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
 } from '../constants.js';
 import { BRIDGE_NODES, RINGS, TOWERS } from '../game/route.js';
 import {
@@ -121,6 +121,30 @@ export class Renderer {
   }
 
   /**
+   * Where a car is now, as opposed to where it was at the last simulation tick.
+   *
+   * The simulation runs at sixty and the screen may not. On a hundred-and-twenty
+   * hertz panel half the frames arrive with no tick in them at all - the meter
+   * reads X0, X1, X0, X1 - so the car moved on every other frame and stood still
+   * in between, which is a judder with nothing wrong behind it. The circuits
+   * where it showed were the cheap ones, because those are the ones that can
+   * reach a hundred and twenty in the first place; Monza did it and Spa did not.
+   *
+   * `alpha` is how much of a tick has already gone by, so each car is carried
+   * forward by its own speed for that fraction. It is extrapolation rather than
+   * interpolation - the future is guessed rather than the past re-read - and
+   * over a sixtieth of a second at three hundred and fifty that is a guess about
+   * a metre and a half long, made from the velocity that is about to be used
+   * anyway.
+   */
+  at(state, car) {
+    const a = state.alpha || 0;
+    if (!a) return worldOf(state.route, car.s, car.x);
+    const on = a / TICK_RATE;
+    return worldOf(state.route, car.s + car.speed * on, car.x + car.vx * on);
+  }
+
+  /**
    * The canvas is the size of the picture, and the browser stretches it.
    *
    * It used to be the size of the window, and the frame was blown up onto it by
@@ -205,8 +229,14 @@ export class Renderer {
     // sounds like it would be smoother and is not: it swings the car out to the
     // edge of the frame every time you take a wide line, and at this field of
     // view the edge of the frame is off the screen.
-    const back = worldOf(route, p.s - (CAM_BACK + (CAM_BACK_FAST - CAM_BACK) * eased), p.x * 0.94);
-    const look = worldOf(route, p.s + CAM_AHEAD, p.x * 0.5);
+    // Where the car is this instant, not where the last tick left it: the camera
+    // sits on the car, so a camera built from the tick judders exactly as much
+    // as the car would.
+    const on = (state.alpha || 0) / TICK_RATE;
+    const here = p.s + p.speed * on;
+    const side = p.x + p.vx * on;
+    const back = worldOf(route, here - (CAM_BACK + (CAM_BACK_FAST - CAM_BACK) * eased), side * 0.94);
+    const look = worldOf(route, here + CAM_AHEAD, side * 0.5);
     const high = CAM_HIGH + (CAM_HIGH_FAST - CAM_HIGH) * eased;
     const dx = look.x - back.x;
     const dz = look.z - back.z;
@@ -798,7 +828,7 @@ export class Renderer {
     for (const car of state.cars) {
       const away = car.s - p.s;
       if (away < -60 || away > 780) continue;
-      const at = worldOf(route, car.s, car.x);
+      const at = this.at(state, car);
       // A car right on the camera fills a quarter of the screen with one dark
       // polygon and reads as a fault in the renderer. It is also almost entirely
       // behind you: the camera sits eight metres back, so anything this close is

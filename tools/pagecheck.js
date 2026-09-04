@@ -246,5 +246,50 @@ byId.get('quit').fire('click');
 pump(3);
 ok('quitting goes back to the menu', !byId.get('menu').classes.has('hidden'));
 
+// --- A screen faster than the simulation ------------------------------------------
+
+// The simulation runs at sixty and a good many screens do not. On a hundred and
+// twenty hertz panel half the frames arrive with no tick in them at all, so
+// without a sub-tick fraction the world stands still in every other one - which
+// is a judder with nothing wrong behind it, and it showed on the circuits cheap
+// enough to reach a hundred and twenty in the first place.
+{
+  const { Renderer } = await import('../src/render/renderer.js');
+  const { makeRace, step, driveLine } = await import('../src/game/sim.js');
+  const { player } = await import('../src/game/state.js');
+
+  const judder = (alpha) => {
+    const state = makeRace({ route: 'monza', mode: 'qual', tier: 'normal', seed: 5 });
+    const view = new Renderer(byId.get('screen'));
+    const p = player(state);
+    const TICK = 1000 / 60;
+    let acc = 0;
+    const seen = [];
+    for (let f = 0; f < 900; f++) {
+      acc += 1000 / 120;
+      while (acc >= TICK) {
+        acc -= TICK;
+        step(state, driveLine(state, 0.95));
+        state.clock = 999;
+      }
+      state.alpha = alpha ? acc / TICK : 0;
+      view.follow(state, p);
+      if (f > 400) seen.push(view.at(state, p).z);
+    }
+    // Second difference: motion is smooth, a stutter is not.
+    let sum = 0;
+    for (let i = 2; i < seen.length; i++) {
+      sum += Math.abs(seen[i] - 2 * seen[i - 1] + seen[i - 2]);
+    }
+    return sum / (seen.length - 2);
+  };
+
+  const stuttering = judder(false);
+  const smooth = judder(true);
+  ok(`at 120Hz the car moves ${(stuttering / smooth).toFixed(0)}x more smoothly for `
+    + `knowing where it is between ticks (${stuttering.toFixed(2)}m a frame against `
+    + `${smooth.toFixed(2)})`, smooth * 4 < stuttering);
+}
+
 console.log(failures ? `\n${failures} failed` : '\nall good');
 process.exit(failures ? 1 : 0);

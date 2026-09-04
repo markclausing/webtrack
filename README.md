@@ -283,10 +283,11 @@ the board about the corner you have not finished yet wins the ground.
 
 Press **F** during a race for a frame meter: how long the last frame took, how
 many simulation steps went into it, and how many triangles came out. The middle
-number is the one that matters. A steady `X1` is a game running at speed; an `X1`
-and `X2` alternating is a game that has run out of frame, and that is the one
-failure that looks like a fault in the road rather than a fault in the clock —
-the car appears to shiver and nothing about the car is wrong.
+number is the one that matters. `X1` is a game running at speed. `X2` and `X1`
+alternating is a game that has run out of frame. `X0` and `X1` alternating is a
+screen running faster than the simulation, which is fine — the world is drawn
+where it is between ticks rather than where the last one left it, so a 120Hz
+panel gets smoother motion than a 60Hz one rather than a stutter.
 
 ## The look
 
