@@ -171,7 +171,7 @@ export class Renderer {
       z: back.z,
       yaw: Math.atan2(dx, dz),
       pitch: Math.atan2(back.y + high - (look.y + 1.1), flat),
-      roll: -p.yaw * 0.1 - back.bank * 0.22,
+      roll: -p.yaw * 0.1 - back.bank * 0.22 - back.dish * 0.8,
     };
 
     if (!this.cam) this.cam = { ...want };
@@ -1028,7 +1028,7 @@ function fog(away) {
 
 /** The tarmac's height at an offset, including the camber into the corner. */
 function roadY(n, off) {
-  return n.y - n.bank * off * 0.12;
+  return n.y - n.bank * off * 0.12 - n.dish * off;
 }
 
 /**

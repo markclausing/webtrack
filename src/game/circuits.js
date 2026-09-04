@@ -43,6 +43,24 @@
 export const STORE = 10;
 
 /**
+ * What the surveyed widths are multiplied by, and the narrowest the road may be.
+ *
+ * The survey measures the tarmac off satellite imagery, and it measures it
+ * honestly: the asphalt, not the asphalt plus the bit of kerb and paint a car
+ * actually uses. It comes out around nine or ten metres across at Zandvoort
+ * where the circuit is really twelve to fourteen, and against the fourteen the
+ * drawn circuits have always been, that is the difference between a track you
+ * race on and a corridor you queue in - eight cars, and no room to be alongside
+ * anybody through a corner.
+ *
+ * So the whole set is scaled, which keeps what the survey is actually good for:
+ * the differences. Monza stays the narrow one and Spa stays the wide one, and
+ * the chicane at the Roggia stays tighter than the Kemmel straight.
+ */
+export const WIDEN = 1.32;
+export const NARROWEST = 5.2;
+
+/**
  * The surveyed centre lines, as base-36 decimetre deltas: x, z, half-width,
  * repeating. Generated - do not edit by hand. See docs/CIRCUITS.md for where
  * they came from and what that obliges us to say about it.
@@ -314,10 +332,24 @@ export const SURVEYED = {
     laps: 3,
     // Tarzan sits low by the paddock, the middle of the lap climbs into the
     // dunes as far as Scheivlak, and the rest of it comes back down.
+    // Written twice. The first attempt had the right total - seventeen metres,
+    // which is what the place has - spread evenly over fourteen points three
+    // hundred metres apart, and from the cockpit it was flat. The camera looks
+    // at a point twenty-six metres up the road, so a steady gradient is a
+    // gradient you have already pitched down to meet: what you see of a hill is
+    // where it changes, not how much of it there is.
+    //
+    // So the same height is spent differently. The climb out of Hugenholtz
+    // through Hunserug is made to happen over four hundred metres instead of a
+    // kilometre, and Scheivlak gets what Scheivlak is famous for - a crest at
+    // the top of the circuit with the road falling away behind it, ten metres
+    // in a hundred and fifty, which you arrive at flat out and cannot see over.
     climb: [
-      [0.000, 0], [0.100, -2], [0.170, 2], [0.206, 5], [0.271, 9],
-      [0.353, 13], [0.410, 15], [0.480, 7], [0.542, 4], [0.605, 2],
-      [0.735, 5], [0.835, 9], [0.905, 4], [0.960, 1],
+      [0.000, 0], [0.055, -1], [0.100, -3], [0.140, -2], [0.176, 1],
+      [0.210, 7], [0.250, 13], [0.300, 17], [0.360, 20], [0.405, 21],
+      [0.440, 11], [0.470, 7], [0.500, 5], [0.545, 4], [0.605, 3],
+      [0.660, 5], [0.735, 9], [0.800, 13], [0.850, 12], [0.905, 6],
+      [0.950, 2],
     ],
     // The dished corners, in degrees, and how much of a lap each one lasts.
     // Tarzan is the mildest of the three and the other two are the ones that

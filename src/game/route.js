@@ -28,7 +28,7 @@
  */
 
 import { CHECKPOINT_EVERY, ROAD_HALF, SEG, WALL_AT } from '../constants.js';
-import { centreLine, profile, SURVEYED } from './circuits.js';
+import { centreLine, NARROWEST, profile, SURVEYED, WIDEN } from './circuits.js';
 
 /**
  * How far out, in metres from the centreline, each ground ring sits.
@@ -736,19 +736,33 @@ export function buildRoute(key) {
       // place. A survey is not relaxed - that is the point of it - so Monza's
       // Rettifilo came out at a hundred and twenty-five degrees of camber, which
       // is not a corner, it is a wall the car drives up.
-      bank: (real ? Math.max(-0.12, Math.min(0.12, -curve * 3.2)) : -curve * 3.2)
-        + dish[i],
+      // Camber: a road detail, and a fudge factor rather than a gradient. Kept
+      // exactly as it was on the drawn circuits, and clamped on the surveyed
+      // ones because a survey is not relaxed and Monza's Rettifilo came out at
+      // a hundred and twenty-five degrees of it.
+      bank: real ? Math.max(-0.12, Math.min(0.12, -curve * 3.2)) : -curve * 3.2,
+      // Banking: a structure, and a real angle. Held apart from the camber
+      // because the two behave nothing alike. Camber is drawn at a twelfth of
+      // its nominal value and does not touch the car at all; eighteen degrees of
+      // banking is eighteen degrees, it drops the inside of the road by four
+      // metres over its width, and it is worth a fifth of the grip. Anything
+      // else would be a picture of a banked corner rather than one.
+      dish: dish[i],
       // How wide the tarmac is here.
       //
       // A constant everywhere until the surveyed circuits arrived, and it could
       // not stay one: Monza averages four and three quarter metres either side
       // of the line and Spa reaches eight, so one number would have made half of
       // them wrong and the wrong half feel like the other one.
-      half: at(i).half ?? ROAD_HALF,
+      half: at(i).half === undefined
+        ? ROAD_HALF
+        : Math.max(NARROWEST, at(i).half * WIDEN),
       // The barrier, which has to stay outside the road however wide the road
       // gets. Fifteen metres is a good run-off beside a nine metre track and is
       // inside the kerb of a sixteen metre one.
-      wall: Math.max(WALL_AT, (at(i).half ?? ROAD_HALF) + 6),
+      wall: Math.max(WALL_AT, (at(i).half === undefined
+        ? ROAD_HALF
+        : Math.max(NARROWEST, at(i).half * WIDEN)) + 6),
       warm,
       g: real
         ? capped(groundReal(y, real.land, wob, infield[i], coastAt(real.land.sea, t)),
@@ -1050,12 +1064,104 @@ function scatter(nodes, rnd) {
 function dress(nodes, real, rnd) {
   const count = nodes.length;
   const out = nodes.map(() => null);
-  const add = (i, prop) => {
-    const at = ((Math.round(i) % count) + count) % count;
-    (out[at] ||= []).push(prop);
-  };
   /** A fraction of a lap, as a node. */
   const node = (t) => Math.round(t * count);
+
+  /**
+   * Is there road here?
+   *
+   * Scenery is placed at a distance out from a node, which is fine on a road
+   * that never comes back on itself and is not fine on any of these. Zandvoort
+   * put sixty-two dunes on its own circuit: a dune twenty-six metres off the
+   * main straight is a dune on the road at Hugenholtz, because Hugenholtz is
+   * twenty-eight metres away. Spa did it with thirty-one conifers, Suzuka with
+   * sixty trees and three marker posts. Inside a hairpin it is worse still -
+   * anything placed further in than the corner's own radius comes out the other
+   * side of it.
+   *
+   * A twenty metre grid over the nodes makes the question cheap enough to ask
+   * about every prop on the circuit, which is the only way to be sure: the ways
+   * a circuit can fold back on itself are not worth enumerating.
+   */
+  const CELL = 20;
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x);
+    maxX = Math.max(maxX, n.x);
+    minZ = Math.min(minZ, n.z);
+    maxZ = Math.max(maxZ, n.z);
+  }
+  const cols = Math.max(1, Math.ceil((maxX - minX) / CELL) + 1);
+  const rows = Math.max(1, Math.ceil((maxZ - minZ) / CELL) + 1);
+  const grid = new Array(cols * rows);
+  const cellOf = (x, z) => Math.max(0, Math.min(cols - 1, Math.floor((x - minX) / CELL)))
+    + Math.max(0, Math.min(rows - 1, Math.floor((z - minZ) / CELL))) * cols;
+  for (const n of nodes) (grid[cellOf(n.x, n.z)] ||= []).push(n);
+
+  /** How far from a piece of road this prop's own footprint needs. */
+  const SPREAD = {
+    dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
+    palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
+    pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
+    post: 0.5, mast: 1,
+  };
+
+  const onRoad = (x, z, spread) => {
+    const cx = Math.floor((x - minX) / CELL);
+    const cz = Math.floor((z - minZ) / CELL);
+    // Two cells either way, because the widest thing here needs fifteen metres
+    // of clearance and a cell is twenty.
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const col = cx + dx;
+        const row = cz + dz;
+        if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+        const cell = grid[col + row * cols];
+        if (!cell) continue;
+        for (const n of cell) {
+          const want = n.half + 1.5 + spread;
+          const ax = x - n.x;
+          const az = z - n.z;
+          if (ax * ax + az * az < want * want) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  /**
+   * A prop, put where it was asked for if there is room and pulled in towards
+   * its own node if there is not.
+   *
+   * Dropped rather than forced if it will not fit anywhere: a missing tree is
+   * invisible and a tree in the middle of the road is the only thing anybody
+   * will talk about.
+   */
+  const add = (i, prop) => {
+    const at = ((Math.round(i) % count) + count) % count;
+    if (prop.side && prop.off) {
+      const a = nodes[at];
+      const spread = (SPREAD[prop.kind] ?? 3) * (prop.s || 1);
+      let off = prop.off;
+      let room = false;
+      // Its own place first, then three quarters of the way in, then half.
+      for (const share of [1, 0.75, 0.5]) {
+        const tryOff = Math.max(a.half + 1.5 + spread * 0.6, prop.off * share);
+        const x = a.x + a.nx * prop.side * tryOff;
+        const z = a.z + a.nz * prop.side * tryOff;
+        if (onRoad(x, z, spread)) continue;
+        off = tryOff;
+        room = true;
+        break;
+      }
+      if (!room) return;
+      prop = { ...prop, off };
+    }
+    (out[at] ||= []).push(prop);
+  };
 
   for (let i = 0; i < count; i++) {
     // Marker posts and floodlights, exactly as on the drawn circuits. The posts

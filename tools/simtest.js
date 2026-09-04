@@ -369,11 +369,15 @@ for (const tier of ['easy', 'normal', 'hard']) {
 // is, the road is the width the survey says, the height it climbs is the height
 // it climbs, and Suzuka's two roads miss each other.
 {
+  // Widths are after WIDEN and NARROWEST: the survey measures the asphalt and a
+  // car uses a bit more than the asphalt, so the whole set is scaled and floored
+  // in circuits.js. What is checked here is that they are still all different
+  // from each other, which is the part the survey is actually good for.
   const want = {
-    spa: { km: 7.00, climb: 98, half: [3.9, 8.2] },
-    monza: { km: 5.79, climb: 9, half: [3.8, 6.1] },
-    suzuka: { km: 5.80, climb: 40, half: [3.9, 7.7] },
-    zandvoort: { km: 4.31, climb: 17, half: [4.0, 8.0] },
+    spa: { km: 7.00, climb: 98, half: [5.2, 10.8] },
+    monza: { km: 5.79, climb: 9, half: [5.2, 8.1] },
+    suzuka: { km: 5.80, climb: 40, half: [5.2, 10.1] },
+    zandvoort: { km: 4.31, climb: 25, half: [5.3, 10.6] },
   };
   for (const [key, w] of Object.entries(want)) {
     const route = buildRoute(key);
@@ -403,9 +407,46 @@ for (const tier of ['easy', 'normal', 'hard']) {
 
   // Zandvoort's two dished corners, which are the reason it is quicker than its
   // shape suggests.
-  const banked = buildRoute('zandvoort').nodes
-    .filter((n) => Math.abs(n.bank) > 0.2).length;
-  ok(`zandvoort is dished at ${banked} nodes`, banked > 40 && banked < 200);
+  const dished = buildRoute('zandvoort').nodes.filter((n) => Math.abs(n.dish) > 0.2);
+  const deepest = Math.max(...dished.map((n) => Math.abs(n.dish))) * 180 / Math.PI;
+  ok(`zandvoort is dished at ${dished.length} nodes, deepest ${deepest.toFixed(0)} degrees`,
+    dished.length > 40 && dished.length < 200 && deepest > 16 && deepest < 20);
+  // And the banking has to be worth something, or it is a picture of a banked
+  // corner rather than one. The drawn circuits must not have gained any.
+  const drop = Math.max(...dished.map((n) => Math.abs(n.dish) * n.half * 2));
+  ok(`and it drops the inside of the road by ${drop.toFixed(1)} m across its full width`,
+    drop > 2.5);
+  ok('while the drawn circuits are dished nowhere',
+    ['pass', 'coast', 'grand'].every(
+      (k) => buildRoute(k).nodes.every((n) => n.dish === 0),
+    ));
+
+  // Nothing standing beside the circuit may be standing on it. A circuit that
+  // folds back on itself puts one node's scenery on another node's road, and a
+  // dune twenty-six metres off the main straight at Zandvoort was a dune on the
+  // road at Hugenholtz - sixty-two of them, on that circuit alone.
+  for (const key of ['spa', 'monza', 'suzuka', 'zandvoort']) {
+    const route = buildRoute(key);
+    const nodes = route.nodes;
+    let on = 0;
+    let total = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      for (const prop of route.props[i] || []) {
+        total++;
+        if (!prop.side || !prop.off) continue;
+        const a = nodes[i];
+        const x = a.x + a.nx * prop.side * prop.off;
+        const z = a.z + a.nz * prop.side * prop.off;
+        for (const b of nodes) {
+          if (Math.hypot(x - b.x, z - b.z) < b.half + 1) {
+            on++;
+            break;
+          }
+        }
+      }
+    }
+    ok(`${key}: none of its ${total} pieces of scenery stands on the road`, on === 0);
+  }
 
   /**
    * And the one that cost a day: no ground may be drawn above a road it could be

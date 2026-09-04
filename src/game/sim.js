@@ -67,6 +67,9 @@ const BUMP_COOL = 20;
 /** How far past the racing line a rival will run when it makes a mistake. */
 const MISTAKE = 4.5;
 
+/** Grip per radian of banking. Eighteen degrees is worth about a fifth. */
+const BANK_GRIP = 0.62;
+
 // --- The tick ----------------------------------------------------------------
 
 export function step(state, mask = 0) {
@@ -197,7 +200,7 @@ function drive(state, car) {
   // great deal of the speed, which is what makes running wide a mistake rather
   // than a wider line.
   const hold = surf === 'road' ? 1 : surf === 'verge' ? GRIP_VERGE : GRIP_ROUGH;
-  const grip = GRIP * state.cfg.grip * hold * (car.gripScale || 1);
+  const grip = GRIP * state.cfg.grip * hold * (car.gripScale || 1) * dished(node);
   const pull = (car.power || DRIVE) * (surf === 'rough' ? OFFROAD_TOP : 1);
 
   let acc = 0;
@@ -503,7 +506,7 @@ function think(state, car) {
  * code drives the pass and the boulevard.
  */
 function safeSpeed(state, car, share = AI_GRIP) {
-  const grip = GRIP * state.cfg.grip * share * (car.gripScale || 1);
+  const base = GRIP * state.cfg.grip * share * (car.gripScale || 1);
   // How much of the brakes the braking point is worked out with. Under one
   // because a car that brakes at exactly the last possible moment has no margin
   // for the corner being slightly different than it looked - and over the old
@@ -517,13 +520,36 @@ function safeSpeed(state, car, share = AI_GRIP) {
     const node = nodeStep(state.route, from, n);
     const kappa = Math.abs(node.curve) / SEG;
     if (kappa < 1e-5) continue;
-    const corner = Math.sqrt(grip / kappa);
+    // The banking is read at the corner rather than under the car, or a driver
+    // would brake for a dished corner as though it were flat and then find they
+    // had thrown away the whole advantage of it on the way in.
+    const corner = Math.sqrt((base * dished(node)) / kappa);
     if (corner >= limit) continue;
     // v² = corner² + 2·a·d, which is the same sum a driver does with their eyes.
     const d = Math.max(0, n * SEG - 8);
     limit = Math.min(limit, Math.sqrt(corner * corner + 2 * brake * d));
   }
   return limit;
+}
+
+/**
+ * How much more grip a dished corner is worth.
+ *
+ * Banking works by tilting the road so that part of the car's weight points at
+ * the middle of the corner instead of at the ground. The textbook sum for it
+ * divides by one minus mu tan theta, which for a car with this much mechanical
+ * grip goes to infinity somewhere around fifteen degrees and is no use to
+ * anybody. So it is linear in the angle and tuned to arrive at about a fifth
+ * more grip at eighteen degrees, which is what Zandvoort's two dished corners
+ * are and roughly what they are worth.
+ *
+ * Only the authored banking counts. The camber every corner has is drawn at a
+ * twelfth of its nominal value and has never touched the car; making it grip
+ * would have quietly rewritten how the three drawn circuits drive.
+ */
+function dished(node) {
+  const lean = -(node.dish || 0) * Math.sign(node.curve || 1);
+  return lean > 0 ? 1 + lean * BANK_GRIP : 1;
 }
 
 /**

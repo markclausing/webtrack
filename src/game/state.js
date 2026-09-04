@@ -216,16 +216,21 @@ export function worldOf(route, s, x, lift = 0) {
   const a = route.nodes[i];
   const b = route.nodes[(i + 1) % route.nodes.length];
   const bank = a.bank + (b.bank - a.bank) * t;
+  const dish = a.dish + (b.dish - a.dish) * t;
   const nx = a.nx + (b.nx - a.nx) * t;
   const nz = a.nz + (b.nz - a.nz) * t;
   return {
     x: a.x + (b.x - a.x) * t + nx * x,
-    y: a.y + (b.y - a.y) * t + lift - bank * x * 0.12,
+    // Camber at a twelfth, banking at its face value: on a dished corner the
+    // inside of the road really is metres below the outside, and a car sitting
+    // on it has to sit on it.
+    y: a.y + (b.y - a.y) * t + lift - bank * x * 0.12 - dish * x,
     z: a.z + (b.z - a.z) * t + nz * x,
     // The heading is continuous round the lap and then jumps by two pi at the
     // line, so the two are compared the short way round rather than subtracted.
     a: a.a + shortTurn(a.a, b.a) * t,
     bank,
+    dish,
     slope: a.slope,
     curve: a.curve,
     node: a,
