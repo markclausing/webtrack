@@ -525,6 +525,14 @@ function scatter(nodes, rnd) {
       add(i, { kind: 'post', side: 1, off: 16.4, s: 1, r: 0, align: true });
     }
 
+    // Floodlights, alternating sides every seventy metres, leaning out over the
+    // track. On a circuit that finishes in the dark they are not decoration -
+    // they are the reason the third lap is a lap rather than a corridor.
+    if (i % 12 === 0 && !nodes[i].bridge) {
+      const side = (i / 12) % 2 === 0 ? -1 : 1;
+      add(i, { kind: 'mast', side, off: 17.5, s: 1, r: side < 0 ? 0 : Math.PI, align: true });
+    }
+
     if (warm < 0.55) {
       // Trees on the low side, rock on the high side: that is what a cut through
       // a hill looks like, and it also tells you which way the track is about to

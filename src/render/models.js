@@ -79,7 +79,7 @@ function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
 
 // --- Scenery -----------------------------------------------------------------
 
-export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0) {
+export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, night = 0) {
   const s = prop.s || 1;
   // Trees and rocks are turned any old way and that is the point of them. A
   // gantry, a grandstand and a marker post belong to the track and are handed
@@ -122,6 +122,24 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0) {
       put.face(rt, side, [0, h, 0, 1, 0, 1, 1.1, 0, -0.9]);
       put.face(rt, dark, [0, h, 0, 1.1, 0, -0.9, -1, 0, -1]);
       put.face(rt, side, [0, h, 0, -1, 0, -1, -1, 0, 1]);
+      break;
+    }
+    case 'mast': {
+      // A floodlight on a pole, leaning out over the track. Two faces of pole,
+      // an arm and a head - and after dark the head is not tinted at all,
+      // because a lamp is a lamp and the whole reason it is there is that the
+      // rest of the world has gone dark around it.
+      const steel = tint(C.metal);
+      const dark = tint(shade(C.metal, 0.7));
+      put.face(rt, steel, [-0.24, 0, 0, 0.24, 0, 0, 0.18, 11, 0, -0.18, 11, 0]);
+      put.face(rt, dark, [0, 0, -0.24, 0, 0, 0.24, 0, 11, 0.18, 0, 11, -0.18]);
+      put.face(rt, steel, [-0.16, 10.5, 0, -0.16, 11, 0, -3.4, 11.6, 0, -3.4, 11.2, 0]);
+      const lit = night > 0.03;
+      const lamp = lit ? C.lamp : tint(shade(C.chrome, 0.9));
+      put.face(rt, lamp, [-4.1, 10.9, -0.5, -2.9, 10.9, -0.5, -2.9, 11.5, -0.5, -4.1, 11.5, -0.5]);
+      put.face(rt, lamp, [-2.9, 10.9, 0.5, -4.1, 10.9, 0.5, -4.1, 11.5, 0.5, -2.9, 11.5, 0.5]);
+      put.face(rt, lit ? C.lamp : tint(C.chrome),
+        [-4.1, 10.85, -0.5, -2.9, 10.85, -0.5, -2.9, 10.85, 0.5, -4.1, 10.85, 0.5]);
       break;
     }
     case 'post':

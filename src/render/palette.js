@@ -29,6 +29,7 @@ export const C = {
   helmet: md(236, 236, 240),
   hot: md(250, 190, 40),
   tail: md(255, 60, 40),
+  lamp: md(255, 244, 196),
   crowd: md(160, 120, 150),
   armco: md(206, 210, 214),
 };

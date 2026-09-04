@@ -118,7 +118,8 @@ are when they are not in front of you.
 horizon by the second lap and finishes at night, gradually and without ever doing
 it in front of you. It is measured on distance rather than on the clock, so a
 race that has gone badly gets dark at the same place on the circuit as one that
-has gone well.
+has gone well. The floodlights beside the track come on at dusk, a good half hour
+before anybody needs them, which is what a real circuit does.
 
 ![The sun on the horizon, second lap](docs/screenshots/dusk.png)
 
@@ -200,11 +201,13 @@ billboards, no textures anywhere. Go round a bend and the palm tree turns,
 because it is actually there.
 
 The renderer is about five hundred lines and does not use the GPU. It transforms,
-clips, projects and fills every triangle by hand into a `Uint32Array` at 320 ×
-224, which is what a Mega Drive put on a television, and blows the result up to
-fit the window with the smoothing turned off. That is not the slow way round:
-five thousand flat triangles over seventy-one thousand pixels is about two
-milliseconds, which leaves fourteen of the sixteen a frame gets.
+clips, projects and fills every triangle by hand into a `Uint32Array` at 400 ×
+280 — a quarter more than the 320 × 224 a Mega Drive put on a television, in the
+same ten by seven shape, and about the most that can be added before the pixels
+stop being pixels — and blows the result up to fit the window with the smoothing
+turned off. That is not the slow way round: three thousand flat triangles over a
+hundred and twelve thousand pixels is about two milliseconds, which leaves
+fourteen of the sixteen a frame gets.
 
 Doing it in software buys the one thing a modern pipeline will not give you,
 which is the actual look:
@@ -252,6 +255,10 @@ four things that cost nothing and are worth more than another fifty would be:
   straight, with the ground falling away to water on both sides of the deck. The
   cable is the whole thing: take it away and it is a road with red walls on it,
   put it back and it is a crossing, from half a mile away, in eight quads a node.
+- **Floodlights that are actually lights.** After dark the lamp heads are not
+  tinted with the rest of the world, and each one puts a pool on the tarmac. Your
+  own headlights are brighter and gone by ninety metres; the floodlights are
+  dimmer and go to the horizon, so the pool in front of you still reads as yours.
 - **A day that ends.** Each time of day is one arithmetic operation applied to
   every colour that goes into the world — darken, then pull towards a wash — so a
   colour added tomorrow gets a night version for nothing. The sky is the

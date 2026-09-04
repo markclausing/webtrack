@@ -30,7 +30,7 @@ import {
   BTN, CHECKPOINT_TIME, DRAG, DRIVE, DT, GRAVITY, GRIP, GRIP_ROUGH, GRIP_VERGE, NUDGE,
   NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROAD_HALF, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL,
   SPIN_AT, SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
-  TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP,
+  TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP, CAR_HALF,
 } from '../constants.js';
 import { nextRandom, randRange } from '../util.js';
 import { makeState, nodeAt, nodeStep, player, racing, surfaceOf } from './state.js';
@@ -237,7 +237,7 @@ function drive(state, car) {
   // easing the ground uses to fall away, so the eight metres of run-off narrow
   // to nothing over the first twenty-four metres of the crossing rather than
   // disappearing between one node and the next.
-  const wall = WALL_AT + (ROAD_HALF + 0.75 - WALL_AT) * (node.g.bay || 0);
+  const wall = WALL_AT + (ROAD_HALF + 0.75 - WALL_AT) * (node.g.bay || 0) - CAR_HALF;
   if (Math.abs(car.x) > wall) {
     const into = Math.abs(car.vx) + car.speed * 0.08;
     car.x = Math.sign(car.x) * wall;

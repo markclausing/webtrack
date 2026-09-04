@@ -337,7 +337,10 @@ export class Renderer {
     const edge = ROAD_HALF + RUMBLE;
     const first = nodeAt(route, p.s).i - DRAW_BEHIND;
 
-    const night = Math.max(0, (this.lightAt - 0.45) / 0.55);
+    // Nought until the sun is on the horizon, one when it has gone. It starts
+    // early enough that the floodlights come on at dusk, which is when a real
+    // circuit switches them on - a good half hour before anybody needs them.
+    const night = Math.max(0, (this.lightAt - 0.4) / 0.6);
     for (let step = 0; step < DRAW_AHEAD; step++) {
       const i = first + step;
       const a = nodeStep(route, i, 0);
@@ -347,7 +350,16 @@ export class Renderer {
       // The headlights: at night the near tarmac is a good deal brighter than
       // the rest of the world, which is what a car's own lights look like from
       // inside it and is most of what makes a night lap readable.
-      const beam = night > 0 ? night * Math.max(0, 1 - away / 85) ** 1.4 : 0;
+      // Two things light the tarmac after dark: your own headlights, which are
+      // brightest under the nose and gone by ninety metres, and the floodlights,
+      // which are dimmer and go all the way to the horizon. The brighter of the
+      // two wins, so the pool in front of you still reads as yours.
+      const beam = night > 0
+        ? night * Math.max(
+          Math.max(0, 1 - away / 85) ** 1.4,
+          0.34 + 0.2 * Math.cos((((i % 12) + 12) % 12) / 12 * Math.PI * 2),
+        )
+        : 0;
       const tint = (colour) => mix(this.lamp(colour), theme.fog, f);
       const road = beam > 0
         ? (colour) => mix(shade(this.lamp(colour), 1 + beam * 2.4), theme.fog, f)
@@ -477,7 +489,7 @@ export class Renderer {
             a.x + a.nx * off,
             groundY(a, Math.sign(off) || 1, Math.abs(off)) + (prop.lift || 0),
             a.z + a.nz * off,
-            tint, local, prop.align ? a.a : 0, state.tick);
+            tint, local, prop.align ? a.a : 0, state.tick, night);
         }
       }
     }

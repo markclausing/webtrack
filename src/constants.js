@@ -104,6 +104,15 @@ export const TOW_DRAG = 0.55;       // how much of your drag disappears, at best
 /** Car bodies, for the shoving: half a car wide and a car and a bit long. */
 export const BODY_X = 1.9;
 export const BODY_S = 4.6;
+/**
+ * Half the width of one, for the barrier.
+ *
+ * The barrier stops the car, and a car is not a point: clamping the centreline
+ * to the rail leaves the outer wheels a metre past it, which anywhere else looks
+ * like a car leaning on a barrier and on a bridge looks like a car parked in
+ * mid-air over the water.
+ */
+export const CAR_HALF = 1.05;
 /** Metres per second of shove when two cars touch, and what it costs the pair. */
 export const NUDGE = 6.5;
 export const NUDGE_COST = 0.965;
@@ -266,8 +275,17 @@ export function gearAt(speed) {
  * laptop. Every triangle is flat, every colour is one of the five hundred and
  * twelve that machine could make, and there is not a texture anywhere.
  */
-export const SCREEN_W = 320;
-export const SCREEN_H = 224;
+/**
+ * Four hundred by two hundred and eighty.
+ *
+ * A quarter more than the 320 x 224 a Mega Drive put on a television, in the
+ * same ten by seven shape, and about the most that can be added without the
+ * pixels stopping being pixels. It costs half again as many of them to fill -
+ * a hundred and twelve thousand against seventy-two - which the software
+ * rasteriser has the room for and the look has the tolerance for.
+ */
+export const SCREEN_W = 400;
+export const SCREEN_H = 280;
 
 /**
  * Field of view, as the focal length of a screen this wide.
@@ -278,8 +296,8 @@ export const SCREEN_H = 224;
  * through the middle of it. The eye reads that as velocity far more readily than
  * it reads a number changing in the corner.
  */
-export const FOCAL = 250;
-export const FOCAL_FAST = 178;
+export const FOCAL = 312;
+export const FOCAL_FAST = 222;
 /** Nothing nearer than this is drawn, because the maths stops working at zero. */
 export const NEAR = 0.55;
 

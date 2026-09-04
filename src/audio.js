@@ -30,7 +30,9 @@ export class Sound {
   constructor() {
     this.ctx = null;
     this.on = true;
-    this.talk = true;
+    // The voice is off unless it is asked for. It says four things and it says
+    // them well, and it is still the first thing anybody turns off.
+    this.talk = false;
     this.running = false;
     this.nodes = null;
     this.speech = null;
