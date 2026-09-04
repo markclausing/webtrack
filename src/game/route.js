@@ -386,7 +386,11 @@ export function buildRoute(key) {
   for (let i = 0; i < count; i++) {
     let sum = 0;
     for (let k = -soften; k <= soften; k++) sum += height[((i + k) % count + count) % count];
-    infield[i] = sum / (soften * 2 + 1) - 6;
+    // Never above the road beside it, whatever the smoothing says. The plain
+    // reaches all the way across the loop now, and a plain ten metres above the
+    // road is not scenery, it is a lid: from a dip in the circuit it covered the
+    // world and the car appeared to be driving through a lake.
+    infield[i] = Math.min(sum / (soften * 2 + 1) - 6, height[i] - 4);
   }
 
   // Which way the hill leans, from the curvature averaged over eighty metres.
@@ -461,36 +465,25 @@ export function buildRoute(key) {
     // and a long ramp beside the deck reads as land you could drive on.
     const ease = Math.min(1, Math.min(k, BRIDGE_NODES - 1 - k) / 4);
     const drop = (h) => h + (water - h) * ease;
+    // The heights ease down over the four nodes at each end; the colour does
+    // not ease at all. Blending it was the bug: on the approach the hillside was
+    // still thirty metres up and already being painted as sea, so a bay
+    // appeared in mid-air over the track and the car drove into it. Water is
+    // drawn only where the ground has actually arrived at the water.
+    const wet = ease > 0.999 ? 1 : 0;
     node.g = {
       ...node.g,
       l: [drop(node.y - 1), drop(node.g.l[1]), drop(node.g.l[2])],
       r: [drop(node.y - 1), drop(node.g.r[1]), drop(node.g.r[2])],
       far: [drop(node.g.far[0]), drop(node.g.far[1])],
-      wet: Math.max(node.g.wet, ease),
-      bay: ease,
+      wet: Math.max(node.g.wet, wet),
+      bay: wet,
     };
   }
-
-  // How far the infield has to reach to close the middle of the loop.
-  //
-  // The rings are fixed distances from the centreline, and the outermost is
-  // three hundred and forty metres - which on a circuit six hundred metres
-  // across is plenty and on one twelve hundred metres across leaves a hole in
-  // the middle of it that you look through at the sky. The infield side is given
-  // whatever it needs: the furthest any node is from the middle of the loop.
-  let midX = 0;
-  let midZ = 0;
-  for (const n of nodes) {
-    midX += n.x / count;
-    midZ += n.z / count;
-  }
-  let horizon = 0;
-  for (const n of nodes) horizon = Math.max(horizon, Math.hypot(n.x - midX, n.z - midZ));
 
   return {
     key,
     nodes,
-    horizon: horizon * 1.08,
     bridgeFrom: from,
     bridgeWater: water,
     props: scatter(nodes, seeded(plan.seed ^ 0x3a71)),

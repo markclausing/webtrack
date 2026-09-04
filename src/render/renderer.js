@@ -50,6 +50,15 @@ const FOG_FAR = DRAW_AHEAD * SEG;
 /**
  * The ground, in rings, as [inner, outer, which colour, how often].
  *
+ * The outermost is three hundred and forty metres and it stays there, however
+ * big the circuit is. On the largest one that leaves a few hundred pixels of sky
+ * showing across the middle of the loop, which is worth having: a band that
+ * reaches further than this on a track that curves does not stay in the middle,
+ * it comes out the far side and lands on the piece of road the car is on. Two
+ * attempts at closing that hole - one to the widest point of the loop, one to
+ * the centre of it - both put a grey-green plain over the track with the car
+ * apparently driving through a lake.
+ *
  * The last number is the only interesting one: the run-off beside the kerb is
  * drawn at every node, the middle distance at every second and the far hills at
  * every fourth. That keeps the work roughly proportional to the pixels a band
@@ -455,14 +464,10 @@ export class Renderer {
         const far = nodeStep(route, i, every);
         for (const side of [-1, 1]) {
           const colour = bandColour(local, a, side, kind, i, this.surf);
-          // The infield band reaches as far as it has to to close the middle of
-          // the loop; the outward one stops at the horizon ring, because outside
-          // the loop there is nothing to close.
-          const out = kind === 'far' && side > 0 ? route.horizon : outer;
           rt.quad(
             a.x + a.nx * side * inner, groundY(a, side, inner), a.z + a.nz * side * inner,
-            a.x + a.nx * side * out, groundY(a, side, out), a.z + a.nz * side * out,
-            far.x + far.nx * side * out, groundY(far, side, out), far.z + far.nz * side * out,
+            a.x + a.nx * side * outer, groundY(a, side, outer), a.z + a.nz * side * outer,
+            far.x + far.nx * side * outer, groundY(far, side, outer), far.z + far.nz * side * outer,
             far.x + far.nx * side * inner, groundY(far, side, inner), far.z + far.nz * side * inner,
             tint(colour),
           );
