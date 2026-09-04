@@ -453,7 +453,9 @@ export function buildRoute(key) {
     node.bridge = k / (BRIDGE_NODES - 1);
     // Everything either side of the deck falls away to the water, and both
     // sides of it are water rather than only the seaward one.
-    const ease = Math.min(1, Math.min(k, BRIDGE_NODES - 1 - k) / 7);
+    // Four nodes to fall away rather than seven: the run-off narrows with it,
+    // and a long ramp beside the deck reads as land you could drive on.
+    const ease = Math.min(1, Math.min(k, BRIDGE_NODES - 1 - k) / 4);
     const drop = (h) => h + (water - h) * ease;
     node.g = {
       ...node.g,

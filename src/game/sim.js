@@ -229,15 +229,23 @@ function drive(state, car) {
   car.vx += (want - car.vx) * STEER_RATE * DT;
   car.x += car.vx * DT;
 
-  // The barrier. Always there, always the same price.
-  if (Math.abs(car.x) > WALL_AT) {
-    const into = Math.abs(car.vx) + car.speed * 0.05;
-    car.x = Math.sign(car.x) * WALL_AT;
+  // The barrier. Always there, and the price is most of your speed - which is
+  // the only thing that stops driving at it being a racing line.
+  //
+  // On the bridge it is the railing, because on a bridge there is nothing on the
+  // other side of the railing. It closes in as the span begins, on the same
+  // easing the ground uses to fall away, so the eight metres of run-off narrow
+  // to nothing over the first twenty-four metres of the crossing rather than
+  // disappearing between one node and the next.
+  const wall = WALL_AT + (ROAD_HALF + 0.75 - WALL_AT) * (node.g.bay || 0);
+  if (Math.abs(car.x) > wall) {
+    const into = Math.abs(car.vx) + car.speed * 0.08;
+    car.x = Math.sign(car.x) * wall;
     car.vx = -car.vx * 0.25;
     car.speed *= WALL_KEEP;
     if (car === player(state)) state.shake = 1;
     state.events.push({ t: 'wall', mine: car === player(state) });
-    if (into > SPIN_AT * 0.7) spin(state, car);
+    if (into > SPIN_AT * 0.55) spin(state, car);
   }
 
   car.s += car.speed * DT;
