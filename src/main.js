@@ -60,6 +60,7 @@ const hiscoreBox = document.getElementById('hiscore');
 let mode = 'gp';
 let route = 'pass';
 let tier = 'normal';
+let dusk = true;
 
 const game = {
   state: null,
@@ -135,7 +136,7 @@ function attract() {
   // Always a grand prix behind the menu, whatever is selected in front of it: an
   // empty circuit is the correct thing to qualify on and the wrong thing to
   // watch.
-  const state = makeRace({ route, mode: 'gp', tier, seed: (Math.random() * 1e9) | 0 });
+  const state = makeRace({ route, mode: 'gp', tier, dusk, seed: (Math.random() * 1e9) | 0 });
   // Started a long way in, at speed, with the lights already out and the clock
   // wound up: the menu is never showing a standing start it will not finish, and
   // never the same forty metres of track twice.
@@ -155,7 +156,7 @@ function attract() {
 
 function startRun() {
   sound.wake();
-  game.state = makeRace({ route, mode, tier, seed: (Date.now() & 0x7fffffff) });
+  game.state = makeRace({ route, mode, tier, dusk, seed: (Date.now() & 0x7fffffff) });
   game.playing = true;
   game.paused = false;
   game.acc = 0;
@@ -283,7 +284,20 @@ function renderMode() {
       + 'per cent of each other and of you, they will shut the door, and the board '
       + 'keeps the whole race rather than your best lap.';
 }
+pick('dusk', (value) => {
+  dusk = value === 'on';
+  renderDusk();
+  game.demo = attract();
+});
 pick('sound', (value) => sound.enable(value === 'on'));
+
+function renderDusk() {
+  document.getElementById('duskBlurb').textContent = dusk
+    ? 'The race starts in the afternoon, has the sun on the horizon by the second '
+      + 'lap and finishes in the dark. The floodlights come on at dusk.'
+    : 'Daylight the whole way. A circuit you are learning is easier to learn in '
+      + 'the light, and the board does not care either way.';
+}
 pick('talk', (value) => sound.voice(value === 'on'));
 
 function renderSkill() {
@@ -561,6 +575,7 @@ fit();
 
 document.getElementById('routeBlurb').textContent = ROUTES[route].blurb;
 renderMode();
+renderDusk();
 renderSkill();
 renderKeys();
 renderScores(mode, route, tier);

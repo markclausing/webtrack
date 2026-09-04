@@ -145,6 +145,13 @@ for (const tier of ['easy', 'normal', 'hard']) {
   }
   ok(`and it is dark at the flag (light at each line: ${seen.map((v) => v.toFixed(2)).join(', ')})`,
     state.light > 0.97 && seen.every((v, i) => i === 0 || v > seen[i - 1]));
+
+  // And it does not, when it is turned off.
+  const bright = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 6, dusk: false });
+  for (let t = 0; t < TICK_RATE * 200 && !bright.over && !bright.finished; t++) {
+    step(bright, driveLine(bright, 0.98));
+  }
+  ok('with the sunset off it stays daylight the whole way', bright.light === 0);
 }
 
 /**

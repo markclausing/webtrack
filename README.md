@@ -121,6 +121,9 @@ race that has gone badly gets dark at the same place on the circuit as one that
 has gone well. The floodlights beside the track come on at dusk, a good half hour
 before anybody needs them, which is what a real circuit does.
 
+There is a switch for it in the menu. A circuit you are still learning is easier
+to learn in the light, and the board does not care which you drove in.
+
 ![The sun on the horizon, second lap](docs/screenshots/dusk.png)
 
 ![The third lap, on headlights](docs/screenshots/night.png)

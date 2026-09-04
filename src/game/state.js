@@ -91,7 +91,9 @@ export function makeCar(kind, slot, s, x, extra = {}) {
  * an arcade racer has about three minutes in which to give you seven overtakes
  * and the feeling that you earned each one.
  */
-export function makeState({ route = 'pass', mode = 'gp', tier = 'normal', seed = 1 } = {}) {
+export function makeState({
+  route = 'pass', mode = 'gp', tier = 'normal', seed = 1, dusk = true,
+} = {}) {
   const cfg = TIERS[tier] || TIERS.normal;
   const rules = MODES[mode] || MODES.gp;
   const built = buildRoute(route);
@@ -135,7 +137,15 @@ export function makeState({ route = 'pass', mode = 'gp', tier = 'normal', seed =
     over: false,
     reason: '',
     shake: 0,
-    /** Nought at the start, one at the flag: afternoon, then dusk, then night. */
+    /**
+     * Nought at the start, one at the flag: afternoon, then dusk, then night.
+     *
+     * Held at nought for the whole race when the sunset is turned off, which is
+     * a setting because a circuit you are learning is easier to learn in the
+     * light - and because a lap time set at midnight and one set at four in the
+     * afternoon are on the same board.
+     */
+    dusk,
     light: 0,
     prevMask: 0,
     events: [],

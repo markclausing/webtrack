@@ -85,12 +85,13 @@ export function step(state, mask = 0) {
 
   state.elapsed++;
   state.clock -= DT;
-  // The afternoon going. Measured on distance rather than on the clock, so a
-  // race that has gone badly gets dark at the same place on the circuit as one
-  // that has gone well - the light is a property of how far round you are, not
-  // of how long you took.
-  state.light = Math.max(0, Math.min(1,
-    player(state).s / (state.route.metres * state.laps)));
+  // The afternoon going, if it is going at all. Measured on distance rather
+  // than on the clock, so a race that has gone badly gets dark at the same place
+  // on the circuit as one that has gone well - the light is a property of how
+  // far round you are, not of how long you took.
+  state.light = state.dusk
+    ? Math.max(0, Math.min(1, player(state).s / (state.route.metres * state.laps)))
+    : 0;
   if (state.clock <= 0) {
     state.clock = 0;
     return end(state, 'time');
