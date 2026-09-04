@@ -130,7 +130,7 @@ for (const tier of ['easy', 'normal', 'hard']) {
  * on the lap everybody else did in daylight.
  */
 {
-  const state = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 6 });
+  const state = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 6, dusk: true });
   ok('it starts in daylight', state.light === 0);
   const seen = [];
   let lap = -1;
@@ -146,12 +146,13 @@ for (const tier of ['easy', 'normal', 'hard']) {
   ok(`and it is dark at the flag (light at each line: ${seen.map((v) => v.toFixed(2)).join(', ')})`,
     state.light > 0.97 && seen.every((v, i) => i === 0 || v > seen[i - 1]));
 
-  // And it does not, when it is turned off.
-  const bright = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 6, dusk: false });
+  // And it does not without being asked, which is the default.
+  const bright = makeRace({ route: 'pass', mode: 'gp', tier: 'normal', seed: 6 });
   for (let t = 0; t < TICK_RATE * 200 && !bright.over && !bright.finished; t++) {
     step(bright, driveLine(bright, 0.98));
   }
-  ok('with the sunset off it stays daylight the whole way', bright.light === 0);
+  ok('and it is daylight the whole way unless the sunset is asked for',
+    bright.light === 0);
 }
 
 /**

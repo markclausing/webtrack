@@ -92,7 +92,7 @@ export function makeCar(kind, slot, s, x, extra = {}) {
  * and the feeling that you earned each one.
  */
 export function makeState({
-  route = 'pass', mode = 'gp', tier = 'normal', seed = 1, dusk = true,
+  route = 'pass', mode = 'gp', tier = 'normal', seed = 1, dusk = false,
 } = {}) {
   const cfg = TIERS[tier] || TIERS.normal;
   const rules = MODES[mode] || MODES.gp;
@@ -140,10 +140,10 @@ export function makeState({
     /**
      * Nought at the start, one at the flag: afternoon, then dusk, then night.
      *
-     * Held at nought for the whole race when the sunset is turned off, which is
-     * a setting because a circuit you are learning is easier to learn in the
-     * light - and because a lap time set at midnight and one set at four in the
-     * afternoon are on the same board.
+     * Held at nought for the whole race unless the sunset is asked for, which is
+     * the default because a circuit is easier to learn in the light - and
+     * because a lap set at midnight and one set at four in the afternoon go on
+     * the same board either way.
      */
     dusk,
     light: 0,

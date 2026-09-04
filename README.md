@@ -34,14 +34,16 @@ nothing to install.
 
 ## Controls
 
-|                   | Keys      |
-| ----------------- | --------- |
-| Accelerate        | `W`       |
-| Brake             | `S`       |
-| Steer             | `A` / `D` |
-| Pause             | `Esc`     |
+|                   | Keys        |
+| ----------------- | ----------- |
+| Accelerate        | `↑`         |
+| Brake             | `↓`         |
+| Steer             | `←` / `→`   |
+| Pause             | `Esc`       |
 
-Every key can be changed in the menu. Gamepads need no setting up: the stick
+One car and one driver, so the arrows are the default rather than W A S D — the
+other four games in this family seat two people at one keyboard and this one does
+not. Every key can be changed in the menu, and W A S D is one of the presets. Gamepads need no setting up: the stick
 steers and any face button is the throttle.
 
 On a phone, hold it sideways. The bottom-left corner is the wheel, `GAS` is the
@@ -121,8 +123,9 @@ race that has gone badly gets dark at the same place on the circuit as one that
 has gone well. The floodlights beside the track come on at dusk, a good half hour
 before anybody needs them, which is what a real circuit does.
 
-There is a switch for it in the menu. A circuit you are still learning is easier
-to learn in the light, and the board does not care which you drove in.
+There is a switch for it in the menu, and it is off to begin with: a circuit you
+are still learning is easier to learn in the light, and the board does not care
+which you drove in.
 
 ![The sun on the horizon, second lap](docs/screenshots/dusk.png)
 

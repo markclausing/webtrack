@@ -217,7 +217,9 @@ ok('the menu goes away when the run starts', byId.get('menu').classes.has('hidde
 // The throttle, held. The loop reads the keyboard through the shared input
 // module, so this is the same path a key press takes. The lights are still on
 // for the first three seconds of it, which is part of what is being checked.
-for (const fn of winListeners.get('keydown') || []) fn({ code: 'KeyW', key: 'w', preventDefault() {} });
+for (const fn of winListeners.get('keydown') || []) {
+  fn({ code: 'ArrowUp', key: 'ArrowUp', preventDefault() {} });
+}
 
 const screen = byId.get('screen');
 const before = screen.drawn || 0;

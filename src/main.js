@@ -38,7 +38,29 @@ const highscores = new Highscores();
 
 // Its own key, like the score board: the other four games are on this domain
 // and one key would mean rebinding here silently rebinding a game of football.
-const bindings = loadBindings('webtrack.bindings.v1');
+const BINDINGS_KEY = 'webtrack.bindings.v1';
+
+/**
+ * What the keys do before anybody has said otherwise.
+ *
+ * The shared input module defaults its first slot to W A S D, which is right for
+ * the four games that seat two people at one keyboard. This one seats one, and
+ * one person driving one car reaches for the arrows. So an untouched browser
+ * gets the arrow preset, and a browser that has been to the controls screen gets
+ * whatever it chose - the check is for the stored bindings, not for their value,
+ * or changing your mind back to W A S D would be overruled on the next visit.
+ */
+function firstBindings() {
+  let saved = null;
+  try {
+    saved = globalThis.localStorage?.getItem(BINDINGS_KEY);
+  } catch { /* private mode: there is nothing stored and nothing to read */ }
+  const out = loadBindings(BINDINGS_KEY);
+  if (!saved) out[0] = { ...PRESETS.find((p) => p.key === 'arrows').bindings };
+  return out;
+}
+
+const bindings = firstBindings();
 const input = new InputDevices(bindings);
 input.attach(window);
 
@@ -60,7 +82,7 @@ const hiscoreBox = document.getElementById('hiscore');
 let mode = 'gp';
 let route = 'pass';
 let tier = 'normal';
-let dusk = true;
+let dusk = false;
 
 const game = {
   state: null,
@@ -534,7 +556,7 @@ function renderKeys() {
     if (!preset) return;
     bindings[0] = { ...preset.bindings };
     input.setBindings(bindings);
-    saveBindings(bindings, 'webtrack.bindings.v1');
+    saveBindings(bindings, BINDINGS_KEY);
     renderKeys();
   };
 }
@@ -545,7 +567,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code !== 'Escape') {
     bindings[0][binding] = e.code;
     input.setBindings(bindings);
-    saveBindings(bindings, 'webtrack.bindings.v1');
+    saveBindings(bindings, BINDINGS_KEY);
   }
   binding = null;
   document.getElementById('bindHint').textContent = 'Click a key to change it.';

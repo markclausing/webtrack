@@ -107,8 +107,8 @@ if (route === 'docs') {
       return at > 10 && at < 22 && player(s).speed > 45 && player(s).lap >= 0;
     }, 'pass', 'gp'],
     // The afternoon going: the same circuit on the second lap and the third.
-    ['dusk', (s) => s.light > 0.5 && s.light < 0.62 && player(s).speed > 60, 'pass', 'gp'],
-    ['night', (s) => s.light > 0.9 && player(s).speed > 60, 'pass', 'gp'],
+    ['dusk', (s) => s.light > 0.5 && s.light < 0.62 && player(s).speed > 60, 'pass', 'gp', 0.95, true],
+    ['night', (s) => s.light > 0.9 && player(s).speed > 60, 'pass', 'gp', 0.95, true],
     ['bridge', (s) => {
       const at = nodeAt(s.route, player(s).s).i;
       const from = s.route.bridgeFrom;
@@ -121,8 +121,8 @@ if (route === 'docs') {
     }, 'grand', 'gp'],
   ];
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
-  for (const [name, when, on, mode, share = 0.95] of want) {
-    const world = makeRace({ route: on, mode, tier: 'normal', seed: 20260903 });
+  for (const [name, when, on, mode, share = 0.95, dusk = false] of want) {
+    const world = makeRace({ route: on, mode, tier: 'normal', seed: 20260903, dusk });
     const view = new Renderer(fakeCanvas());
 
     let got = false;
