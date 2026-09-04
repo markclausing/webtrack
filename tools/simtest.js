@@ -416,6 +416,54 @@ for (const tier of ['easy', 'normal', 'hard']) {
   const drop = Math.max(...dished.map((n) => Math.abs(n.dish) * n.half * 2));
   ok(`and it drops the inside of the road by ${drop.toFixed(1)} m across its full width`,
     drop > 2.5);
+  // Which way up, which is not a detail: written the other way round it put the
+  // inside of Tarzan three and a half metres above the outside - eighteen
+  // degrees of corner actively throwing the car off the road - and every other
+  // test in this file stayed green.
+  //
+  // A positive curve is a right-hander, so its outside is at negative x, and the
+  // road at x is y minus dish times x.
+  // Which way up, checked a corner at a time rather than a node at a time. A
+  // single node's curvature wobbles and at the exit of Hugenholtz it briefly
+  // reverses, while the corner plainly does not - and a banked corner is banked
+  // one way along the whole of its length, because that is how one gets built.
+  const zNodes = buildRoute('zandvoort').nodes;
+  const roadAt = (n, x) => n.y - n.bank * x * 0.12 - n.dish * x;
+  const bends = [];
+  let run = null;
+  for (const n of zNodes) {
+    if (Math.abs(n.dish) > 0.05) (run ||= []).push(n);
+    else if (run) {
+      bends.push(run);
+      run = null;
+    }
+  }
+  if (run) bends.push(run);
+  const wrongWay = bends.filter((bend) => {
+    const turning = bend.reduce((sum, n) => sum + n.curve, 0);
+    // Positive curve is a right-hander, so its outside is at negative x.
+    const outside = turning > 0 ? -1 : 1;
+    return bend.some((n) => roadAt(n, outside * n.half) <= roadAt(n, -outside * n.half));
+  });
+  ok(`and all ${bends.length} of them are dished the right way up: `
+    + 'the outside of the corner is the high side',
+    bends.length === 3 && wrongWay.length === 0);
+
+  // The same question asked of the camber, on every circuit including the three
+  // drawn ones. It was answered wrong on all seven until the banking arrived
+  // with the same sign on it and made it impossible to miss.
+  for (const key of ['pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort']) {
+    const nodes = buildRoute(key).nodes;
+    const surface = (n, x) => n.y - n.bank * x * 0.12;
+    // Only corners worth the name: on a straight the camber is noise either way.
+    const bendy = nodes.filter((n) => Math.abs(n.curve) > 0.02);
+    const wrong = bendy.filter((n) => {
+      const out = n.curve > 0 ? -n.half : n.half;
+      return surface(n, out) < surface(n, -out);
+    });
+    ok(`${key}: all ${bendy.length} of its real corners are cambered outside-high`,
+      bendy.length > 0 && wrong.length === 0);
+  }
   ok('while the drawn circuits are dished nowhere',
     ['pass', 'coast', 'grand'].every(
       (k) => buildRoute(k).nodes.every((n) => n.dish === 0),

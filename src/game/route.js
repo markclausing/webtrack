@@ -683,17 +683,31 @@ export function buildRoute(key) {
   for (const bend of (real?.bank) || []) {
     const span = Math.max(1, Math.round((bend.span || 0.02) * count));
     const mid = Math.round(bend.at * count);
+    // Which way this corner goes, decided once for the whole of it.
+    //
+    // Read per node it flipped inside a single corner: Hugenholtz reverses
+    // curvature at its exit, so the banking went from eighteen degrees one way
+    // to thirteen the other over forty metres. That is not a dished corner, it
+    // is a camber change you would feel through the wheel as a step. A bend is
+    // banked one way along its whole length because that is how one gets built.
+    let sum = 0;
+    for (let m = -span; m <= span; m++) {
+      sum += turn(heading[((mid + m) % count + count) % count],
+        heading[((mid + m + 1) % count + count) % count]);
+    }
     for (let k = -span; k <= span; k++) {
       const j = ((mid + k) % count + count) % count;
       const fade = 0.5 + 0.5 * Math.cos((k / span) * Math.PI);
-      // Averaged over the corner: the apex node's own curvature is noisy, and
-      // the entry to a dished corner is dished too.
-      let sum = 0;
-      for (let m = -6; m <= 6; m++) {
-        sum += turn(heading[((j + m) % count + count) % count],
-          heading[((j + m + 1) % count + count) % count]);
-      }
-      dish[j] = -Math.sign(sum || 1) * (bend.deg * Math.PI / 180) * fade;
+      // Plus, not minus, and that sign is the whole of it.
+      //
+      // A positive heading change turns the forward vector towards the
+      // right-hand vector, so a positive curve is a right-hander and the outside
+      // of it is the left, at negative x. Road height is `y - dish * x`, so
+      // raising the outside means a positive dish. It was written negative
+      // first, which put the inside of Tarzan three and a half metres above the
+      // outside: a corner that throws the car out rather than holding it in,
+      // and eighteen degrees of it.
+      dish[j] = Math.sign(sum || 1) * (bend.deg * Math.PI / 180) * fade;
     }
   }
 
@@ -736,11 +750,23 @@ export function buildRoute(key) {
       // place. A survey is not relaxed - that is the point of it - so Monza's
       // Rettifilo came out at a hundred and twenty-five degrees of camber, which
       // is not a corner, it is a wall the car drives up.
-      // Camber: a road detail, and a fudge factor rather than a gradient. Kept
-      // exactly as it was on the drawn circuits, and clamped on the surveyed
-      // ones because a survey is not relaxed and Monza's Rettifilo came out at
-      // a hundred and twenty-five degrees of it.
-      bank: real ? Math.max(-0.12, Math.min(0.12, -curve * 3.2)) : -curve * 3.2,
+      // Camber: a road detail, and a fudge factor rather than a gradient - it is
+      // drawn at a twelfth of its nominal value and it never touches the car's
+      // grip.
+      //
+      // Positive, and it used to be negative, which had every corner in the game
+      // cambered the wrong way round. A positive curve is a right-hander, so its
+      // outside is at negative x, and road height is `y - bank * x * 0.12`:
+      // raising the outside wants a positive bank. Written the other way it put
+      // the inside of the sharpest corner on the pass a metre and a third above
+      // the outside. It was invisible for years because a twelfth of a fudge
+      // factor is a metre over the width of the road and nothing sits on it -
+      // and it stopped being invisible the moment eighteen degrees of real
+      // banking arrived at Tarzan with the same sign on it.
+      //
+      // Clamped on the surveyed circuits because a survey is not relaxed, and
+      // Monza's Rettifilo came out at a hundred and twenty-five degrees.
+      bank: real ? Math.max(-0.12, Math.min(0.12, curve * 3.2)) : curve * 3.2,
       // Banking: a structure, and a real angle. Held apart from the camber
       // because the two behave nothing alike. Camber is drawn at a twelfth of
       // its nominal value and does not touch the car at all; eighteen degrees of

@@ -171,7 +171,12 @@ export class Renderer {
       z: back.z,
       yaw: Math.atan2(dx, dz),
       pitch: Math.atan2(back.y + high - (look.y + 1.1), flat),
-      roll: -p.yaw * 0.1 - back.bank * 0.22 - back.dish * 0.8,
+      // Rolled with the road, but not all the way with it. A camera bolted to
+      // the car would roll the full eighteen degrees through Tarzan and you
+      // would see a level road and a world on its ear; at nought this is a
+      // level world and a road on its ear. Six tenths splits it, which is about
+      // what a camera hanging behind the car would actually do.
+      roll: -p.yaw * 0.1 - back.bank * 0.22 - back.dish * 0.6,
     };
 
     if (!this.cam) this.cam = { ...want };

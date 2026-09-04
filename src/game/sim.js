@@ -260,7 +260,16 @@ function drive(state, car) {
   const to = Math.max(-0.45, Math.min(0.45,
     car.vx * 0.028 + car.wheel * 0.16 - Math.sign(kappa) * Math.min(0.3, car.slide * 0.02)));
   car.yaw += (to - car.yaw) * 0.25;
-  car.roll = -Math.sign(kappa) * Math.min(0.045, (need / Math.max(1, grip)) * 0.045);
+  // How the car sits: a little lean on its own springs, and the angle of
+  // whatever it is standing on.
+  //
+  // The second half is new and was a bug you could see from the cockpit. The
+  // road at Tarzan tilts eighteen degrees and the car was drawn level on it, so
+  // half of it went through the surface - a car is nearly two metres wide, and
+  // two metres across eighteen degrees is thirty centimetres of bodywork under
+  // the tarmac.
+  const lean = -Math.sign(kappa) * Math.min(0.045, (need / Math.max(1, grip)) * 0.045);
+  car.roll = lean - (node.dish + node.bank * 0.12);
 
 }
 
@@ -548,7 +557,11 @@ function safeSpeed(state, car, share = AI_GRIP) {
  * would have quietly rewritten how the three drawn circuits drive.
  */
 function dished(node) {
-  const lean = -(node.dish || 0) * Math.sign(node.curve || 1);
+  // Positive when the road is tilted into the corner rather than out of it.
+  // `dish` is signed by the corner it belongs to, so this is only ever a
+  // multiplication - but it is the same sign the road geometry uses, and when
+  // that was flipped this quietly stopped paying out anything at all.
+  const lean = (node.dish || 0) * Math.sign(node.curve || 1);
   return lean > 0 ? 1 + lean * BANK_GRIP : 1;
 }
 
