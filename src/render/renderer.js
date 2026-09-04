@@ -76,6 +76,26 @@ const BANDS = [
 const MAP_W = 62;
 const MAP_H = 52;
 
+/**
+ * The HUD is drawn in a fixed space and scaled onto the screen.
+ *
+ * Every number in the panels below - four pixels from this edge, a bar
+ * eighty-four wide, a gap of ten between two rows - was chosen against a screen
+ * four hundred and eighty across, and there are about ninety of them. Left as
+ * raw pixels they are a layout that quietly shrinks every time the resolution
+ * goes up: the last increase took the HUD from a fifth of the screen to a sixth
+ * and nobody noticed until the one after it.
+ *
+ * So they stay as they were written and the drawing is scaled instead. The one
+ * thing that cannot follow smoothly is the font, which is a five by seven bitmap
+ * blitted at whole multiples - so it goes up in steps while the panels around it
+ * move continuously, which is what a bitmap interface at a higher resolution has
+ * always looked like.
+ */
+const HUD_BASE_W = 480;
+const HUD_BASE_H = 336;
+const HUD_SCALE = SCREEN_W / HUD_BASE_W;
+
 const HUD_BACK = md(12, 12, 24);
 const HUD_EDGE = md(80, 84, 110);
 const HUD_TEXT = md(226, 230, 240);
@@ -810,7 +830,7 @@ export class Renderer {
 
   /** The map, the field on it, and you. */
   drawMap(state, p, x, y) {
-    const rt = this.rt;
+    const rt = this.ui;
     const { pts, place, start } = this.map(state.route);
     rt.panel(x, y, MAP_W, MAP_H, HUD_BACK, HUD_EDGE);
     for (const [px, py] of pts) rt.rect(x + px, y + py, 1, 1, HUD_DIM);
@@ -847,10 +867,37 @@ export class Renderer {
    *
    * Everything is in the corner an arcade cabinet put it in, and the biggest
    * thing on the screen is whichever number you are actually playing for.
+   *
+   * All of it is laid out against a screen four hundred and eighty across and
+   * scaled onto whatever the screen actually is, which is what `ui` below is
+   * for.
    */
-  hud(state, p) {
+
+  /**
+   * The raster, taking coordinates in the HUD's own four-hundred-and-eighty-wide
+   * space instead of in pixels.
+   */
+  get ui() {
+    if (this._ui) return this._ui;
     const rt = this.rt;
-    const W = SCREEN_W;
+    const u = HUD_SCALE;
+    const q = (n) => Math.round(n * u);
+    // At least one, and whole: half a pixel of bitmap font is no font at all.
+    const k = (n) => Math.max(1, Math.round((n || 1) * u));
+    this._ui = {
+      panel: (x, y, w, h, a, b) => rt.panel(q(x), q(y), q(w), q(h), a, b),
+      rect: (x, y, w, h, c) => rt.rect(q(x), q(y), q(w), q(h), c),
+      text: (str, x, y, c, n) => rt.text(str, q(x), q(y), c, k(n)),
+      textMid: (str, x, y, c, n) => rt.textMid(str, q(x), q(y), c, k(n)),
+      blit: (...args) => rt.blit(...args),
+    };
+    return this._ui;
+  }
+
+  hud(state, p) {
+    const rt = this.ui;
+    const W = HUD_BASE_W;
+    const SCREEN_H = HUD_BASE_H;
     const qual = state.mode === 'qual';
 
     // The clock, in the middle, big, and red when it is nearly gone.
@@ -969,12 +1016,12 @@ export class Renderer {
     }
     if (Math.abs(worst) < 0.035) return;
 
-    const rt = this.rt;
+    const rt = this.ui;
     const hard = Math.abs(worst) > 0.085;
     const near = at < 24;
     const colour = hard ? (near ? BAD : WARN) : HUD_DIM;
     const right = worst > 0;
-    const x = SCREEN_W / 2 + (right ? 32 : -50);
+    const x = HUD_BASE_W / 2 + (right ? 32 : -50);
     rt.panel(x, 30, 18, 16, HUD_BACK, colour);
     // A solid triangle, eight rows, pointing the way the corner goes.
     for (let row = 0; row < 8; row++) {
@@ -994,14 +1041,15 @@ export class Renderer {
    * number reaches zero.
    */
   lights(state) {
-    const rt = this.rt;
+    const rt = this.ui;
+    const W = HUD_BASE_W;
     const on = Math.min(5, Math.floor((LIGHTS - state.lights) / 40));
-    rt.panel(SCREEN_W / 2 - 56, 78, 112, 24, HUD_BACK, HUD_EDGE);
+    rt.panel(W / 2 - 56, 78, 112, 24, HUD_BACK, HUD_EDGE);
     for (let i = 0; i < 5; i++) {
       const lit = i < on;
-      rt.rect(SCREEN_W / 2 - 50 + i * 21, 82, 16, 16, lit ? BAD : shade(HUD_EDGE, 0.4));
+      rt.rect(W / 2 - 50 + i * 21, 82, 16, 16, lit ? BAD : shade(HUD_EDGE, 0.4));
     }
-    if (on >= 5) rt.textMid('READY', SCREEN_W / 2, 106, WARN);
+    if (on >= 5) rt.textMid('READY', W / 2, 106, WARN);
   }
 }
 

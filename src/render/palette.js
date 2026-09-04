@@ -32,6 +32,12 @@ export const C = {
   lamp: md(255, 244, 196),
   crowd: md(160, 120, 150),
   armco: md(206, 210, 214),
+  // Corner boards. Yellow with a black chevron on it, which is the most legible
+  // pair of colours there is and is what the boards beside a real circuit are
+  // painted, for the same reason.
+  board: md(248, 206, 48),
+  boardHard: md(240, 96, 36),
+  boardMark: md(24, 22, 20),
 };
 
 /**

@@ -250,6 +250,14 @@ and exactly what it looked like. The infield is now one flat plain a few metres
 below the average height of the circuit. The outside may still do as it pleases:
 it points away, and nothing it does can ever be in front of anything.
 
+Every corner on every circuit is signed. Two boards on the approach, at about
+ninety metres and forty-five, and then a run of them down the outside of the
+corner itself - one chevron for a bend you take flat, two for a hundred and
+ninety km/h, three for one that needs the brakes properly. It is the convention
+every rally and half the circuits in the world already use, so it needs no
+explaining, and it is there because at three hundred and fifty a corner arrives
+in under two seconds from the point where the road stops looking straight.
+
 ## The look
 
 Everything you can see is polygons standing in the world — no sprites, no
@@ -257,13 +265,19 @@ billboards, no textures anywhere. Go round a bend and the palm tree turns,
 because it is actually there.
 
 The renderer is about five hundred lines and does not use the GPU. It transforms,
-clips, projects and fills every triangle by hand into a `Uint32Array` at 480 ×
-336 — half again the 320 × 224 a Mega Drive put on a television, in the same ten
-by seven shape — and blows the result up to fit the window with the smoothing
-turned off. That is not the slow way round: four thousand flat triangles over a
-hundred and sixty thousand pixels is under two and a half milliseconds, which
-leaves fourteen of the sixteen a frame gets. What makes this read as sixteen-bit
-is the flat shading and the nine-bit palette, not the count of pixels.
+clips, projects and fills every triangle by hand into a `Uint32Array` at 640 ×
+448 — twice the 320 × 224 a Mega Drive put on a television, in the same ten by
+seven shape, which is past what that machine could do and about what a Saturn
+ran Virtua Fighter 2 at — and blows the result up to fit the window with the
+smoothing turned off. That is not the slow way round: six thousand flat triangles
+over two hundred and eighty-seven thousand pixels is under four milliseconds,
+which leaves twelve of the sixteen a frame gets.
+
+What makes this read as sixteen-bit was never the pixel count. It is the flat
+shading, the nine-bit palette, and the fact that a tree is three polygons — and
+more pixels make those clearer rather than less true. The HUD is laid out against
+a fixed 480-wide space and scaled onto whatever the screen is, so it stops
+shrinking every time that number goes up, which is what it had been quietly doing.
 
 Doing it in software buys the one thing a modern pipeline will not give you,
 which is the actual look:

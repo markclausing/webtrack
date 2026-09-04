@@ -277,17 +277,22 @@ export function gearAt(speed) {
  * twelve that machine could make, and there is not a texture anywhere.
  */
 /**
- * Four hundred and eighty by three hundred and thirty-six.
+ * Six hundred and forty by four hundred and forty-eight.
  *
- * Half again the 320 x 224 a Mega Drive put on a television, in the same ten by
- * seven shape. A hundred and sixty-one thousand pixels against seventy-two,
- * which the software rasteriser has the room for - the frame is still a third of
- * its budget - and which the look still tolerates, because what makes this read
- * as sixteen-bit is the flat shading and the nine-bit palette rather than the
- * count of pixels.
+ * Twice the 320 x 224 a Mega Drive put on a television, in the same ten by seven
+ * shape, and past what that machine could do - this is the resolution a Saturn
+ * ran Virtua Fighter 2 at, near enough. Two hundred and eighty-seven thousand
+ * pixels against seventy-two, and the frame goes from 2.4 milliseconds to 3.7 of
+ * the sixteen and a half there are.
+ *
+ * The look survives it because what makes this read as sixteen-bit was never the
+ * pixel count: it is the flat shading, the nine-bit palette and the fact that a
+ * tree is three polygons. More pixels make those things clearer rather than less
+ * true - and the HUD is laid out against a fixed four hundred and eighty wide
+ * space now, so it no longer shrinks every time this number goes up.
  */
-export const SCREEN_W = 480;
-export const SCREEN_H = 336;
+export const SCREEN_W = 640;
+export const SCREEN_H = 448;
 
 /**
  * Field of view, as the focal length of a screen this wide.
@@ -298,8 +303,8 @@ export const SCREEN_H = 336;
  * through the middle of it. The eye reads that as velocity far more readily than
  * it reads a number changing in the corner.
  */
-export const FOCAL = 374;
-export const FOCAL_FAST = 266;
+export const FOCAL = 499;
+export const FOCAL_FAST = 355;
 /** Nothing nearer than this is drawn, because the maths stops working at zero. */
 export const NEAR = 0.55;
 

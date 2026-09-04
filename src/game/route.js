@@ -927,6 +927,85 @@ function checkpointsFor(count) {
 }
 
 /**
+ * Corner boards: chevrons on the approach to every corner, and down the outside
+ * of it.
+ *
+ * This is a driving aid and it is the honest kind. The circuit does not change
+ * and the car does not change; what changes is that you are told a corner is
+ * coming while there is still time to do something about it, which is exactly
+ * what the boards beside a real circuit are for. At three hundred and fifty a
+ * corner arrives in under two seconds from the point where the road ahead of it
+ * stops looking straight, and on a crest or through trees it arrives from
+ * nowhere at all.
+ *
+ * One chevron for a corner you lift for, two for third gear, three for one that
+ * needs the brakes properly - the same convention as everywhere else, so nobody
+ * has to be told. Two boards on the approach at about ninety and forty-five
+ * metres, then a run of them down the outside of the corner itself, which is
+ * where your eyes already are.
+ *
+ * The curvature is read over a stretch rather than off a node: one node of a
+ * circuit is six metres, and six metres of anything is noise.
+ */
+function cornerBoards(nodes, add) {
+  const count = nodes.length;
+  const at = (i) => nodes[((i % count) + count) % count];
+  const SPAN = 5;
+  const smooth = new Float64Array(count);
+  for (let i = 0; i < count; i++) {
+    let sum = 0;
+    for (let k = -SPAN; k <= SPAN; k++) sum += at(i + k).curve;
+    smooth[i] = sum / (SPAN * 2 + 1);
+  }
+
+  // Anything gentler than this is a bend you take flat, and a board on it is a
+  // board nobody reads. A node is six metres, so curvature in radians per node
+  // is six over the radius: this is a two hundred and fifty metre corner, which
+  // at this much grip is about two hundred and eighty km/h.
+  const ENOUGH = 0.024;
+  const corners = [];
+  let run = null;
+  for (let i = 0; i < count; i++) {
+    if (Math.abs(smooth[i]) > ENOUGH) {
+      run ||= { from: i, peak: 0 };
+      if (Math.abs(smooth[i]) > Math.abs(run.peak)) run.peak = smooth[i];
+      run.to = i;
+    } else if (run) {
+      if (run.to - run.from >= 3) corners.push(run);
+      run = null;
+    }
+  }
+  if (run && run.to - run.from >= 3) corners.push(run);
+
+  for (const corner of corners) {
+    const bend = corner.peak > 0 ? 1 : -1;
+    // How many chevrons, from what the corner is actually worth in speed rather
+    // than from a number that looked about right. Six over the curvature is the
+    // radius and the square root of grip times radius is the speed, so three
+    // chevrons is a fifty metre corner at around a hundred and thirty km/h,
+    // two is a hundred and ten metres at about a hundred and ninety, and one is
+    // everything else that is still a corner.
+    const peak = Math.abs(corner.peak);
+    const sharp = peak > 0.12 ? 3 : peak > 0.055 ? 2 : 1;
+    // The outside of the corner, which is the side you are looking at on the way
+    // in and the side you end up on if you get it wrong.
+    const side = -bend;
+    const board = (i) => {
+      const node = at(i);
+      add(i, {
+        kind: 'sign', side, off: node.wall + 2.4, s: 1, r: 0,
+        align: true, flat: true, bend, sharp,
+      });
+    };
+    // On the approach: ninety metres and forty-five.
+    board(corner.from - 15);
+    board(corner.from - 8);
+    // And down the outside of the corner itself, every thirty metres.
+    for (let i = corner.from; i <= corner.to; i += 5) board(i);
+  }
+}
+
+/**
  * Everything standing beside the track.
  *
  * Placed on the node it belongs to and drawn when that node is drawn, which
@@ -1055,6 +1134,8 @@ function scatter(nodes, rnd) {
   add(third + 40, { kind: 'balloon', side: 1, off: 80, s: 1, r: 0.7, lift: 42 });
   add(third * 2 + 90, { kind: 'balloon', side: 1, off: 120, s: 0.8, r: 2.1, lift: 58 });
   add(Math.floor(third * 1.5), { kind: 'chopper', side: 1, off: 30, s: 1, r: 0, lift: 32, align: true });
+
+  cornerBoards(nodes, add);
 
   // The gantry is the checkpoint. It is placed on the node the clock is actually
   // reading, not near it, because a gate you go under half a second before the
@@ -1272,6 +1353,8 @@ function dress(nodes, real, rnd) {
       kind: 'flyover', side: 0, off: 0, s: 1, r: cross, lift: clear, align: true,
     });
   }
+
+  cornerBoards(nodes, add);
 
   // The gantry is the checkpoint, on the node the clock actually reads.
   for (const at of checkpointsFor(count)) {

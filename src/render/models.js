@@ -320,6 +320,55 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       }
       break;
     }
+    /**
+     * A corner board: chevrons on a panel, on two legs, facing back up the road.
+     *
+     * One chevron for a corner you lift for, three for one that needs the
+     * brakes, which is the convention every rally and half the circuits in the
+     * world already use - so it needs no explaining, and it is readable at the
+     * distance where reading it is still worth something.
+     *
+     * Built in the local x-y plane, so with the track's heading it stands square
+     * across the road and faces whoever is arriving.
+     */
+    case 'sign': {
+      const bend = prop.bend || 1;
+      const count = Math.max(1, Math.min(3, prop.sharp || 1));
+      const leg = tint(shade(C.metal, 0.8));
+      const face = tint(count >= 3 ? C.boardHard : C.board);
+      const mark = tint(C.boardMark);
+      const back = tint(shade(C.metal, 0.55));
+      const W = 2.9;
+      const y0 = 1.9;
+      const y1 = 4.5;
+      for (const at of [-W * 0.62, W * 0.62]) {
+        put.face(rt, leg, [at - 0.14, 0, 0, at + 0.14, 0, 0, at + 0.14, y0, 0, at - 0.14, y0, 0]);
+      }
+      // The panel, and its back, so it is a board rather than a hole in the air
+      // when you look at it from the far side of the corner.
+      put.face(rt, back, [W, y0, 0.09, -W, y0, 0.09, -W, y1, 0.09, W, y1, 0.09]);
+      put.face(rt, face, [-W, y0, 0, W, y0, 0, W, y1, 0, -W, y1, 0]);
+      // The chevrons, pointing the way the road goes.
+      const mid = (y0 + y1) / 2;
+      const tall = (y1 - y0) * 0.34;
+      const wide = 0.62;
+      const step = 1.55;
+      const left = -((count - 1) * step) / 2;
+      for (let c = 0; c < count; c++) {
+        const cx = left + c * step;
+        // A filled arrowhead: tip on the bend's side, two tails behind it, and a
+        // notch cut out of the back so it reads as a chevron and not a triangle.
+        put.face(rt, mark, [
+          cx + bend * wide, mid, -0.02,
+          cx - bend * wide * 0.55, mid + tall, -0.02,
+          cx - bend * wide * 0.05, mid + tall, -0.02,
+          cx + bend * wide * 1.5, mid, -0.02,
+          cx - bend * wide * 0.05, mid - tall, -0.02,
+          cx - bend * wide * 0.55, mid - tall, -0.02,
+        ]);
+      }
+      break;
+    }
     case 'rock':
     case 'crag': {
       const lit = tint(theme.rock);
