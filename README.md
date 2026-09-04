@@ -131,21 +131,36 @@ always a way past, and only on the approach, because covering the inside of a
 corner it is already in means going off the outside of it. Make them commit, then
 go the other way.
 
-**They are in the same car as you, and on normal they are given three per cent
-more of it.** That is deliberately on the wrong side of one: at ninety-eight per
-cent of your grip they were a field a driver who knows the circuit simply walked
-away from. Three per cent is worth about a second a lap, which over three laps is
-the difference between coming through and not — and it leaves the difficulty to
-be the only thing it should be, which is how well they use the car. No rubber
-band, no catching you up when you crash, no pulling away when you do not. A rival
-that cheated at *braking points* would be one you could not learn, and learning
-where they brake is still the only way past seven of them.
+**They are in exactly the car you are in.** On normal the multiplier is one: no
+extra grip, no extra top end, no rubber band, no catching you up when you crash
+and no pulling away when you do not. That is only a fair fight because they now
+drive it properly, which for a long time they did not — see below. Easy gives
+them five per cent less and you six per cent more; hard gives them seven and a
+half per cent more.
+
+**What made them slow was never their pace, it was their traffic.** Alone on the
+circuit they were always within a second a lap of a competent drive. In a pack of
+eight they were ten seconds a lap slower, and all of it was self-inflicted: every
+car within twenty-six metres of another made it drive defensively, so in a field
+this close all eight spent three laps off the racing line covering each other;
+and two cars leaning on each other were charged three and a half per cent of
+their speed *every frame it lasted*, which is twelve per cent a second, so nobody
+could run alongside anybody through a corner without both of them losing the
+race. They now lose three tenths of a second a lap to each other, and the test
+suite measures exactly that, because it is the failure this game keeps drifting
+back into.
 
 They aim at the apex and nothing cleverer. A proper three-phase racing line —
 outside on entry, apex, outside on exit — was tried and made them two seconds a
 lap slower and put them on the grass a third of the time: the line moves further
 and faster than their steering can follow, and a car sawing at a line it cannot
 hold is slower than a car holding a worse one.
+
+What they did need was to steer at where the car is *going* as well as at where
+it is. A corner pushes continuously, and a controller that only looks at the
+error has a standing one: they spent eight per cent of every lap off the tarmac
+and hit the barrier twice a lap, alone, on an empty circuit. One term for the
+lateral velocity took that to a third of a per cent and three hundredths.
 
 **And they stay in touch with each other.** The field is spread by about one per
 cent of pace from pole to the back row, end to end. That number is doing more for

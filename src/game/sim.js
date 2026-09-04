@@ -355,16 +355,37 @@ function contacts(state) {
       const ds = a.s - b.s;
       if (Math.abs(ds) > BODY_S || Math.abs(a.x - b.x) > BODY_X) continue;
 
-      // Side by side: they lean on each other and both lose a little.
-      const push = (a.x < b.x ? -1 : 1) * NUDGE;
-      a.vx += push;
-      b.vx -= push;
-      a.speed *= NUDGE_COST;
-      b.speed *= NUDGE_COST;
+      // Side by side: they are moved apart until they are not in the same place,
+      // and the speed they lose is charged once.
+      //
+      // Moved rather than pushed. An acceleration applied every tick they
+      // overlap accumulates: two cars leaning on each other for half a second
+      // come out of it with fifteen metres a second of sideways speed and go
+      // straight into the barriers, which is where a hundred and eighty barrier
+      // hits a race came from. This separates them by the overlap and cancels
+      // the speed they were closing at, which is what two cars leaning on each
+      // other actually do.
+      const gap = a.x - b.x;
+      const dir = gap < 0 ? -1 : 1;
+      const overlap = BODY_X - Math.abs(gap);
+      a.x += dir * overlap * 0.5;
+      b.x -= dir * overlap * 0.5;
+      const leaning = (a.vx - b.vx) * dir;
+      if (leaning < 0) {
+        a.vx -= leaning * 0.5 * dir;
+        b.vx += leaning * 0.5 * dir;
+      }
+      // And a shove, once, so contact is felt rather than merely resolved.
+      if (!a.bumpT && !b.bumpT) {
+        a.vx += dir * NUDGE * 0.35;
+        b.vx -= dir * NUDGE * 0.35;
+      }
 
       if (a.bumpT || b.bumpT) continue;
       a.bumpT = BUMP_COOL;
       b.bumpT = BUMP_COOL;
+      a.speed *= NUDGE_COST;
+      b.speed *= NUDGE_COST;
       state.events.push({ t: 'touch', mine: a === player(state) || b === player(state) });
 
       // Nose to tail is a different thing entirely. Whoever was behind was the
@@ -424,12 +445,18 @@ function think(state, car) {
     const block = inTheWay(state, car);
     if (block) car.line = Math.max(-wide, Math.min(wide, block));
 
-    // And somebody in the mirrors is worth more than either. It moves part of
-    // the way across to cover the side they are coming down - part, so there is
-    // always a way past, and only on the approach, because covering the inside
-    // of a corner you are already in means going off the outside of it.
+    // And somebody in the mirrors is worth more than either - but only when
+    // there is actually a move being made, and only where a move can be made.
+    //
+    // Defending on every straight against everybody within twenty-six metres
+    // cost the field seven seconds a lap, because in a bunched race there is
+    // always somebody there: all eight of them spent the whole afternoon off
+    // the racing line covering each other and the player drove round the
+    // outside of the lot. So: close, genuinely quicker, and not in a corner -
+    // a corner is where the line is worth more than the door.
     const chaser = behind(state, car);
-    if (chaser) {
+    const inCorner = Math.abs(nodeStep(state.route, i, 6).curve) > 0.02;
+    if (chaser && !inCorner && chaser.speed > car.speed + 1.5) {
       const cover = car.line + (chaser.x - car.line) * AI_DEFEND;
       car.line = Math.max(-wide, Math.min(wide, cover));
     }
@@ -448,7 +475,12 @@ function think(state, car) {
     line += car.wrongTo;
   }
 
-  const off = line - car.x;
+  // Steering against where the car is going as well as where it is. Without the
+  // second term it is a proportional controller fighting a corner that pushes
+  // continuously, which leaves a standing error: they ran eight per cent of
+  // every lap off the tarmac and into the barrier twice a lap, alone on an
+  // empty circuit. It is the same anticipation the reference driver uses.
+  const off = (line - car.x) - car.vx * 0.34;
   const want = limit;
   car.ctl = {
     throttle: car.speed < want,

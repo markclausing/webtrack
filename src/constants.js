@@ -196,15 +196,17 @@ export const AI_SPREAD = 0.0016;    // per grid slot
 /**
  * How hard a rival will defend.
  *
- * A car with somebody in its mirrors moves across to cover the side they are
- * coming down, but only part of the way and only when it has grip to spare -
- * which means it cannot do it in the middle of a corner, which is where you get
- * past it. Without this they hold their line and an overtake is a matter of
- * having a faster car; with it, it is a matter of putting them somewhere they
- * did not want to be first.
+ * A car with somebody close behind and genuinely coming past moves part of the
+ * way across to cover the side they are on - part, so there is always a way
+ * through, and never in a corner, where the line is worth more than the door.
+ *
+ * The range matters more than the strength. At twenty-six metres, in a field
+ * this close, every car had somebody in its mirrors the whole race and the whole
+ * field drove defensively for three laps: seven seconds a lap slower than the
+ * same cars spread out. Fifteen metres is somebody who is actually there.
  */
-export const AI_DEFEND = 0.62;      // how far across they will come
-export const AI_MIRROR = 26;        // metres of mirror they look into
+export const AI_DEFEND = 0.55;      // how far across they will come
+export const AI_MIRROR = 15;        // metres of mirror they look into
 
 // --- The clock ---------------------------------------------------------------
 
@@ -227,15 +229,14 @@ export const CHECKPOINT_EVERY = 220;
  * What the three settings change.
  *
  * `ai` is the whole difficulty and is a multiplier on the rivals' grip and
- * power. On normal they have three per cent more than you: it is not much, and
- * it is deliberately on the wrong side of one, because a driver who knows the
- * circuit is worth a good deal more than three per cent and the alternative is a
- * field you leave behind on lap one. `grip` is your own, and is the other half
- * of the same dial from the other end.
+ * power. On normal it is one: exactly the car you have, driven properly, which
+ * is a good deal harder than it sounds and was worth three per cent extra only
+ * while they were losing seven seconds a lap to each other. `grip` is your own,
+ * and is the other half of the same dial from the other end.
  */
 export const TIERS = {
   easy: { clock: 1.3, ai: 0.95, grip: 1.06, label: 'Easy' },
-  normal: { clock: 1, ai: 1.03, grip: 1, label: 'Normal' },
+  normal: { clock: 1, ai: 1, grip: 1, label: 'Normal' },
   hard: { clock: 0.86, ai: 1.075, grip: 0.96, label: 'Hard' },
 };
 
