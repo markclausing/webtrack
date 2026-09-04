@@ -346,6 +346,48 @@ for (const tier of ['easy', 'normal', 'hard']) {
       .table('gp', 'pass', 'normal').length === 1);
 }
 
+// --- Whether it is a race ------------------------------------------------------
+
+// The one test that is about whether the game is any good rather than whether it
+// works: the field has to be worth beating.
+//
+// It is here because it kept not being true. The rivals could each lap Spa in
+// 1:58 and the field averaged 2:01, because they drove into the back of each
+// other all afternoon and paid three and a half per cent of their speed for
+// every contact - and whoever was in clean air pocketed the difference, which
+// was always the player. They keep nine metres now, and they take a corner from
+// the outside of it rather than from the middle.
+{
+  const field = (tier, share) => {
+    let place = 0;
+    let runs = 0;
+    for (const route of ['spa', 'monza', 'zandvoort', 'pass', 'coast']) {
+      for (const seed of [3, 9]) {
+        const state = makeRace({ route, mode: 'gp', tier, seed });
+        let t = 0;
+        while (!state.finished && t < TICK_RATE * 900) {
+          step(state, driveLine(state, share));
+          state.clock = 999;
+          t++;
+        }
+        place += player(state).place;
+        runs++;
+      }
+    }
+    return place / runs;
+  };
+
+  const normal = field('normal', 0.98);
+  ok(`on normal the reference driver finishes ${normal.toFixed(1)}th, not first`, normal > 4);
+  const committed = field('normal', 1.06);
+  ok(`and has to be over-committed to be near the front (${committed.toFixed(1)}th at 1.06)`,
+    committed < normal);
+  const gentle = field('easy', 0.98);
+  ok(`while on easy the same driver wins (${gentle.toFixed(1)}th)`, gentle < 2);
+  const brutal = field('hard', 1.06);
+  ok(`and on hard being over-committed is not enough (${brutal.toFixed(1)}th)`, brutal > 4);
+}
+
 // --- The corner boards --------------------------------------------------------
 
 // Chevrons on every circuit, and never two of them disagreeing.

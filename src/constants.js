@@ -86,6 +86,16 @@ export const STEER_FLOOR = 5;
 /** Rolling resistance off the tarmac: grass and gravel. */
 export const OFFROAD_DRAG = 0.9;
 export const OFFROAD_TOP = 0.42;
+/**
+ * And on the kerb and the grass beside it.
+ *
+ * Between the two, and it did not exist: the verge had full power, so three
+ * metres of grass on a corner exit cost eight hundredths of a second and running
+ * wide was a line rather than a mistake. Three quarters is enough that a moment
+ * out there costs you the exit and the straight after it, and not so little that
+ * a wheel on the kerb ends your race.
+ */
+export const VERGE_TOP = 0.74;
 
 /**
  * The tow.

@@ -28,7 +28,7 @@
 import {
   ACCEL, AI_DEFEND, AI_GRIP, AI_LOOK, AI_MIRROR, AI_SPREAD, AI_TOP, BODY_S, BODY_X, BRAKE,
   BTN, CHECKPOINT_TIME, DRAG, DRIVE, DT, GRAVITY, GRIP, GRIP_ROUGH, GRIP_VERGE, NUDGE,
-  NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL,
+  NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL, VERGE_TOP,
   SPIN_AT, SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
   TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP, CAR_HALF,
 } from '../constants.js';
@@ -202,7 +202,15 @@ function drive(state, car) {
   // than a wider line.
   const hold = surf === 'road' ? 1 : surf === 'verge' ? GRIP_VERGE : GRIP_ROUGH;
   const grip = GRIP * state.cfg.grip * hold * (car.gripScale || 1) * dished(node);
-  const pull = (car.power || DRIVE) * (surf === 'rough' ? OFFROAD_TOP : 1);
+  // And how much of the engine reaches the ground.
+  //
+  // The verge used to get all of it: thirty-eight per cent less grip, a little
+  // rolling drag, and full power. Which meant that on any corner exit you could
+  // put three metres of the car on the grass and it cost eight hundredths of a
+  // second - so running wide was not a mistake, it was a slightly different
+  // line. Grass does not give you full traction. It gives you wheelspin.
+  const pull = (car.power || DRIVE)
+    * (surf === 'rough' ? OFFROAD_TOP : surf === 'verge' ? VERGE_TOP : 1);
 
   let acc = 0;
   if (ctl.throttle) acc += ACCEL * Math.max(0, 1 - car.speed / Math.max(8, pull));
@@ -473,7 +481,37 @@ function think(state, car) {
     // cleverer one.
     const { i } = nodeAt(state.route, car.s);
     const soon = nodeStep(state.route, i, 22);
-    car.line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * wide;
+    const now = nodeStep(state.route, i, 4);
+    const late = nodeStep(state.route, i, 40);
+    const apex = Math.min(1, Math.abs(soon.curve) * 34);
+    // Out, in, out - as much of it as their hands can actually follow.
+    //
+    // The apex on its own is what they used to aim at, and it is a slow way
+    // round: a corner taken from the middle of the road has a smaller radius
+    // than the same corner taken from the outside of it, and a smaller radius is
+    // a lower speed. The three-phase line was tried before and abandoned because
+    // it moved faster than their steering could follow - but their steering has
+    // an anticipation term now that it did not have then, and with that it
+    // holds. It is worth less in a single fast lap than it is over a race: their
+    // quickest lap is unchanged, and they spend a fifth of the time off the
+    // tarmac and stopped hitting the barrier altogether, which is where the race
+    // pace actually comes from.
+    //
+    // Which phase they are in comes from comparing the corner in front of them
+    // with the corner under them: rising curvature is an entry and wants the
+    // outside, falling curvature is an exit and wants the outside as well, and
+    // the apex is the moment in between.
+    const rising = Math.abs(late.curve) - Math.abs(now.curve);
+    const wideSide = Math.sign(soon.curve || now.curve || 1);
+    if (apex < 0.12) {
+      car.line = 0;
+    } else if (rising > 0.006) {
+      car.line = wideSide * wide * Math.min(1, apex * 1.1);
+    } else if (rising < -0.006) {
+      car.line = Math.sign(now.curve || 1) * wide * Math.min(1, apex * 0.9);
+    } else {
+      car.line = -Math.sign(soon.curve) * apex * wide;
+    }
 
     // Somebody slow in the way is worth more than the perfect line.
     const block = inTheWay(state, car);
@@ -515,12 +553,57 @@ function think(state, car) {
   // every lap off the tarmac and into the barrier twice a lap, alone on an
   // empty circuit. It is the same anticipation the reference driver uses.
   const off = (line - car.x) - car.vx * 0.34;
-  const want = limit;
+
+  /**
+   * And they no longer drive into the back of each other.
+   *
+   * There was nothing in here about the car in front. The only speed a rival
+   * knew was the speed the next corner allows, so on a circuit where they are
+   * evenly matched - which is every circuit, the field is spread by one per cent
+   * end to end - the one behind simply drove into the one ahead, was shoved
+   * sideways by the contact code, lost three and a half per cent of its speed,
+   * and did it again. They spend forty per cent of a race within fifteen metres
+   * of somebody, so that ran to about three seconds a lap: the fastest of them
+   * could lap Spa in 1:58 and the field averaged 2:01, and the difference was
+   * paid straight to whoever was in clean air. Which was the player.
+   *
+   * Nine metres and matching speed. Closer than that and they lift; further and
+   * they can close, which keeps them inside the forty-two metres a tow works
+   * over - so a car that cannot pass sits in the hole in the air and waits for
+   * somewhere it can, instead of hammering the car in front down the straight.
+   */
+  let want = limit;
+  const front = ahead(state, car);
+  if (front) {
+    const gap = front.s - car.s;
+    want = Math.min(want, front.speed + Math.max(0, (gap - 9) * 0.9));
+  }
   car.ctl = {
     throttle: car.speed < want,
     brake: car.speed > want * 1.02 + 0.5,
     steer: Math.max(-1, Math.min(1, off * 0.95)),
   };
+}
+
+/**
+ * The car this one is about to run into: nearest ahead, in its path, and closing.
+ *
+ * Narrower than `inTheWay`, and looking for something else. That one asks which
+ * side to go round somebody slow; this one asks whether to be on the brakes at
+ * all, so it only cares about cars actually in front of this one's nose.
+ */
+function ahead(state, car) {
+  let best = null;
+  let closest = 34;
+  for (const other of state.cars) {
+    if (other === car || other.done) continue;
+    const gap = other.s - car.s;
+    if (gap <= 0 || gap > closest) continue;
+    if (Math.abs(other.x - car.x) > BODY_X * 1.15) continue;
+    closest = gap;
+    best = other;
+  }
+  return best;
 }
 
 /**

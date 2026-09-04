@@ -54,6 +54,22 @@ On a phone, hold it sideways. The bottom-left corner is the wheel, `GAS` is the
 big button, `BRAKE` is the small one beside it, and the little `II` at the top
 pauses.
 
+### What the rivals do
+
+Seven of them, in the same machinery as yours, and the difficulty setting moves
+their grip and your clock rather than giving them anything you do not have. They
+work out a braking point the same way you do — how fast may I be going for what
+is coming — and they take a corner from the outside of it, which is the only way
+round that is quick.
+
+They also leave nine metres to the car in front. That sounds like nothing and it
+is most of the racing: without it the one behind simply drove into the one ahead,
+was shoved sideways, lost three and a half per cent of its speed and did it
+again. They spend forty per cent of a race within fifteen metres of somebody, so
+that ran to about three seconds a lap — the fastest of them could lap Spa in 1:58
+while the field averaged 2:01, and the difference went straight to whoever was in
+clean air. Which was always you.
+
 ## Two ways out
 
 **Qualifying** is an empty circuit, three laps and a long clock. Only one number
