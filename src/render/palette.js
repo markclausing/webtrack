@@ -34,6 +34,14 @@ export const C = {
   armco: md(206, 210, 214),
 };
 
+/**
+ * `ridge` is a misnomer kept for the sake of the two themes that were here
+ * first: nothing draws a ridge with it. It is the colour of anything built -
+ * grandstands and the blocks along the boulevard - and on a circuit in the sand
+ * that matters more than it sounds. Given the dunes' own tan it camouflaged
+ * every stand at Zandvoort, and eighteen metres of grandstand the colour of the
+ * dune behind it reads as a mesa, which is what it looked like.
+ */
 export const THEMES = {
   mountain: {
     sky: [
@@ -53,6 +61,101 @@ export const THEMES = {
     tree: md(30, 66, 44),
     trunk: md(74, 54, 38),
     water: md(58, 94, 128),
+  },
+  /**
+   * The Ardennes. Spruce to the barrier on both sides, and a sky that is doing
+   * you a favour by not raining - which at Spa it usually is, and which is why
+   * the green here is a cold one rather than a summer one.
+   */
+  ardennes: {
+    sky: [
+      [0.20, md(30, 44, 92)],
+      [0.34, md(58, 78, 132)],
+      [0.44, md(102, 126, 166)],
+      [0.52, md(150, 170, 194)],
+      [1.00, md(184, 196, 206)],
+    ],
+    fog: md(168, 180, 190),
+    near: md(58, 96, 54),
+    mid: md(44, 78, 46),
+    far: md(52, 74, 62),
+    ridge: md(116, 122, 128),
+    verge: md(88, 110, 66),
+    rock: md(112, 110, 104),
+    tree: md(22, 54, 38),
+    trunk: md(64, 48, 36),
+    water: md(52, 84, 110),
+  },
+  /**
+   * The Royal Park at Monza: broadleaf rather than conifer, and a warmer, dustier
+   * light. The park is the reason the circuit looks like nowhere else - it is a
+   * road through a wood, not a facility with trees around it.
+   */
+  park: {
+    sky: [
+      [0.20, md(36, 56, 116)],
+      [0.34, md(70, 100, 158)],
+      [0.44, md(122, 156, 190)],
+      [0.52, md(176, 196, 208)],
+      [1.00, md(206, 210, 200)],
+    ],
+    fog: md(198, 200, 186),
+    near: md(84, 116, 56),
+    mid: md(66, 98, 50),
+    far: md(84, 102, 74),
+    ridge: md(134, 134, 130),
+    verge: md(110, 128, 68),
+    rock: md(132, 126, 114),
+    tree: md(44, 84, 40),
+    trunk: md(84, 62, 42),
+    water: md(60, 96, 120),
+  },
+  /** Suzuka: bright, humid, and hazier the further out you look. */
+  japan: {
+    sky: [
+      [0.20, md(40, 66, 128)],
+      [0.34, md(78, 116, 172)],
+      [0.44, md(134, 172, 200)],
+      [0.52, md(186, 206, 216)],
+      [1.00, md(212, 218, 216)],
+    ],
+    fog: md(204, 212, 212),
+    near: md(76, 122, 62),
+    mid: md(58, 102, 56),
+    far: md(78, 106, 88),
+    ridge: md(124, 132, 138),
+    verge: md(104, 132, 72),
+    rock: md(124, 122, 114),
+    tree: md(36, 80, 46),
+    trunk: md(78, 60, 42),
+    water: md(56, 100, 132),
+  },
+  /**
+   * Zandvoort. Sand on both sides and the North Sea over the top of it, which is
+   * a colder and greyer sea than the one on the boulevard - that one is a
+   * holiday and this one is weather.
+   */
+  dunes: {
+    sky: [
+      [0.20, md(48, 68, 118)],
+      [0.34, md(88, 116, 158)],
+      [0.44, md(140, 164, 188)],
+      [0.52, md(186, 200, 210)],
+      [1.00, md(212, 214, 210)],
+    ],
+    fog: md(186, 192, 190),
+    near: md(190, 174, 130),
+    mid: md(172, 158, 118),
+    far: md(152, 144, 116),
+    ridge: md(126, 130, 136),
+    verge: md(158, 156, 96),
+    rock: md(164, 152, 126),
+    tree: md(96, 116, 62),
+    trunk: md(112, 96, 62),
+    // Colder and greyer than the boulevard's water, and a good deal stronger
+    // than it started out: at the first attempt the North Sea was within a
+    // shade of the haze in front of it and the beach read as an overexposure.
+    water: md(40, 86, 122),
   },
   coast: {
     sky: [

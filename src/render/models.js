@@ -112,6 +112,214 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       put.face(rt, dark, [0.45, 5.4, 0, 0.6, 4.3, -2.6, -0.4, 6.0, -1.4]);
       break;
     }
+    /**
+     * A spruce. Taller and narrower than the pine, and darker.
+     *
+     * It exists because Spa is a corridor through conifers and the pine already
+     * in here reads as an alpine tree standing on its own. Three crossed
+     * triangles rather than two: a spruce seen from a car is a column, and two
+     * flat triangles give you a column that thins out every ninety degrees.
+     */
+    case 'spruce': {
+      const trunk = tint(shade(theme.trunk, 0.85));
+      const dark = tint(shade(theme.tree, 0.6));
+      const mid = tint(shade(theme.tree, 0.8));
+      const lit = tint(theme.tree);
+      put.face(rt, trunk, [-0.18, 0, 0, 0.18, 0, 0, 0.18, 1.9, 0, -0.18, 1.9, 0]);
+      put.face(rt, lit, [0, 9.4, 0, -1.25, 1.3, 0, 1.25, 1.3, 0]);
+      put.face(rt, dark, [0, 9.4, 0, 0, 1.3, -1.25, 0, 1.3, 1.25]);
+      put.face(rt, mid, [0, 8.2, 0, -0.9, 1.3, -0.9, 0.9, 1.3, 0.9]);
+      break;
+    }
+    /**
+     * A broadleaf. A trunk and a lump, which is what a big deciduous tree is
+     * from a moving car - the crown reads as a mass and never as a shape.
+     */
+    case 'oak': {
+      const trunk = tint(theme.trunk);
+      const dark = tint(shade(theme.tree, 0.66));
+      const mid = tint(shade(theme.tree, 0.86));
+      const lit = tint(shade(theme.tree, 1.08));
+      put.face(rt, trunk, [-0.32, 0, 0, 0.32, 0, 0, 0.32, 2.6, 0, -0.32, 2.6, 0]);
+      // Three overlapping quads at different angles: a crown with a top on it,
+      // rather than a disc that vanishes when you drive past it.
+      put.face(rt, dark, [-2.5, 2.4, 0, 2.5, 2.4, 0, 2.1, 6.6, 0, -2.1, 6.6, 0]);
+      put.face(rt, mid, [0, 2.4, -2.5, 0, 2.4, 2.5, 0, 6.6, 2.1, 0, 6.6, -2.1]);
+      put.face(rt, lit, [-1.7, 6.2, -1.7, 1.7, 6.2, -1.7, 1.7, 7.4, 1.7, -1.7, 7.4, 1.7]);
+      break;
+    }
+    /**
+     * A dune: a long low hummock of sand lying across the wind.
+     *
+     * The whole of Zandvoort's character is that you cannot see the next corner,
+     * and this is why. Wide and low rather than tall and pointed, because a
+     * pointed dune is a rock and the difference is the whole reason for having
+     * a separate shape.
+     */
+    case 'dune': {
+      // Lit brighter than the ground it stands on, not the same as it. Painted
+      // in theme.near it was the exact colour of the sand under it and seventeen
+      // hundred dunes were drawn at Zandvoort without one of them being visible.
+      const lit = tint(shade(theme.near, 1.14));
+      const side = tint(shade(theme.near, 0.94));
+      const dark = tint(shade(theme.near, 0.74));
+      // A ridge rather than a plateau, and it took getting wrong to see why:
+      // built with a flat top it came out as a seventeen metre mesa and the
+      // circuit ran through Arizona. The crest is a line, the two flanks meet
+      // along it, and the ends come to a point - which is a dune.
+      put.face(rt, lit, [-5, 0, -2.6, 5, 0, -2.6, 2.2, 1.5, 0, -2.2, 1.5, 0]);
+      put.face(rt, dark, [5, 0, 2.6, -5, 0, 2.6, -2.2, 1.5, 0, 2.2, 1.5, 0]);
+      put.face(rt, side, [-5, 0, -2.6, -2.2, 1.5, 0, -5, 0, 2.6]);
+      put.face(rt, side, [5, 0, 2.6, 2.2, 1.5, 0, 5, 0, -2.6]);
+      break;
+    }
+    /** Marram grass: two blades. It is the thing that holds the dune together. */
+    case 'marram': {
+      const lit = tint(theme.tree);
+      const dark = tint(shade(theme.tree, 0.74));
+      put.face(rt, lit, [-0.5, 0, 0, 0.5, 0, 0, 0.15, 1.5, 0.2]);
+      put.face(rt, dark, [0, 0, -0.5, 0, 0, 0.5, 0.25, 1.3, 0.1]);
+      break;
+    }
+    /**
+     * A stack of tyres. Black, banded, and where the barrier is doing the most
+     * work - the outside of the fast corners and the inside of the hairpins.
+     */
+    case 'tyres': {
+      const dark = tint(shade(C.tyre, 0.8));
+      const lit = tint(C.tyre);
+      const stripe = tint(C.kerbB);
+      for (let k = 0; k < 3; k++) {
+        const y0 = k * 0.62;
+        box(rt, tint, k === 1 ? C.kerbA : C.tyre, -2.6, 2.6, y0, y0 + 0.58, -0.5, 0.5);
+      }
+      // A white cap so the stack reads as a stack and not as a wall.
+      put.face(rt, stripe, [-2.6, 1.88, -0.5, 2.6, 1.88, -0.5, 2.6, 1.94, 0.5, -2.6, 1.94, 0.5]);
+      void dark; void lit;
+      break;
+    }
+    /**
+     * The pit building: a long shed with a control tower on the end of it.
+     *
+     * Every circuit has one and every one of them is the thing you see first,
+     * so it is the single most useful building in the game. The tower is what
+     * tells you the start line is coming rather than another grandstand.
+     */
+    case 'pit': {
+      const wall = tint(shade(C.chrome, 0.92));
+      const glass = tint(C.glass);
+      box(rt, tint, C.chrome, -13, 13, 0, 5.2, -3.4, 3.4);
+      // The glazing along the front, which is what a pit building is.
+      put.face(rt, glass, [-12.4, 2.4, -3.5, 12.4, 2.4, -3.5, 12.4, 4.6, -3.5, -12.4, 4.6, -3.5]);
+      // The tower, off one end.
+      box(rt, tint, C.chrome, 7.5, 13, 5.2, 13.5, -2.6, 2.6);
+      put.face(rt, glass, [8, 9.4, -2.7, 12.5, 9.4, -2.7, 12.5, 12.8, -2.7, 8, 12.8, -2.7]);
+      // The roof slab, overhanging, which is most of the silhouette.
+      put.face(rt, wall, [-13.8, 5.2, -4.2, 13.8, 5.2, -4.2, 13.8, 5.2, 4.2, -13.8, 5.2, 4.2]);
+      break;
+    }
+    /** A big screen on a frame, showing something too small to make out. */
+    case 'screen': {
+      const leg = tint(shade(C.metal, 0.8));
+      const face = tint(C.shadow);
+      const glow = tint(night > 0.3 ? C.lamp : shade(C.glass, 1.1));
+      box(rt, tint, C.metal, -0.4, 0.4, 0, 5.4, -0.4, 0.4);
+      void leg;
+      put.face(rt, face, [-4.2, 5.2, 0, 4.2, 5.2, 0, 4.2, 10.4, 0, -4.2, 10.4, 0]);
+      put.face(rt, glow, [-3.7, 5.7, -0.12, 3.7, 5.7, -0.12, 3.7, 9.9, -0.12, -3.7, 9.9, -0.12]);
+      break;
+    }
+    /** A campervan. There is a small town of these at Spa for one weekend a year. */
+    case 'camper': {
+      const body = 1 + ((prop.i || 0) % 3);
+      const paint = TEAM_COLOURS[(body * 3) % TEAM_COLOURS.length];
+      box(rt, tint, C.chrome, -2.4, 2.4, 0.5, 2.6, -1.1, 1.1);
+      box(rt, tint, paint, -2.4, 0.4, 2.6, 3.4, -1.05, 1.05);
+      put.face(rt, tint(C.tyre), [-1.9, 0, -1.15, -1.1, 0, -1.15, -1.1, 0.7, -1.15, -1.9, 0.7, -1.15]);
+      put.face(rt, tint(C.tyre), [1.1, 0, -1.15, 1.9, 0, -1.15, 1.9, 0.7, -1.15, 1.1, 0.7, -1.15]);
+      break;
+    }
+    /** A beach pavilion: a flat-roofed box on legs with a deck in front of it. */
+    case 'pavilion': {
+      box(rt, tint, C.chrome, -5, 5, 1.2, 4.2, -3, 3);
+      put.face(rt, tint(shade(C.chrome, 1.06)),
+        [-5.8, 4.2, -3.6, 5.8, 4.2, -3.6, 5.8, 4.2, 3.6, -5.8, 4.2, 3.6]);
+      // The deck, out towards the water.
+      put.face(rt, tint(theme.trunk), [-5, 1.2, -3, 5, 1.2, -3, 5, 1.2, -7, -5, 1.2, -7]);
+      put.face(rt, tint(C.glass), [-4.4, 1.8, -3.1, 4.4, 1.8, -3.1, 4.4, 3.6, -3.1, -4.4, 3.6, -3.1]);
+      break;
+    }
+    /**
+     * A wind turbine, out on the horizon off Zandvoort. Three hundred metres
+     * away and forty metres tall, so it is a mast and three blades and that is
+     * the whole of it. Turning, because a still one reads as broken.
+     */
+    case 'turbine': {
+      const white = tint(shade(C.chrome, 1.1));
+      const spin = time * 0.012 + (prop.off || 0);
+      put.face(rt, white, [-0.5, 0, 0, 0.5, 0, 0, 0.28, 17, 0, -0.28, 17, 0]);
+      for (let k = 0; k < 3; k++) {
+        const a2 = spin + (k / 3) * Math.PI * 2;
+        const sx = Math.cos(a2);
+        const sy = Math.sin(a2);
+        put.face(rt, white, [
+          0, 17.4, -0.35,
+          sx * 9 - sy * 0.5, 17.4 + sy * 9 + sx * 0.5, -0.35,
+          sx * 9 + sy * 0.5, 17.4 + sy * 9 - sx * 0.5, -0.35,
+        ]);
+      }
+      break;
+    }
+    /**
+     * A section of the old banked oval at Monza.
+     *
+     * Concrete, thirty degrees, and falling apart in the trees along the
+     * Serraglio, which is exactly what is there: they stopped racing on it in
+     * nineteen sixty-one and never took it down. Three of these in a row and you
+     * get the curve arriving and leaving, which is how you see it from the road.
+     */
+    case 'banking': {
+      const face = tint(shade(C.chrome, 0.72));
+      const top = tint(shade(C.chrome, 0.86));
+      const under = tint(shade(C.shadow, 1.3));
+      // The banked surface: a long quad leaning back at about thirty degrees.
+      put.face(rt, face, [-14, 0, 0, 14, 0, 0, 14, 7.4, -8.6, -14, 7.4, -8.6]);
+      // The lip along the top, and the dark underside of the structure.
+      put.face(rt, top, [-14, 7.4, -8.6, 14, 7.4, -8.6, 14, 8.1, -9.4, -14, 8.1, -9.4]);
+      put.face(rt, under, [14, 0, 0, -14, 0, 0, -14, 8.1, -9.4, 14, 8.1, -9.4]);
+      break;
+    }
+    /**
+     * The underside of the flyover, seen from the road going under it.
+     *
+     * Drawn where the other half of the circuit crosses, at the angle it
+     * crosses at, and only from below - from above you are driving on the deck
+     * itself and the renderer builds that out of the road. Deliberately deep and
+     * dark: what you get at Suzuka is a slab of shadow arriving overhead at
+     * three hundred, and the shadow is the whole effect.
+     */
+    case 'flyover': {
+      const deck = tint(shade(C.chrome, 0.6));
+      const under = tint(shade(C.shadow, 1.15));
+      const pier = tint(shade(C.chrome, 0.78));
+      const W = 34;    // half the length of the span, across the road below
+      const D = 7.6;   // half the width of the deck itself
+      // The underside, and the two fascias hanging below it.
+      put.face(rt, under, [-W, 0, -D, W, 0, -D, W, 0, D, -W, 0, D]);
+      put.face(rt, deck, [-W, 0, -D, W, 0, -D, W, 2.6, -D, -W, 2.6, -D]);
+      put.face(rt, deck, [W, 0, D, -W, 0, D, -W, 2.6, D, W, 2.6, D]);
+      // The parapet along each edge, which is what you see against the sky.
+      put.face(rt, pier, [-W, 2.6, -D, W, 2.6, -D, W, 3.5, -D, -W, 3.5, -D]);
+      put.face(rt, pier, [W, 2.6, D, -W, 2.6, D, -W, 3.5, D, W, 3.5, D]);
+      // Two piers, well clear of the road underneath.
+      for (const at of [-25, 25]) {
+        put.face(rt, pier, [at - 2.4, 0, -D, at + 2.4, 0, -D,
+          at + 2.4, -60, -D, at - 2.4, -60, -D]);
+        put.face(rt, under, [at + 2.4, 0, D, at - 2.4, 0, D,
+          at - 2.4, -60, D, at + 2.4, -60, D]);
+      }
+      break;
+    }
     case 'rock':
     case 'crag': {
       const lit = tint(theme.rock);

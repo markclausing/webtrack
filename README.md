@@ -3,9 +3,13 @@
 ### ▶ [Play it](https://markclausing.github.io/webtrack/)
 
 A polygon racing game in the browser, in the spirit of the first generation of
-them. Three closed circuits, eight single seaters, a red suspension bridge to
+them. Seven closed circuits, eight single seaters, a red suspension bridge to
 cross, and an afternoon that runs out: you start in daylight, the sun is on the
 horizon by the second lap and you finish in the dark.
+
+Three of the circuits were drawn by a random number generator. Four of them are
+Spa, Monza, Suzuka and Zandvoort, from surveyed centre lines, with the elevation
+and the banking written in by hand.
 
 Two ways to go out — put a lap in on an empty circuit, or start eighth of eight
 against seven cars in the same machinery as yours that will shut the door.
@@ -175,7 +179,9 @@ minute up the road by the flag and you were racing two cars rather than seven. A
 it stands somebody is within ninety metres of you for about eighty per cent of a
 race, which is a thing the test suite measures and would notice going away.
 
-## Three circuits
+## Seven circuits
+
+### The three that were drawn
 
 **The pass** is 4.3 km through the mountains, climbing fifty metres and giving it
 all back — three kinds of corner, all of them third gear or lower, with enough
@@ -186,6 +192,35 @@ the water and back up again, and it is two laps because one of them is already a
 long afternoon.
 
 ![The grand circuit, on the coastal half of the lap](docs/screenshots/grand.png)
+
+### The four that are places
+
+**Spa-Francorchamps**, 7.0 km, with the hundred metres of height it is famous
+for: Eau Rouge arrives twenty-nine metres below the start line and Les Combes
+sits sixty-seven above it. **Monza**, 5.8 km, the fastest and the flattest, with
+the derelict banking of the old oval rotting in the trees along the Serraglio.
+**Suzuka**, 5.8 km, the only figure of eight anybody races on — the run down to
+Degner crosses the back straight twenty-one metres above it. **Zandvoort**,
+4.3 km, through the dunes, with two corners dished at eighteen degrees.
+
+![Under the flyover at Suzuka, where the circuit crosses itself](docs/screenshots/suzuka.png)
+
+The corners are surveyed and the corners are therefore right. The elevation is
+not surveyed — the source data is flat — so it is written by hand from what these
+places do, and so is Zandvoort's banking. Everything you can see beside the road
+is invented towards what makes each one recognisable. [docs/CIRCUITS.md](docs/CIRCUITS.md)
+says where the geometry came from and what that obliges us to say about it: the
+centre lines derive from OpenStreetMap and carry ODbL terms.
+
+![The climb out of Eau Rouge onto the Kemmel straight](docs/screenshots/spa.png)
+
+Two of them changed the engine rather than just adding to it. The road used to be
+seven metres either side of the line everywhere; Monza is under four in places
+and Spa reaches eight, so the width is now a property of each node. And a real
+circuit folds back on itself, which the drawn ones never do — every node's ground
+is now held under the height of the lowest road it could be drawn across, because
+without that Zandvoort drew its own dunes over its main straight and covered the
+sky in the colour of sand.
 
 They are closed loops, and that is not a detail of the level design — it is the
 shape of `route.js`. You cannot make a road that returns to where it started by

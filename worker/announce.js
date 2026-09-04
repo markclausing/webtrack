@@ -20,6 +20,10 @@ const ROADS = {
   pass: 'the pass',
   coast: 'the boulevard',
   grand: 'the grand circuit',
+  spa: 'Spa-Francorchamps',
+  monza: 'Monza',
+  suzuka: 'Suzuka',
+  zandvoort: 'Zandvoort',
 };
 
 const PLACED = {

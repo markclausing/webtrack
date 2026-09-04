@@ -27,7 +27,8 @@
  * actually there.
  */
 
-import { CHECKPOINT_EVERY, SEG } from '../constants.js';
+import { CHECKPOINT_EVERY, ROAD_HALF, SEG, WALL_AT } from '../constants.js';
+import { centreLine, profile, SURVEYED } from './circuits.js';
 
 /**
  * How far out, in metres from the centreline, each ground ring sits.
@@ -40,6 +41,16 @@ export const RINGS = [15.6, 32, 95, 340];
 
 /** Where the water is, for the circuits that have any. Everything else is above it. */
 export const SEA = -6;
+
+/**
+ * The height the start line of a surveyed circuit sits at.
+ *
+ * Arbitrary, and it has to be something: the survey is two coordinates and a
+ * width, so there is no datum in the data to inherit. Forty metres is enough
+ * that Eau Rouge - twenty-nine below the line - is still above zero, and the
+ * heights written in circuits.js are all relative to this, including the sea.
+ */
+const REAL_BASE = 40;
 
 /** Deterministic and local: track building must not touch the simulation's rng. */
 function seeded(seed) {
@@ -159,7 +170,35 @@ function resample(poly, seg) {
     const t = (want - run[at]) / span;
     const a = poly[at];
     const b = poly[(at + 1) % n];
-    out.push({ x: lerp(a.x, b.x, t), z: lerp(a.z, b.z, t) });
+    const point = { x: lerp(a.x, b.x, t), z: lerp(a.z, b.z, t) };
+    // The surveyed circuits carry a width that varies round the lap, and it has
+    // to survive being resampled or the road narrows in the wrong places.
+    if (a.half !== undefined) point.half = lerp(a.half, b.half, t);
+    out.push(point);
+  }
+  return out;
+}
+
+/**
+ * A surveyed line as a dense polyline, splined rather than joined up.
+ *
+ * The survey is stored every ten metres, and ten metre chords round a twenty-two
+ * metre hairpin - which is La Source, and Suzuka's - is a corner made of six
+ * flat faces. Running the same Catmull-Rom through it that the drawn circuits
+ * use costs nothing at build time and gives back the curve the ten metres were
+ * sampled from.
+ */
+function sampleSurvey(pts, per = 6) {
+  const n = pts.length;
+  const at = (i) => pts[((i % n) + n) % n];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < per; k++) {
+      const t = k / per;
+      const p = spline(at(i - 1), at(i), at(i + 1), at(i + 2), t);
+      p.half = lerp(at(i).half, at(i + 1).half, t);
+      out.push(p);
+    }
   }
   return out;
 }
@@ -271,6 +310,121 @@ function ground(y, lean, warm, wob, infield) {
 }
 
 /**
+ * The ground beside a circuit that is a real place.
+ *
+ * Symmetric, low, and it follows the road. That is three decisions and all three
+ * are forced by the same fact: a real circuit folds back on itself. The drawn
+ * circuits are laid out around a ring, so the left of the car is always the
+ * outside of the loop and can be a mountain safely - nothing is ever behind it.
+ * Spa is not laid out around anything. It crosses its own path, runs anti-clock
+ * for a third of a lap and comes back, and Zandvoort's main straight passes
+ * within thirty metres of Hugenholtz. On a shape like that there is no side that
+ * is reliably "away", so a thirty metre hillside beside one piece of road is a
+ * thirty metre hillside drawn over another piece of road, and the only safe hill
+ * is a low one.
+ *
+ * Which is also the truth of it. These places are not carved out of an alp. Spa
+ * has its hundred metres in the road itself rather than in a wall beside it, and
+ * that is exactly what makes it what it is.
+ */
+function groundReal(y, land, wob, near, wet) {
+  // Only the first ring follows the road. The two beyond it come back to the
+  // smoothed height and stay there, and that is not a stylistic choice.
+  //
+  // Built the obvious way - every ring at the local road height plus a bank -
+  // Zandvoort drew the sky tan. The circuit climbs seventeen metres and folds
+  // back on itself, so the ground belonging to Scheivlak, which is up in the
+  // dunes, was being drawn ninety-five metres wide across the road at
+  // Hugenholtz, which is not. From the cockpit it was a plain covering the
+  // world. The bank beside the road is the part you actually look at; anything
+  // further out only has to be a surface, and a surface that agrees with itself
+  // everywhere cannot loom over anything.
+  const bank = (phase) => [
+    y + 0.5 + wob(phase + 5) * 0.7,
+    lerp(y + land.rise * (0.55 + 0.45 * wob(phase + 2)), near, 0.55),
+    near + land.roll * 0.5 * wob(phase),
+  ];
+  // Two phases rather than one, or both sides of the road do the same thing at
+  // the same time and the circuit reads as a trench.
+  const l = bank(3);
+  const far = [near + land.roll * 0.7 * wob(1.6), near + land.roll * 0.5 * wob(1.1)];
+  if (wet > 0) {
+    // Zandvoort is on a beach, and the part of it that is on a beach is the part
+    // you can see the beach from. Only the outer rings go down to the water: the
+    // dune between the barrier and it stays where it was, because that dune is
+    // the reason the sea is a glimpse rather than a view.
+    //
+    // Measured from the start line rather than from zero. Written as an absolute
+    // it put the North Sea forty-seven metres below the circuit, which is not a
+    // beach, it is a cliff with a view.
+    const sea = REAL_BASE + land.sea.level;
+    // Both outer rings, not just the far one. Water is flat, and pulling only
+    // the ring at ninety-five metres down left the sea running downhill from
+    // thirty-two metres out to ninety-five - a sloping North Sea, which the eye
+    // reads as a beach the colour of water rather than as water.
+    //
+    // The crest at fifteen metres comes down only part of the way, so there is
+    // still a dune between the road and the beach. You see the sea over it,
+    // which is what you do at Zandvoort.
+    l[1] = lerp(l[1], sea, wet);
+    l[2] = lerp(l[2], sea, wet);
+    l[0] = lerp(l[0], y + 1.2, wet * 0.8);
+    far[0] = lerp(far[0], sea, wet);
+  }
+  return { l, r: bank(8), far, wet };
+}
+
+/**
+ * How much sea there is at this point of the lap, from nought to one.
+ *
+ * Raised over a cosine and wrapped, so the water arrives and leaves rather than
+ * switching on - a hard edge between grass and the North Sea is a wall of water
+ * standing in a field, which is exactly what it looked like the first time.
+ */
+function coastAt(sea, t) {
+  if (!sea) return 0;
+  let d = Math.abs(((t - sea.at) % 1 + 1.5) % 1 - 0.5);
+  if (d > sea.span) return 0;
+  d /= sea.span;
+  return 0.5 + 0.5 * Math.cos(d * Math.PI);
+}
+
+/**
+ * A patch of ground held under its lids.
+ *
+ * Three of them, one per band, and each ring is held under the lid of the
+ * furthest band it is a corner of: the ring at thirty-two metres is the outer
+ * edge of the near band and the inner edge of the mid band, so it has to satisfy
+ * the stricter of the two. The margins are small and they matter - a band drawn
+ * at exactly the height of the road it crosses is a coin toss in the depth
+ * buffer, and the coin came up ground.
+ */
+function capped(g, near, mid, far) {
+  const lid = [
+    Number.isFinite(near) ? near - 0.6 : Infinity,
+    Number.isFinite(mid) ? mid - 1.5 : Infinity,
+    Number.isFinite(far) ? far - 2 : Infinity,
+  ];
+  const cut = (v, k) => Math.min(v, lid[k]);
+  return {
+    l: g.l.map(cut),
+    r: g.r.map(cut),
+    far: g.far.map((v) => Math.min(v, lid[2])),
+    wet: g.wet,
+  };
+}
+
+/** A name, as a seed. Stable, so a circuit's scenery never moves. */
+function nameSeed(key) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h | 0;
+}
+
+/**
  * How many nodes of the circuit are a bridge, and where the towers stand on it.
  *
  * A suspension bridge wants a straight, so the span is put on the straightest
@@ -317,19 +471,33 @@ const CIRCUITS = {
 };
 
 export function buildRoute(key) {
-  const plan = CIRCUITS[key] || CIRCUITS.pass;
-  const rnd = seeded(plan.seed);
-  const climb = loopNoise(seeded(plan.seed ^ 0x9e37), 4);
-  const roll = loopNoise(seeded(plan.seed ^ 0x1d3f), 7);
-  const wobble = loopNoise(seeded(plan.seed ^ 0x51ed), 6);
+  const real = SURVEYED[key] || null;
+  const plan = real || CIRCUITS[key] || CIRCUITS.pass;
+  // The drawn circuits carry their own seed. A surveyed one has no seed to
+  // carry, so its name is its seed: the scenery beside Spa is the same scenery
+  // beside Spa every time, which is the only property any of this needs.
+  const seed = real ? nameSeed(key) : plan.seed;
+  const rnd = seeded(seed);
+  const climb = loopNoise(seeded(seed ^ 0x9e37), 4);
+  const roll = loopNoise(seeded(seed ^ 0x1d3f), 7);
+  const wobble = loopNoise(seeded(seed ^ 0x51ed), 6);
+  const height0 = real ? profile(real.climb) : null;
 
-  // Drawn, then relaxed until nothing on it is sharper than this circuit is
-  // allowed to be. Forty passes is plenty and the loop stops as soon as it can;
-  // the alternative - rejecting seeds until one behaves - throws away a good
-  // circuit because of one corner on it.
-  let ring = resample(sampleLoop(controlPoints(rnd, plan.points, plan.radius)), SEG);
-  for (let pass = 0; pass < 40 && sharpest(ring) > plan.tightest; pass++) {
-    ring = resample(relax(ring, 0.5), SEG);
+  let ring;
+  if (real) {
+    // A survey needs no relaxing: its corners are the corners. That is the whole
+    // reason for having it, and running `relax` over it would take La Source
+    // from twenty-two metres to thirty and make it somebody else's hairpin.
+    ring = resample(sampleSurvey(centreLine(key)), SEG);
+  } else {
+    // Drawn, then relaxed until nothing on it is sharper than this circuit is
+    // allowed to be. Forty passes is plenty and the loop stops as soon as it
+    // can; the alternative - rejecting seeds until one behaves - throws away a
+    // good circuit because of one corner on it.
+    ring = resample(sampleLoop(controlPoints(rnd, plan.points, plan.radius)), SEG);
+    for (let pass = 0; pass < 40 && sharpest(ring) > plan.tightest; pass++) {
+      ring = resample(relax(ring, 0.5), SEG);
+    }
   }
   const count = ring.length;
   const at = (i) => ring[((i % count) + count) % count];
@@ -350,7 +518,16 @@ export function buildRoute(key) {
   // a gradient, it is a ramp.
   const height = new Float64Array(count);
   let steepest = 0;
-  for (let pass = 0; pass < 6; pass++) {
+  if (real) {
+    // Read straight off the profile in circuits.js. No relaxing and no ceiling
+    // on the gradient: Eau Rouge is genuinely that steep, and the one thing the
+    // player is going to check is whether it is.
+    for (let i = 0; i < count; i++) height[i] = REAL_BASE + height0(i / count);
+    for (let i = 0; i < count; i++) {
+      steepest = Math.max(steepest, Math.abs(height[(i + 1) % count] - height[i]) / SEG);
+    }
+  }
+  for (let pass = 0; pass < 6 && !real; pass++) {
     const scale = plan.climb / (1 + pass * 0.55);
     steepest = 0;
     for (let i = 0; i < count; i++) {
@@ -390,7 +567,12 @@ export function buildRoute(key) {
     // reaches all the way across the loop now, and a plain ten metres above the
     // road is not scenery, it is a lid: from a dip in the circuit it covered the
     // world and the car appeared to be driving through a lake.
-    infield[i] = Math.min(sum / (soften * 2 + 1) - 6, height[i] - 4);
+    // A real circuit gets its own number: the plain sits a couple of metres
+    // under the road rather than six, because these places are flat facilities
+    // and a six metre ditch round the whole of Monza is a moat.
+    infield[i] = real
+      ? Math.min(sum / (soften * 2 + 1) + real.land.plain, height[i] - 1.2)
+      : Math.min(sum / (soften * 2 + 1) - 6, height[i] - 4);
   }
 
   // Which way the hill leans, from the curvature averaged over eighty metres.
@@ -411,10 +593,114 @@ export function buildRoute(key) {
     lean[i] = Math.max(-0.8, Math.min(0.8, (sum / (span * 2 + 1)) * 14));
   }
 
+  /**
+   * The lowest road that any of this node's ground could be drawn over.
+   *
+   * This is the rule the surveyed circuits could not do without, and it took a
+   * tan sky at Zandvoort to find it. That circuit climbs seventeen metres into
+   * the dunes and comes back within twenty-eight metres of its own main
+   * straight, so the ground belonging to Scheivlak - which is up at the top -
+   * was being drawn ninety-five metres wide over the road at the bottom. From
+   * the cockpit it was not a hillside. It was a lid: a flat plane above the
+   * camera, near at the top of the screen and far at the bottom, covering the
+   * whole sky in the colour of sand.
+   *
+   * So every node is told the height of the lowest road within a hundred and
+   * thirty metres of it that is somewhere else on the lap, and nothing it draws
+   * may rise above that. Nodes on the same stretch of road are excluded, or a
+   * circuit that merely goes downhill would clamp its own verge flat.
+   *
+   * The drawn circuits do not need it - laid out around a ring, they never come
+   * back on themselves - and do not get it, so nothing about the mountain pass
+   * changes.
+   */
+  const ceiling = [
+    new Float64Array(count).fill(Infinity),
+    new Float64Array(count).fill(Infinity),
+    new Float64Array(count).fill(Infinity),
+  ];
+  if (real) {
+    // One ceiling per band, because a band that only reaches thirty-two metres
+    // can only be drawn over a road that is within thirty-two metres. Giving
+    // them all the same ceiling was the first attempt and it was both too
+    // strict near the road - the verge became a ditch - and not strict enough
+    // far from it, which is where the trouble actually was.
+    const near2 = RINGS[1] * RINGS[1];
+    const mid2 = RINGS[2] * RINGS[2];
+    const far2 = RINGS[3] * RINGS[3];
+    const AWAY = 40;
+    // Flat arrays rather than the ring objects: this is the one loop in the file
+    // that runs a million times, and reading two fields off an object a million
+    // times is most of what it was doing.
+    const xs = new Float64Array(count);
+    const zs = new Float64Array(count);
+    for (let i = 0; i < count; i++) {
+      xs[i] = ring[i].x;
+      zs[i] = ring[i].z;
+    }
+    const c0 = ceiling[0];
+    const c1 = ceiling[1];
+    const c2 = ceiling[2];
+    for (let i = 0; i < count; i++) {
+      const xi = xs[i];
+      const zi = zs[i];
+      const hi = height[i];
+      // Each pair once, and only pairs that are a long way apart along the lap:
+      // the wrap is handled by stopping short at the end rather than by working
+      // out a wrapped distance a million times.
+      const last = count - (i < AWAY ? AWAY - i : 0);
+      for (let j = i + AWAY; j < last; j++) {
+        const dx = xi - xs[j];
+        const dz = zi - zs[j];
+        const d2 = dx * dx + dz * dz;
+        if (d2 > far2) continue;
+        const hj = height[j];
+        if (hj < c2[i]) c2[i] = hj;
+        if (hi < c2[j]) c2[j] = hi;
+        if (d2 > mid2) continue;
+        if (hj < c1[i]) c1[i] = hj;
+        if (hi < c1[j]) c1[j] = hi;
+        if (d2 > near2) continue;
+        if (hj < c0[i]) c0[i] = hj;
+        if (hi < c0[j]) c0[j] = hi;
+      }
+    }
+  }
+
+  /**
+   * Extra banking, for the circuits that are dished.
+   *
+   * Zandvoort is the only one of the four, and it matters there: eighteen
+   * degrees at Hugenholtz and at the last corner, which is enough that you carry
+   * speed through them you could not carry anywhere else on the lap.
+   *
+   * The sign comes from the corner rather than from the table, so a dished
+   * corner leans into whichever way it turns and the table only has to say how
+   * much. Raised over a cosine so the car is not asked to roll eighteen degrees
+   * between two nodes - a step in the banking is a kerb across the track.
+   */
+  const dish = new Float64Array(count);
+  for (const bend of (real?.bank) || []) {
+    const span = Math.max(1, Math.round((bend.span || 0.02) * count));
+    const mid = Math.round(bend.at * count);
+    for (let k = -span; k <= span; k++) {
+      const j = ((mid + k) % count + count) % count;
+      const fade = 0.5 + 0.5 * Math.cos((k / span) * Math.PI);
+      // Averaged over the corner: the apex node's own curvature is noisy, and
+      // the entry to a dished corner is dished too.
+      let sum = 0;
+      for (let m = -6; m <= 6; m++) {
+        sum += turn(heading[((j + m) % count + count) % count],
+          heading[((j + m + 1) % count + count) % count]);
+      }
+      dish[j] = -Math.sign(sum || 1) * (bend.deg * Math.PI / 180) * fade;
+    }
+  }
+
   const nodes = [];
   for (let i = 0; i < count; i++) {
     const t = i / count;
-    const warm = plan.warm(t);
+    const warm = plan.warm ? plan.warm(t) : 0;
     const curve = turn(heading[i], heading[(i + 1) % count]);
     const y = height[i];
     // Cycles per lap, not a frequency per node.
@@ -439,24 +725,114 @@ export function buildRoute(key) {
       nz: -Math.sin(heading[i]),
       curve,
       slope: (height[(i + 1) % count] - y) / SEG,
-      // Banking, into the corner. Small: this is a circuit, not a bowl.
-      bank: -curve * 3.2,
+      // Banking, into the corner. Small: this is a circuit, not a bowl - except
+      // where the circuit really is a bowl, which is what `dish` is for.
+      //
+      // Clamped on the surveyed circuits only, and the split is not a fudge.
+      // Three point two times the curvature is a reasonable lean on a corner of
+      // a hundred metres' radius and nonsense on one of twenty. The drawn
+      // circuits are relaxed until nothing on them is sharper than the plan
+      // allows, so the number can never run away there and has been tuned in
+      // place. A survey is not relaxed - that is the point of it - so Monza's
+      // Rettifilo came out at a hundred and twenty-five degrees of camber, which
+      // is not a corner, it is a wall the car drives up.
+      bank: (real ? Math.max(-0.12, Math.min(0.12, -curve * 3.2)) : -curve * 3.2)
+        + dish[i],
+      // How wide the tarmac is here.
+      //
+      // A constant everywhere until the surveyed circuits arrived, and it could
+      // not stay one: Monza averages four and three quarter metres either side
+      // of the line and Spa reaches eight, so one number would have made half of
+      // them wrong and the wrong half feel like the other one.
+      half: at(i).half ?? ROAD_HALF,
+      // The barrier, which has to stay outside the road however wide the road
+      // gets. Fifteen metres is a good run-off beside a nine metre track and is
+      // inside the kerb of a sixteen metre one.
+      wall: Math.max(WALL_AT, (at(i).half ?? ROAD_HALF) + 6),
       warm,
-      g: ground(y, lean[i], warm, wob, infield[i]),
+      g: real
+        ? capped(groundReal(y, real.land, wob, infield[i], coastAt(real.land.sea, t)),
+          ceiling[0][i], ceiling[1][i], ceiling[2][i])
+        : ground(y, lean[i], warm, wob, infield[i]),
     });
+  }
+
+  /**
+   * Where the circuit crosses its own path, and what to do about it.
+   *
+   * Suzuka is a figure of eight. That is not a curiosity, it is a problem the
+   * geometry hands you: at 0.44 and 0.85 of the lap the road is in the same
+   * place twice, twenty-one metres apart in height, and each node draws its own
+   * ground for three hundred metres in every direction. Left alone the upper
+   * road lays a plain across the lower one and the back straight becomes a
+   * tunnel through a hillside that is not there.
+   *
+   * So the higher road gives up its ground and becomes a viaduct: no terrain,
+   * a deck with sides, and piers down to whatever is underneath. Which is what
+   * is actually built at Suzuka, and is the single thing everybody knows about
+   * the place.
+   *
+   * Found rather than written down. It is a property of the survey, and a
+   * property of the survey should be read off the survey.
+   */
+  const flyovers = [];
+  if (real) {
+    const apart = (i, j) => {
+      const d = Math.abs(i - j);
+      return Math.min(d, count - d);
+    };
+    for (let i = 0; i < count; i++) {
+      for (let j = i + 1; j < count; j++) {
+        // Sixty nodes is three hundred and sixty metres of road: closer than
+        // that and it is the same corner, not a crossing.
+        if (apart(i, j) < 60) continue;
+        const gap = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].z - nodes[j].z);
+        if (gap > 26) continue;
+        const drop = nodes[i].y - nodes[j].y;
+        if (Math.abs(drop) < 6) continue;
+        const over = drop > 0 ? i : j;
+        const under = drop > 0 ? j : i;
+        if (flyovers.some((f) => apart(f.at, over) < 60)) continue;
+        flyovers.push({
+          at: over,
+          under,
+          clear: Math.abs(drop),
+          // The angle the upper road crosses the lower one at, so the deck can
+          // be laid over it the way it actually lies rather than square to it.
+          cross: turn(heading[under], heading[over]),
+        });
+      }
+    }
+    // Nineteen nodes of deck: long enough to read as a structure, short enough
+    // that the ground comes back before the next corner does.
+    for (const { at: mid, clear } of flyovers) {
+      for (let k = -18; k <= 18; k++) {
+        const j = ((mid + k) % count + count) % count;
+        const t = Math.min(1, Math.max(0, (18 - Math.abs(k)) / 5));
+        if (t <= (nodes[j].deck || 0)) continue;
+        nodes[j].deck = t;
+        // How far down the piers go, which is as far as the road underneath.
+        nodes[j].deckFoot = nodes[j].y - clear - 1;
+        // And the parapet closes in as the deck begins. This is the same trick
+        // the suspension bridge uses and for the same reason: without it the
+        // barrier stays out at fifteen metres, where on a viaduct there is
+        // nothing at all, and the car drives off the side into the air.
+        nodes[j].wall = nodes[j].wall + (nodes[j].half + 1.1 - nodes[j].wall) * t;
+      }
+    }
   }
 
   // The bridge, laid on the straightest stretch there is, with the water under
   // it a good way below the deck. Done after the nodes exist because it needs
   // their curvature to choose where to go and their heights to decide how far
   // down the water is.
-  const from = straightest(nodes, BRIDGE_NODES);
+  const from = real ? -1 : straightest(nodes, BRIDGE_NODES);
   let lowest = Infinity;
-  for (let k = 0; k < BRIDGE_NODES; k++) {
+  for (let k = 0; !real && k < BRIDGE_NODES; k++) {
     lowest = Math.min(lowest, nodes[(from + k) % count].y);
   }
   const water = lowest - 26;
-  for (let k = 0; k < BRIDGE_NODES; k++) {
+  for (let k = 0; !real && k < BRIDGE_NODES; k++) {
     const node = nodes[(from + k) % count];
     node.bridge = k / (BRIDGE_NODES - 1);
     // Everything either side of the deck falls away to the water, and both
@@ -486,7 +862,13 @@ export function buildRoute(key) {
     nodes,
     bridgeFrom: from,
     bridgeWater: water,
-    props: scatter(nodes, seeded(plan.seed ^ 0x3a71)),
+    props: real
+      ? dress(nodes, { ...real, flyovers }, seeded(seed ^ 0x3a71))
+      : scatter(nodes, seeded(seed ^ 0x3a71)),
+    real: !!real,
+    label: real ? real.label : undefined,
+    theme: real ? real.theme : null,
+    flyovers,
     length: count,
     metres: count * SEG,
     steepest,
@@ -637,6 +1019,129 @@ function scatter(nodes, rnd) {
   // The gantry is the checkpoint. It is placed on the node the clock is actually
   // reading, not near it, because a gate you go under half a second before the
   // seconds arrive is a gate that is lying to you.
+  for (const at of checkpointsFor(count)) {
+    add(at, { kind: 'arch', side: 0, off: 0, s: 1, r: 0, align: true });
+  }
+  return out;
+}
+
+/**
+ * Everything standing beside a circuit that is a real place.
+ *
+ * The drawn circuits scatter their scenery by rule, because there is nothing to
+ * be faithful to: a procedural mountain pass wants pines where the ground is
+ * low and rock where it is high, and any particular pine is as good as any
+ * other. A real one is the other way round. Nobody minds which tree is at the
+ * ninth marker post on the Kemmel straight, but everybody minds that there are
+ * conifers there rather than palms, that the crowd is round the outside of
+ * Tarzan, and that the wheel is where the wheel is.
+ *
+ * So this reads two tables. `scatter` is the ambient stuff, placed at random
+ * within rules - the forest, the dunes, the parkland - and it is what makes one
+ * circuit not look like another from the cockpit. `marks` is the specific stuff,
+ * placed at a fraction of a lap, and it is what makes a circuit findable: the
+ * second time round you know where you are from the big wheel rather than from
+ * the counter in the corner.
+ *
+ * The universal furniture - marker posts, floodlights, gantries - is added here
+ * too and on the same terms as everywhere else, because a circuit that had none
+ * of it would be the only one in the game that did not feel fast.
+ */
+function dress(nodes, real, rnd) {
+  const count = nodes.length;
+  const out = nodes.map(() => null);
+  const add = (i, prop) => {
+    const at = ((Math.round(i) % count) + count) % count;
+    (out[at] ||= []).push(prop);
+  };
+  /** A fraction of a lap, as a node. */
+  const node = (t) => Math.round(t * count);
+
+  for (let i = 0; i < count; i++) {
+    // Marker posts and floodlights, exactly as on the drawn circuits. The posts
+    // are the cheapest speed in the game and the masts are what makes a night
+    // lap a lap; neither has any business changing because the corners came
+    // from a survey.
+    if (i % 4 === 0) {
+      add(i, { kind: 'post', side: -1, off: nodes[i].wall + 1.4, s: 1, r: 0, align: true, flat: true });
+      add(i, { kind: 'post', side: 1, off: nodes[i].wall + 1.4, s: 1, r: 0, align: true, flat: true });
+    }
+    if (i % 12 === 0 && !nodes[i].deck) {
+      const side = (i / 12) % 2 === 0 ? -1 : 1;
+      add(i, {
+        kind: 'mast', side, off: nodes[i].wall + 1.4, s: 1, r: side < 0 ? Math.PI : 0,
+        align: true, flat: true,
+      });
+    }
+
+    // The ambient scenery. Nothing on the deck of a viaduct, which is twenty
+    // metres up in the air.
+    if (nodes[i].deck) continue;
+    for (const rule of real.scatter) {
+      const sides = rule.side === 0 ? [-1, 1] : [rule.side];
+      for (const side of sides) {
+        if (rnd() >= rule.chance) continue;
+        const [lo, hi] = rule.s;
+        add(i, {
+          kind: rule.kind,
+          side,
+          off: rule.from + rnd() * (rule.to - rule.from),
+          s: lo + rnd() * (hi - lo),
+          r: rnd() * 6.28,
+        });
+      }
+    }
+  }
+
+  // The things that are where they are. `every` spreads one entry along a
+  // stretch of lap, which is how a grandstand becomes a grandstand rather than
+  // a shed - the models are one bay wide and a stand is twenty of them.
+  for (const mark of real.marks) {
+    const shape = {
+      kind: mark.kind,
+      side: mark.side,
+      off: mark.off,
+      s: mark.s ?? 1,
+      r: mark.r ?? 0,
+      align: true,
+      // A grandstand belongs level with the road it looks at, not with the sand
+      // behind it. Anything in the air says how far up it is instead.
+      flat: mark.lift === undefined,
+    };
+    if (mark.lift !== undefined) shape.lift = mark.lift;
+    // A stand faces across the track, so it is turned a quarter turn and turned
+    // the other quarter on the other side of the road.
+    if (mark.kind === 'stand' || mark.kind === 'pit') {
+      shape.r += mark.side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    }
+    if (mark.from === undefined) {
+      add(node(mark.at), shape);
+      continue;
+    }
+    for (let t = mark.from; t <= mark.to + 1e-9; t += mark.every) {
+      add(node(t), { ...shape });
+    }
+  }
+
+  // The other end of the flyover.
+  //
+  // The renderer draws a window of about a kilometre of road ahead of you, in
+  // lap order. That is the right thing to draw and it has one consequence here:
+  // the two halves of Suzuka's crossing are two and a half kilometres apart
+  // along the lap, so when you are on the back straight going under the bridge,
+  // the bridge is not in the window and is not drawn at all. You went under
+  // nothing, at three hundred, which is a poor showing for the most famous piece
+  // of road furniture in motor racing.
+  //
+  // So the deck gets drawn a second time, as scenery hanging over the lower
+  // road, at the height and the angle the real one crosses at.
+  for (const { under, clear, cross } of real.flyovers || []) {
+    add(under, {
+      kind: 'flyover', side: 0, off: 0, s: 1, r: cross, lift: clear, align: true,
+    });
+  }
+
+  // The gantry is the checkpoint, on the node the clock actually reads.
   for (const at of checkpointsFor(count)) {
     add(at, { kind: 'arch', side: 0, off: 0, s: 1, r: 0, align: true });
   }

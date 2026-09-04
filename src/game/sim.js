@@ -28,7 +28,7 @@
 import {
   ACCEL, AI_DEFEND, AI_GRIP, AI_LOOK, AI_MIRROR, AI_SPREAD, AI_TOP, BODY_S, BODY_X, BRAKE,
   BTN, CHECKPOINT_TIME, DRAG, DRIVE, DT, GRAVITY, GRIP, GRIP_ROUGH, GRIP_VERGE, NUDGE,
-  NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROAD_HALF, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL,
+  NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL,
   SPIN_AT, SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
   TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP, CAR_HALF,
 } from '../constants.js';
@@ -191,7 +191,7 @@ function drive(state, car) {
   if (car.speed < 0.4 && racing(state)) ctl.throttle = true;
   const { i } = nodeAt(state.route, car.s);
   const node = state.route.nodes[i];
-  const surf = surfaceOf(car.x);
+  const surf = surfaceOf(car.x, node.half);
 
   // What is under the tyres. Off the tarmac you lose most of the grip and a
   // great deal of the speed, which is what makes running wide a mistake rather
@@ -238,7 +238,7 @@ function drive(state, car) {
   // easing the ground uses to fall away, so the eight metres of run-off narrow
   // to nothing over the first twenty-four metres of the crossing rather than
   // disappearing between one node and the next.
-  const wall = WALL_AT + (ROAD_HALF + 0.75 - WALL_AT) * (node.g.bay || 0) - CAR_HALF;
+  const wall = node.wall + (node.half + 0.75 - node.wall) * (node.g.bay || 0) - CAR_HALF;
   if (Math.abs(car.x) > wall) {
     const into = Math.abs(car.vx) + car.speed * 0.08;
     car.x = Math.sign(car.x) * wall;
@@ -423,7 +423,10 @@ function think(state, car) {
   if (car.spinT > 0 || car.done) return;
 
   const limit = safeSpeed(state, car);
-  const wide = ROAD_HALF - 1.4;
+  // How far off the centre the driver is willing to run, which is the road
+  // rather than a number: on a four metre half-width the old constant put the
+  // racing line five and a half metres out, which is in the barrier.
+  const wide = state.route.nodes[nodeAt(state.route, car.s).i].half - 1.4;
 
   if (car.think > 0) car.think--;
   else {
@@ -545,7 +548,7 @@ export function driveLine(state, share = 0.95) {
 
 
   // The apex, and then anybody slow enough to be in the way of it.
-  let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (ROAD_HALF - 1.6);
+  let line = -Math.sign(soon.curve) * Math.min(1, Math.abs(soon.curve) * 34) * (soon.half - 1.6);
   for (const other of state.cars) {
     if (other === p || other.done) continue;
     const gap = other.s - p.s;

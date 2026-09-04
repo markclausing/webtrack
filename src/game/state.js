@@ -20,7 +20,17 @@ import {
   GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS, VERGE,
 } from '../constants.js';
 import { buildRoute } from './route.js';
+import { SURVEYED, SURVEYED_KEYS } from './circuits.js';
 
+/**
+ * The circuits, in the order they appear in the menu.
+ *
+ * Three drawn and four surveyed, and the drawn ones come first on purpose: they
+ * are the ones with a mountain and a sea and a suspension bridge on them, which
+ * the real ones cannot have because the real ones are real. A surveyed circuit
+ * takes its name and its description from circuits.js, so there is one place
+ * where Spa is described and it is the place where Spa is.
+ */
 export const ROUTES = {
   pass: {
     label: 'THE PASS',
@@ -39,6 +49,9 @@ export const ROUTES = {
     blurb: 'Eight kilometres out of the hills, down to the water and back up '
       + 'again. Two laps, because one of them is already a long afternoon.',
   },
+  ...Object.fromEntries(SURVEYED_KEYS.map(
+    (k) => [k, { label: SURVEYED[k].label, blurb: SURVEYED[k].blurb, real: true }],
+  )),
 };
 
 /** The teams, in the order they line up. Their colours live in the palette. */
@@ -114,7 +127,7 @@ export function makeState({
     route: built,
     mode,
     rules,
-    laps: LAPS[route] || 3,
+    laps: LAPS[route] || SURVEYED[route]?.laps || 3,
     field,
     tier,
     cfg,
@@ -227,9 +240,17 @@ function shortTurn(from, to) {
   return d;
 }
 
-/** Is this point on the tarmac, on the kerb and grass, or in the gravel? */
-export function surfaceOf(x) {
-  const off = Math.abs(x) - ROAD_HALF;
+/**
+ * Is this point on the tarmac, on the kerb and grass, or in the gravel?
+ *
+ * Takes the width it is asked about rather than assuming one. The surveyed
+ * circuits are narrower than the drawn ones and narrower in some places than
+ * others - Monza is under four metres either side at the Roggia - so a fixed
+ * seven would have had cars on the grass reported as being on the road, which
+ * is a car with full grip and a puff of dust under it.
+ */
+export function surfaceOf(x, half = ROAD_HALF) {
+  const off = Math.abs(x) - half;
   if (off <= 0) return 'road';
   if (off <= VERGE) return 'verge';
   return 'rough';

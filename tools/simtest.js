@@ -12,7 +12,7 @@
 // for.
 
 import { BTN, GRIP, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT } from '../src/constants.js';
-import { buildRoute } from '../src/game/route.js';
+import { buildRoute, RINGS } from '../src/game/route.js';
 import { driveLine, makeRace, step } from '../src/game/sim.js';
 import {
   finalTicks, formatTime, nodeAt, nodeStep, ordinal, player,
@@ -360,6 +360,94 @@ for (const tier of ['easy', 'normal', 'hard']) {
   player(qual).best = TICK_RATE * 70;
   ok(`and qualifying gives it the lap (${formatTime(finalTicks(qual))})`,
     finalTicks(qual) === TICK_RATE * 70);
+}
+
+// --- The circuits that are real places -------------------------------------------
+
+// The surveyed circuits are checked against the things that are true of them
+// rather than against the code that built them: the lap is the length the place
+// is, the road is the width the survey says, the height it climbs is the height
+// it climbs, and Suzuka's two roads miss each other.
+{
+  const want = {
+    spa: { km: 7.00, climb: 98, half: [3.9, 8.2] },
+    monza: { km: 5.79, climb: 9, half: [3.8, 6.1] },
+    suzuka: { km: 5.80, climb: 40, half: [3.9, 7.7] },
+    zandvoort: { km: 4.31, climb: 17, half: [4.0, 8.0] },
+  };
+  for (const [key, w] of Object.entries(want)) {
+    const route = buildRoute(key);
+    const ys = route.nodes.map((n) => n.y);
+    const halves = route.nodes.map((n) => n.half);
+    const climb = Math.max(...ys) - Math.min(...ys);
+    ok(`${key}: ${(route.metres / 1000).toFixed(2)} km, climbs ${climb.toFixed(0)} m, `
+      + `${Math.min(...halves).toFixed(1)}-${Math.max(...halves).toFixed(1)} m either side`,
+      Math.abs(route.metres / 1000 - w.km) < 0.02
+      && Math.abs(climb - w.climb) < 2
+      && Math.abs(Math.min(...halves) - w.half[0]) < 0.2
+      && Math.abs(Math.max(...halves) - w.half[1]) < 0.2);
+  }
+
+  // Suzuka is a figure of eight, so it has to have a viaduct on it and the
+  // viaduct has to have a parapet: without one the car leaves the deck sideways
+  // into twenty metres of air.
+  const suzuka = buildRoute('suzuka');
+  const deck = suzuka.nodes.filter((n) => n.deck > 0.98);
+  ok(`suzuka crosses itself on ${suzuka.flyovers.length} viaduct, `
+    + `${deck.length} nodes of deck, ${suzuka.flyovers[0]?.clear.toFixed(0)} m of clearance`,
+    suzuka.flyovers.length === 1 && deck.length > 8 && suzuka.flyovers[0].clear > 12);
+  ok('and the parapet on it is inside the road it carries',
+    deck.every((n) => n.wall < n.half + 2 && n.wall > n.half));
+  ok('while nowhere else has one', buildRoute('spa').flyovers.length === 0
+    && buildRoute('monza').flyovers.length === 0);
+
+  // Zandvoort's two dished corners, which are the reason it is quicker than its
+  // shape suggests.
+  const banked = buildRoute('zandvoort').nodes
+    .filter((n) => Math.abs(n.bank) > 0.2).length;
+  ok(`zandvoort is dished at ${banked} nodes`, banked > 40 && banked < 200);
+
+  /**
+   * And the one that cost a day: no ground may be drawn above a road it could be
+   * drawn across.
+   *
+   * A real circuit folds back on itself, so the ground belonging to one piece of
+   * road is drawn over another piece of road. Where the first is higher than the
+   * second the result is a flat plane above the camera - Zandvoort put one over
+   * a fifth of its lap and covered the sky in the colour of sand, with every
+   * other test in this file green.
+   */
+  for (const key of ['spa', 'monza', 'suzuka', 'zandvoort']) {
+    const route = buildRoute(key);
+    const nodes = route.nodes;
+    const n = nodes.length;
+    const reach = [RINGS[1], RINGS[2], RINGS[3]];
+    let worst = 0;
+    let where = 0;
+    for (let i = 0; i < n; i++) {
+      if (nodes[i].deck) continue;
+      const mine = [
+        Math.max(nodes[i].g.l[0], nodes[i].g.r[0], nodes[i].g.l[1], nodes[i].g.r[1]),
+        Math.max(nodes[i].g.l[2], nodes[i].g.r[2]),
+        Math.max(...nodes[i].g.far),
+      ];
+      for (let j = 0; j < n; j++) {
+        const gap = Math.min(Math.abs(i - j), n - Math.abs(i - j));
+        if (gap < 40) continue;
+        const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].z - nodes[j].z);
+        for (let b = 0; b < 3; b++) {
+          if (d > reach[b]) continue;
+          const over = mine[b] - nodes[j].y;
+          if (over > worst) {
+            worst = over;
+            where = i;
+          }
+        }
+      }
+    }
+    ok(`${key}: no ground stands over another part of the lap `
+      + `(worst ${worst.toFixed(1)} m, at node ${where})`, worst <= 0);
+  }
 }
 
 console.log(failures ? `\n${failures} failed` : '\nall good');

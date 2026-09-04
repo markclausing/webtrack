@@ -119,7 +119,9 @@ export class Renderer {
     // goes into the world. The head-up display does not get it: a dashboard is
     // lit from the inside.
     this.hour(state.light || 0);
-    const theme = this.theme(state.route.nodes[nodeAt(state.route, p.s).i].warm);
+    const theme = this.theme(
+      state.route.nodes[nodeAt(state.route, p.s).i].warm, state.route.theme,
+    );
     // The horizon moves with the camera, so the sky bands move with it. Signed
     // the other way it looks almost right, which is worse than looking wrong.
     const lift = Math.tan(cam.pitch) * rt.focal / SCREEN_H;
@@ -315,7 +317,27 @@ export class Renderer {
    * from the node being drawn. That is what lets the land arrive at the water
    * over a few hundred metres instead of changing its mind at a line.
    */
-  theme(warm) {
+  /**
+   * The colours of the place.
+   *
+   * The drawn circuits blend between two of them, because the grand circuit
+   * leaves the mountains and arrives at the sea inside a lap and there must be
+   * no line across the world where it changes its mind. A surveyed circuit is
+   * one place and stays there, so it just names its theme and nothing is
+   * blended at all.
+   */
+  theme(warm, named) {
+    if (named) {
+      const key = `named${named}`;
+      if (this[key]) return this[key];
+      const src = THEMES[named] || THEMES.mountain;
+      const out = { sky: src.sky.map(([f, c]) => [f, c]) };
+      for (const k of ['fog', 'near', 'mid', 'far', 'ridge', 'verge', 'rock', 'tree', 'trunk', 'water']) {
+        out[k] = this.lamp(src[k]);
+      }
+      this[key] = out;
+      return out;
+    }
     const key = `blend${Math.round(warm * 8)}`;
     if (this[key]) return this[key];
     const t = Math.round(warm * 8) / 8;
@@ -343,7 +365,6 @@ export class Renderer {
   ground(state, theme, p) {
     const rt = this.rt;
     const route = state.route;
-    const edge = ROAD_HALF + RUMBLE;
     const first = nodeAt(route, p.s).i - DRAW_BEHIND;
 
     // Nought until the sun is on the horizon, one when it has gone. It starts
@@ -375,18 +396,27 @@ export class Renderer {
         : tint;
       // The ground beside this node takes its colours from this node, which is
       // how a circuit can leave the hills and arrive at the sea inside a lap.
-      const local = a.warm > 0.02 && a.warm < 0.98 ? this.theme(a.warm) : theme;
+      const local = !route.theme && a.warm > 0.02 && a.warm < 0.98
+        ? this.theme(a.warm)
+        : theme;
 
       // Tarmac, in bands of three nodes, which is the oldest trick there is for
       // telling you how fast you are going without a speedometer. The lighter
       // band is a chequer of the two greys rather than a third colour, because
       // there is no third colour between them to have.
+      // How wide the road is here, and at the node after it. Two numbers rather
+      // than one because the tarmac is a quad between two nodes and a surveyed
+      // circuit changes width along it: a road drawn to the near node's width at
+      // both ends steps in and out every six metres, which reads as a ragged
+      // edge rather than as a road that narrows.
+      const ha = a.half;
+      const hb = b.half;
       rt.dither = (i % 6) < 3 ? 0 : road(C.roadAlt);
       rt.quad(
-        a.x - a.nx * ROAD_HALF, roadY(a, -ROAD_HALF), a.z - a.nz * ROAD_HALF,
-        a.x + a.nx * ROAD_HALF, roadY(a, ROAD_HALF), a.z + a.nz * ROAD_HALF,
-        b.x + b.nx * ROAD_HALF, roadY(b, ROAD_HALF), b.z + b.nz * ROAD_HALF,
-        b.x - b.nx * ROAD_HALF, roadY(b, -ROAD_HALF), b.z - b.nz * ROAD_HALF,
+        a.x - a.nx * ha, roadY(a, -ha), a.z - a.nz * ha,
+        a.x + a.nx * ha, roadY(a, ha), a.z + a.nz * ha,
+        b.x + b.nx * hb, roadY(b, hb), b.z + b.nz * hb,
+        b.x - b.nx * hb, roadY(b, -hb), b.z - b.nz * hb,
         road(C.road),
       );
       rt.dither = 0;
@@ -394,11 +424,13 @@ export class Renderer {
       // sixteen stripes a second going past at the edge of the screen.
       const kerb = road((i % 2) < 1 ? C.kerbA : C.kerbB);
       for (const side of [-1, 1]) {
+        const ea = side * (ha + RUMBLE);
+        const eb = side * (hb + RUMBLE);
         rt.quad(
-          a.x + a.nx * side * ROAD_HALF, roadY(a, side * ROAD_HALF), a.z + a.nz * side * ROAD_HALF,
-          a.x + a.nx * side * edge, roadY(a, side * edge), a.z + a.nz * side * edge,
-          b.x + b.nx * side * edge, roadY(b, side * edge), b.z + b.nz * side * edge,
-          b.x + b.nx * side * ROAD_HALF, roadY(b, side * ROAD_HALF), b.z + b.nz * side * ROAD_HALF,
+          a.x + a.nx * side * ha, roadY(a, side * ha), a.z + a.nz * side * ha,
+          a.x + a.nx * ea, roadY(a, ea), a.z + a.nz * ea,
+          b.x + b.nx * eb, roadY(b, eb), b.z + b.nz * eb,
+          b.x + b.nx * side * hb, roadY(b, side * hb), b.z + b.nz * side * hb,
           kerb,
         );
       }
@@ -420,13 +452,15 @@ export class Renderer {
       // The white line down each edge of the tarmac, lifted a few centimetres so
       // it is not fighting the road it is painted on.
       for (const side of [-1, 1]) {
-        const inner = side * (ROAD_HALF - 0.3);
-        const outer = side * ROAD_HALF;
+        const ia = side * (ha - 0.3);
+        const oa = side * ha;
+        const ib = side * (hb - 0.3);
+        const ob = side * hb;
         rt.quad(
-          a.x + a.nx * inner, roadY(a, inner) + 0.04, a.z + a.nz * inner,
-          a.x + a.nx * outer, roadY(a, outer) + 0.04, a.z + a.nz * outer,
-          b.x + b.nx * outer, roadY(b, outer) + 0.04, b.z + b.nz * outer,
-          b.x + b.nx * inner, roadY(b, inner) + 0.04, b.z + b.nz * inner,
+          a.x + a.nx * ia, roadY(a, ia) + 0.04, a.z + a.nz * ia,
+          a.x + a.nx * oa, roadY(a, oa) + 0.04, a.z + a.nz * oa,
+          b.x + b.nx * ob, roadY(b, ob) + 0.04, b.z + b.nz * ob,
+          b.x + b.nx * ib, roadY(b, ib) + 0.04, b.z + b.nz * ib,
           road(C.kerbB),
         );
       }
@@ -440,9 +474,9 @@ export class Renderer {
       // definition; taken off the terrain it slid down the beach on the sea
       // front and left the edge of the track dropping into nothing. On the
       // bridge there is none, because there the railing is the barrier.
-      if (away < 640 && a.bridge === undefined) {
+      if (away < 640 && a.bridge === undefined && !a.deck) {
         for (const side of [-1, 1]) {
-          const at = side * WALL_AT;
+          const at = side * a.wall;
           const ax = a.x + a.nx * at;
           const az = a.z + a.nz * at;
           const bx = b.x + b.nx * at;
@@ -458,8 +492,13 @@ export class Renderer {
 
       // The ground: four bands a side, each drawn less often than the one
       // inside it.
-      for (let band = 0; band < BANDS.length; band++) {
-        const [inner, outer, kind, every] = BANDS[band];
+      // No ground at all on a viaduct: the road there is twenty metres in the
+      // air over another piece of road, and its ground would be a plain laid
+      // across the one underneath.
+      for (let band = 0; band < BANDS.length && !a.deck; band++) {
+        const [inner0, outer, kind, every] = BANDS[band];
+        // The first band starts at the kerb, wherever the kerb happens to be.
+        const inner = band === 0 ? Math.max(ha + RUMBLE, inner0 - (ROAD_HALF - ha)) : inner0;
         if (((i % every) + every) % every !== 0) continue;
         const far = nodeStep(route, i, every);
         for (const side of [-1, 1]) {
@@ -491,6 +530,7 @@ export class Renderer {
 
       this.startLine(state, a.i, a, b, tint);
       if (a.bridge !== undefined) this.bridge(route, a, b, tint);
+      if (a.deck) this.viaduct(a, b, tint, i);
 
       const props = route.props[a.i];
       if (props && away < 900) {
@@ -517,6 +557,61 @@ export class Renderer {
   }
 
   /**
+   * The flyover, where a circuit crosses its own path.
+   *
+   * Only Suzuka has one, and Suzuka is the reason it exists: a figure of eight
+   * has to pass over itself somewhere, and the road that does the passing cannot
+   * simply hang there. So it gets an underside, two fascias, a parapet you
+   * cannot drive through, and a pier every fifth node down to the road below.
+   *
+   * Drawn from the node's own width, so it narrows with the tarmac it carries.
+   */
+  viaduct(a, b, tint, i) {
+    const rt = this.rt;
+    const t = a.deck;
+    const ha = a.half + 1.1;
+    const hb = b.half + 1.1;
+    const drop = 1.4 + 1.2 * t;
+    const concrete = tint(shade(C.chrome, 0.74));
+    const dark = tint(shade(C.chrome, 0.56));
+    const rail = tint(C.armco);
+
+    // The underside, which is the only part of it anybody sees from below.
+    rt.quad(
+      a.x - a.nx * ha, roadY(a, -ha) - drop, a.z - a.nz * ha,
+      b.x - b.nx * hb, roadY(b, -hb) - drop, b.z - b.nz * hb,
+      b.x + b.nx * hb, roadY(b, hb) - drop, b.z + b.nz * hb,
+      a.x + a.nx * ha, roadY(a, ha) - drop, a.z + a.nz * ha,
+      dark,
+    );
+    for (const side of [-1, 1]) {
+      const oa = side * ha;
+      const ob = side * hb;
+      const ax = a.x + a.nx * oa;
+      const az = a.z + a.nz * oa;
+      const bx = b.x + b.nx * ob;
+      const bz = b.z + b.nz * ob;
+      const ay = roadY(a, oa);
+      const by = roadY(b, ob);
+      // The fascia: the depth of the deck, seen from the side.
+      rt.quad(ax, ay, az, bx, by, bz, bx, by - drop, bz, ax, ay - drop, az, concrete);
+      // The parapet, which is what stops the car.
+      rt.quad(ax, ay, az, bx, by, bz, bx, by + 0.95, bz, ax, ay + 0.95, az,
+        (i % 8) < 4 ? rail : tint(C.kerbA));
+      // A pier every fifth node, down to the road underneath.
+      if (t > 0.98 && ((i % 5) + 5) % 5 === 0 && a.deckFoot !== undefined) {
+        const px = a.x + a.nx * oa * 0.72;
+        const pz = a.z + a.nz * oa * 0.72;
+        const py = ay - drop;
+        rt.quad(px - 1.1, py, pz, px + 1.1, py, pz,
+          px + 1.1, a.deckFoot, pz, px - 1.1, a.deckFoot, pz, concrete);
+        rt.quad(px, py, pz - 1.1, px, py, pz + 1.1,
+          px, a.deckFoot, pz + 1.1, px, a.deckFoot, pz - 1.1, dark);
+      }
+    }
+  }
+
+  /**
    * The chequered line, and the boxes the grid is painted in.
    *
    * The line is node zero, which on a circuit is a place you come back to rather
@@ -527,8 +622,8 @@ export class Renderer {
     const rt = this.rt;
     if (node === 0) {
       for (let k = -5; k < 5; k++) {
-        const x0 = k * (ROAD_HALF / 5);
-        const x1 = (k + 1) * (ROAD_HALF / 5);
+        const x0 = k * (a.half / 5);
+        const x1 = (k + 1) * (a.half / 5);
         rt.quad(
           a.x + a.nx * x0, roadY(a, x0) + 0.05, a.z + a.nz * x0,
           a.x + a.nx * x1, roadY(a, x1) + 0.05, a.z + a.nz * x1,
@@ -663,7 +758,7 @@ export class Renderer {
       drawShadow(rt, at.x, at.y, at.z, yaw, 1.15, 2.5, tint);
       drawRacer(rt, car, at.x, at.y, at.z, yaw, tint, this.lightAt);
       // Smoke when the tyres have given up, dust when they are on the grass.
-      const rough = Math.abs(car.x) > ROAD_HALF + RUMBLE;
+      const rough = Math.abs(car.x) > at.node.half + RUMBLE;
       if ((car.slide > 2 || rough) && car.speed > 8) {
         drawSmoke(rt, car, at.x, at.y, at.z, yaw, tint, rough, state.tick + car.slot * 7);
       }
@@ -947,7 +1042,7 @@ function roadY(n, off) {
 function groundY(n, side, off) {
   const g = side < 0 ? n.g.l : n.g.r;
   const far = side < 0 ? n.g.far[0] : n.g.far[1];
-  const kerb = ROAD_HALF + RUMBLE;
+  const kerb = n.half + RUMBLE;
   if (off <= kerb) return roadY(n, side * off);
   if (off <= RINGS[0]) {
     return lerp(roadY(n, side * kerb), g[0], (off - kerb) / (RINGS[0] - kerb));

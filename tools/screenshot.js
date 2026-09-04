@@ -119,6 +119,25 @@ if (route === 'docs') {
       const at = player(s).s % s.route.metres;
       return at > s.route.metres * 0.42 && at < s.route.metres * 0.58 && player(s).speed > 70;
     }, 'grand', 'gp'],
+    // The four that are places, each caught where it is most itself: the climb
+    // out of Eau Rouge, the park along the straight before Lesmo, the flyover
+    // from underneath, and the dunes on the way to Tarzan.
+    ['spa', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.20 && at < s.route.metres * 0.26 && player(s).speed > 72;
+    }, 'spa', 'gp'],
+    ['monza', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.26 && at < s.route.metres * 0.32 && player(s).speed > 75;
+    }, 'monza', 'gp'],
+    ['suzuka', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.835 && at < s.route.metres * 0.852 && player(s).speed > 70;
+    }, 'suzuka', 'gp'],
+    ['zandvoort', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.055 && at < s.route.metres * 0.085 && player(s).speed > 55;
+    }, 'zandvoort', 'gp'],
   ];
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
   for (const [name, when, on, mode, share = 0.95, dusk = false] of want) {
