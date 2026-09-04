@@ -887,6 +887,18 @@ export class Renderer {
     this._ui = {
       panel: (x, y, w, h, a, b) => rt.panel(q(x), q(y), q(w), q(h), a, b),
       rect: (x, y, w, h, c) => rt.rect(q(x), q(y), q(w), q(h), c),
+      /**
+       * A rectangle given by its edges rather than by a corner and a size.
+       *
+       * The difference matters wherever shapes are built out of rows. Scaling a
+       * position and a height separately rounds each of them on its own, so two
+       * rows that touched at four hundred and eighty are one pixel apart at six
+       * hundred and forty - or one pixel on top of each other. The corner arrow
+       * was eight such rows and came out with a comb down the side of it.
+       * Scaling both edges instead makes the next row start exactly where the
+       * last one stopped, whatever the scale is.
+       */
+      span: (x0, y0, x1, y1, c) => rt.rect(q(x0), q(y0), q(x1) - q(x0), q(y1) - q(y0), c),
       text: (str, x, y, c, n) => rt.text(str, q(x), q(y), c, k(n)),
       textMid: (str, x, y, c, n) => rt.textMid(str, q(x), q(y), c, k(n)),
       blit: (...args) => rt.blit(...args),
@@ -1017,19 +1029,34 @@ export class Renderer {
     if (Math.abs(worst) < 0.035) return;
 
     const rt = this.ui;
-    const hard = Math.abs(worst) > 0.085;
+    // The same three grades the boards beside the track use, worked out the same
+    // way, so the panel and the verge never say different things about the same
+    // corner. Six over the curvature is the radius.
+    const peak = Math.abs(worst);
+    const sharp = peak > 0.12 ? 3 : peak > 0.055 ? 2 : 1;
     const near = at < 24;
-    const colour = hard ? (near ? BAD : WARN) : HUD_DIM;
-    const right = worst > 0;
-    const x = HUD_BASE_W / 2 + (right ? 32 : -50);
-    rt.panel(x, 30, 18, 16, HUD_BACK, colour);
-    // A solid triangle, eight rows, pointing the way the corner goes.
-    for (let row = 0; row < 8; row++) {
-      const len = Math.max(1, Math.round(11 - Math.abs(row - 3.5) * 2.4));
-      rt.rect(right ? x + 3 : x + 15 - len, 34 + row, len, 1, colour);
+    const colour = sharp >= 3 ? (near ? BAD : WARN) : sharp === 2 ? WARN : HUD_DIM;
+    const bend = worst > 0 ? 1 : -1;
+    const wide = 10 + sharp * 8;
+    const x = HUD_BASE_W / 2 + (bend > 0 ? 26 : -26 - wide);
+    rt.panel(x, 28, wide, 20, HUD_BACK, colour);
+
+    // Chevrons, drawn as rows between two edges rather than as rows of a fixed
+    // height, so they tile exactly at any scale.
+    const mid = 38;
+    const tall = 6;
+    for (let c = 0; c < sharp; c++) {
+      const tip = bend > 0 ? x + wide - 5 - c * 8 : x + 5 + c * 8;
+      for (let row = 0; row <= tall * 2; row++) {
+        const y = mid - tall + row;
+        // Distance back from the tip grows to the middle of the chevron and
+        // shrinks again, which is what makes it an arrowhead and not a triangle.
+        const back = Math.abs(row - tall) * 0.62;
+        const from = tip - bend * (back + 3.4);
+        const to = tip - bend * back;
+        rt.span(Math.min(from, to), y, Math.max(from, to), y + 1, colour);
+      }
     }
-    // And a bar behind it for the corners that will actually have you.
-    if (hard) rt.rect(right ? x + 2 : x + 14, 34, 2, 8, colour);
   }
 
   /**

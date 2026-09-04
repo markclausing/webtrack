@@ -711,6 +711,32 @@ export function buildRoute(key) {
     }
   }
 
+  /**
+   * The curvature a driver feels, as opposed to the curvature of one node.
+   *
+   * Camber is read off this rather than off `curve`, and it has to be. A node is
+   * six metres, and six metres of a surveyed line is noise: Suzuka's curvature
+   * moves by a hundredth of a radian from one node to the next, so a camber
+   * taken straight off it swung the road - and the car standing on it - by a
+   * degree per node. At two hundred that is nine wobbles a second, and it read
+   * exactly as it sounds, as a car with something loose in the suspension.
+   *
+   * Averaged over sixty-six metres, which is about the length of road a camber
+   * change is actually built over.
+   */
+  const felt = new Float64Array(count);
+  {
+    const span = 5;
+    for (let i = 0; i < count; i++) {
+      let sum = 0;
+      for (let k = -span; k <= span; k++) {
+        const j = ((i + k) % count + count) % count;
+        sum += turn(heading[j], heading[(j + 1) % count]);
+      }
+      felt[i] = sum / (span * 2 + 1);
+    }
+  }
+
   const nodes = [];
   for (let i = 0; i < count; i++) {
     const t = i / count;
@@ -766,7 +792,11 @@ export function buildRoute(key) {
       //
       // Clamped on the surveyed circuits because a survey is not relaxed, and
       // Monza's Rettifilo came out at a hundred and twenty-five degrees.
-      bank: real ? Math.max(-0.12, Math.min(0.12, curve * 3.2)) : curve * 3.2,
+      bank: real ? Math.max(-0.12, Math.min(0.12, felt[i] * 3.2)) : felt[i] * 3.2,
+      // The curvature over sixty-six metres of road rather than over six. The
+      // camber is built from it, and so is how far the car leans on its springs:
+      // both are responses to a corner, and a corner is longer than a node.
+      felt: felt[i],
       // Banking: a structure, and a real angle. Held apart from the camber
       // because the two behave nothing alike. Camber is drawn at a twelfth of
       // its nominal value and does not touch the car at all; eighteen degrees of

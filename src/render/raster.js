@@ -22,15 +22,50 @@
 import { FOCAL, NEAR } from '../constants.js';
 
 /**
- * Snaps a colour to the 512 a Mega Drive could make: three bits a channel.
+ * How many values each colour channel may take. Five bits: thirty-two.
+ *
+ * It was three for a long time - the five hundred and twelve a Mega Drive could
+ * make - and three is what gives flat shading its bite, because it stops two
+ * greens that were nearly the same from staying nearly the same. Thirty-two
+ * thousand seven hundred and sixty-eight is what a Saturn held, and it is what
+ * this runs at now: the same argument that took the resolution past that machine
+ * applies here, and eight steps of blue could not make a sky that was a gradient
+ * rather than a set of stripes.
+ *
+ * The look survives it for the same reason it survived the pixels. What reads as
+ * sixteen-bit is the flat shading, the hard edges and the fact that a tree is
+ * three polygons - none of which is about how many colours there are.
+ */
+export const LEVELS = 32;
+const STEP = 255 / (LEVELS - 1);
+
+/**
+ * Snaps a colour to the palette.
  *
  * Called on the way in rather than on the way out, so it costs nothing per
- * frame, and it is not decoration - it is what stops two greens that were
- * nearly the same from staying nearly the same. The palette does the flattening
- * that a flat-shaded renderer wants anyway.
+ * frame. The palette does the flattening that a flat-shaded renderer wants
+ * anyway.
  */
 export function md(r, g, b) {
-  const q = (v) => Math.round(Math.max(0, Math.min(255, v)) / 255 * 7) * 255 / 7 | 0;
+  const q = (v) => Math.round(Math.max(0, Math.min(255, v)) / STEP) * STEP | 0;
+  return (255 << 24) | (q(b) << 16) | (q(g) << 8) | q(r);
+}
+
+/**
+ * A colour snapped with a dither threshold instead of rounded.
+ *
+ * Rounding sends every value in a step to the same colour, which is what makes a
+ * gradient into stripes. Given a threshold from an ordered matrix this sends
+ * some of them up and some of them down in a fixed pattern, so a run of rows
+ * between two palette entries reads as the colour in between. It is the same
+ * trick the road surface uses for its two greys, applied to a channel at a time.
+ */
+export function dithered(r, g, b, t) {
+  const q = (v) => {
+    const x = Math.max(0, Math.min(255, v)) / STEP;
+    const low = Math.floor(x);
+    return Math.min(LEVELS - 1, x - low > t ? low + 1 : low) * STEP | 0;
+  };
   return (255 << 24) | (q(b) << 16) | (q(g) << 8) | q(r);
 }
 
@@ -163,30 +198,44 @@ export class Raster {
     const pattern = this.pattern || (this.pattern = new Uint32Array(4));
     let at = 0;
 
+    // The sky, as one continuous ramp through the stops rather than as flat
+    // bands with the joins dithered.
+    //
+    // It used to be the other way round, and the reason was the palette: with
+    // eight values a channel there was no gradient to draw. A sky from a deep
+    // blue to a pale one had four or five colours available to do it in, so it
+    // was drawn as four or five stripes and a great deal of care went into
+    // hiding the joins - which worked, and still left the sky looking like
+    // stripes with the joins hidden.
+    //
+    // With thirty-two a channel the ramp itself is nearly smooth, and the
+    // ordered dither is enough to take the rest of the steps out. So every row
+    // gets its own colour, interpolated between the two stops it lies between,
+    // and the four pixels of Bayer pattern decide which side of the palette each
+    // one lands on.
     for (let y = 0; y < h; y++, at += w) {
       const f = y / h;
       let i = 0;
       while (i < bands.length - 1 && f >= bands[i][0]) i++;
-      const colour = bands[i][1];
-      // How many rows until this band gives way to the next one.
-      const rows = (bands[i][0] - f) * h;
-      const next = i + 1 < bands.length ? bands[i + 1][1] : colour;
-      // The fade is a share of the band it belongs to rather than a fixed
-      // number of rows, so a thin band near the horizon is not entirely made of
-      // dither while a deep one at the top of the sky gets a long enough run to
-      // be a gradient.
-      const from = i > 0 ? bands[i - 1][0] : 0;
-      const fade = Math.max(3, Math.min(h * 0.13, (bands[i][0] - from) * h * 0.8));
+      const to = bands[i][1];
+      const from = i > 0 ? bands[i - 1][1] : to;
+      const top = i > 0 ? bands[i - 1][0] : 0;
+      const span = bands[i][0] - top;
+      const u = span > 0 ? Math.max(0, Math.min(1, (f - top) / span)) : 1;
 
-      if (next === colour || rows > fade || rows < 0) {
-        pix.fill(colour, at, at + w);
+      const r = (from & 255) + (((to & 255) - (from & 255)) * u);
+      const g = ((from >> 8) & 255) + ((((to >> 8) & 255) - ((from >> 8) & 255)) * u);
+      const b = ((from >> 16) & 255) + ((((to >> 16) & 255) - ((from >> 16) & 255)) * u);
+
+      const row = (y & 3) * 4;
+      for (let k = 0; k < 4; k++) pattern[k] = dithered(r, g, b, BAYER[row + k] / 16);
+      // Four columns of pattern is all the matrix has, so a row has four answers
+      // in it and the fill is a repeat rather than a per-pixel decision.
+      const p0 = pattern[0];
+      if (p0 === pattern[1] && p0 === pattern[2] && p0 === pattern[3]) {
+        pix.fill(p0, at, at + w);
         continue;
       }
-      // Four pixels of pattern, repeated across the row: the matrix only has
-      // four columns, so the row only has four different answers in it.
-      const t = (1 - rows / fade) * 16;
-      const row = (y & 3) * 4;
-      for (let k = 0; k < 4; k++) pattern[k] = BAYER[row + k] < t ? next : colour;
       for (let x = 0; x < w; x++) pix[at + x] = pattern[x & 3];
     }
   }

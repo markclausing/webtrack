@@ -286,7 +286,7 @@ export function gearAt(speed) {
  * the sixteen and a half there are.
  *
  * The look survives it because what makes this read as sixteen-bit was never the
- * pixel count: it is the flat shading, the nine-bit palette and the fact that a
+ * pixel count: it is the flat shading, the hard edges and the fact that a
  * tree is three polygons. More pixels make those things clearer rather than less
  * true - and the HUD is laid out against a fixed four hundred and eighty wide
  * space now, so it no longer shrinks every time this number goes up.

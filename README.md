@@ -281,7 +281,7 @@ over two hundred and eighty-seven thousand pixels is under four milliseconds,
 which leaves twelve of the sixteen a frame gets.
 
 What makes this read as sixteen-bit was never the pixel count. It is the flat
-shading, the nine-bit palette, and the fact that a tree is three polygons — and
+shading, the palette, and the fact that a tree is three polygons — and
 more pixels make those clearer rather than less true. The HUD is laid out against
 a fixed 480-wide space and scaled onto whatever the screen is, so it stops
 shrinking every time that number goes up, which is what it had been quietly doing.
@@ -289,9 +289,13 @@ shrinking every time that number goes up, which is what it had been quietly doin
 Doing it in software buys the one thing a modern pipeline will not give you,
 which is the actual look:
 
-- **Every colour is one of the 512 that machine could make** — three bits a
-  channel, snapped on the way in. Two greens that were nearly the same stop being
-  nearly the same, which is what flat shading wants anyway.
+- **Every colour is one of 32,768** — five bits a channel, snapped on the way in.
+  It was 512 for a long time, the three bits a Mega Drive had, and three bits is
+  what gives flat shading its bite: two greens that were nearly the same stop
+  being nearly the same. But eight steps of blue cannot make a sky that is a
+  gradient rather than a set of stripes, so it runs at what a Saturn held
+  instead. The bite comes from the flat shading and the hard edges, and neither
+  of those is about how many colours there are.
 - **The track is chequered, not banded.** There is no grey between the two greys
   that palette has, so the lighter stripe is a one-pixel chequerboard of both,
   exactly the way the hardware faked a colour it did not have.

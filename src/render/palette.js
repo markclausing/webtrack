@@ -1,12 +1,18 @@
 /**
  * Colour.
  *
- * Every value here goes through md(), which throws away everything below the
- * top three bits of each channel - so these are not the colours written down,
- * they are the nearest colours the machine being imitated could actually make.
- * Writing them out in full and letting the snap happen is deliberate: it means
- * the numbers read like colours rather than like a lookup table, and two greens
- * that snap to the same green are a signal that one of them was never needed.
+ * Every value here goes through md(), which keeps the top five bits of each
+ * channel - so these are not quite the colours written down, they are the
+ * nearest the palette can make. Writing them out in full and letting the snap
+ * happen is deliberate: it means the numbers read like colours rather than like
+ * a lookup table.
+ *
+ * Five bits, and it was three. Three is the Mega Drive's five hundred and twelve
+ * and it is what gives flat shading its bite, because two greens that were
+ * nearly the same stop being nearly the same. It went up because eight values of
+ * blue cannot make a sky: the gradient had to be drawn as four or five stripes
+ * with a great deal of care taken over hiding the joins, which worked and still
+ * left a sky that looked like stripes with the joins hidden.
  *
  * Two themes, because the two halves of the route are two different times of
  * day as much as two different places: the pass is cold, blue and high, and the

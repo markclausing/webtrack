@@ -192,8 +192,9 @@ function drive(state, car) {
   // rest of the race is a bug however it got there.
   const ctl = car.ctl || { throttle: true, brake: false, steer: 0 };
   if (car.speed < 0.4 && racing(state)) ctl.throttle = true;
-  const { i } = nodeAt(state.route, car.s);
+  const { i, t: along } = nodeAt(state.route, car.s);
   const node = state.route.nodes[i];
+  const after = state.route.nodes[(i + 1) % state.route.nodes.length];
   const surf = surfaceOf(car.x, node.half);
 
   // What is under the tyres. Off the tarmac you lose most of the grip and a
@@ -268,8 +269,25 @@ function drive(state, car) {
   // half of it went through the surface - a car is nearly two metres wide, and
   // two metres across eighteen degrees is thirty centimetres of bodywork under
   // the tarmac.
-  const lean = -Math.sign(kappa) * Math.min(0.045, (need / Math.max(1, grip)) * 0.045);
-  car.roll = lean - (node.dish + node.bank * 0.12);
+  // How far it leans on its springs, from the corner it is in rather than from
+  // the node it is on.
+  //
+  // This was the shiver. At two hundred and sixty the lean saturates at a
+  // curvature of three hundredths, and a surveyed line wanders by one hundredth
+  // from one node to the next - so on a fast curve the body was slamming from
+  // full lean one way to part lean the other and back, ten times a second, on
+  // nothing but survey noise. Read over sixty-six metres it is a corner again.
+  const felt = node.felt !== undefined ? node.felt / SEG : kappa;
+  const load = car.speed * car.speed * Math.abs(felt);
+  const lean = -Math.sign(felt) * Math.min(0.045, (load / Math.max(1, grip)) * 0.045);
+  // Interpolated between the two nodes, the way the road under it is. Taken from
+  // the near node alone the car's roll held still for six metres and then
+  // stepped, which at sixty metres a second is ten steps a second and reads as a
+  // shiver - the road was already smooth between nodes and the car standing on
+  // it was not.
+  const tilt = (a, b) => a + (b - a) * along;
+  car.roll = lean
+    - (tilt(node.dish, after.dish) + tilt(node.bank, after.bank) * 0.12);
 
 }
 

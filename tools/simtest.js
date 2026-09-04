@@ -528,10 +528,21 @@ for (const tier of ['easy', 'normal', 'hard']) {
   for (const key of ['pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort']) {
     const nodes = buildRoute(key).nodes;
     const surface = (n, x) => n.y - n.bank * x * 0.12;
+    // Read over sixty-six metres, which is what the camber itself is read over:
+    // six metres of a surveyed line is noise, and comparing a camber built from
+    // a stretch of road against the curvature of one node in it disagrees at
+    // every corner entry and exit for no reason anybody would care about.
+    const felt = (i) => {
+      let sum = 0;
+      for (let k = -5; k <= 5; k++) {
+        sum += nodes[((i + k) % nodes.length + nodes.length) % nodes.length].curve;
+      }
+      return sum / 11;
+    };
     // Only corners worth the name: on a straight the camber is noise either way.
-    const bendy = nodes.filter((n) => Math.abs(n.curve) > 0.02);
+    const bendy = nodes.filter((n) => Math.abs(felt(n.i)) > 0.02);
     const wrong = bendy.filter((n) => {
-      const out = n.curve > 0 ? -n.half : n.half;
+      const out = felt(n.i) > 0 ? -n.half : n.half;
       return surface(n, out) < surface(n, -out);
     });
     ok(`${key}: all ${bendy.length} of its real corners are cambered outside-high`,
