@@ -157,6 +157,16 @@ export class Renderer {
   }
 
   /**
+   * Hands the picture over again, for anything drawn after `draw` finished.
+   *
+   * Only the frame meter uses it, and only when it is switched on: it has to
+   * report how long the frame took, which is not known until the frame is over.
+   */
+  show() {
+    this.rt.blit(this.ctx, this.buffer);
+  }
+
+  /**
    * The camera: behind the car, low, and lower the faster it goes.
    *
    * It rides the track rather than the car - its position comes from the
@@ -780,8 +790,11 @@ export class Renderer {
       if (Math.hypot(at.x - this.cam.x, at.z - this.cam.z) < 5.4) continue;
       const tint = this.tinter(theme, Math.abs(away));
       const yaw = at.a + car.yaw;
-      drawShadow(rt, at.x, at.y, at.z, yaw, 1.15, 2.5, tint);
-      drawRacer(rt, car, at.x, at.y, at.z, yaw, tint, this.lightAt);
+      // Nose up the hill or down it, so the car sits on the road rather than
+      // through it.
+      const pitch = -Math.atan(at.slope);
+      drawShadow(rt, at.x, at.y, at.z, yaw, 1.15, 2.5, tint, pitch);
+      drawRacer(rt, car, at.x, at.y, at.z, yaw, tint, this.lightAt, pitch);
       // Smoke when the tyres have given up, dust when they are on the grass.
       const rough = Math.abs(car.x) > at.node.half + RUMBLE;
       if ((car.slide > 2 || rough) && car.speed > 8) {

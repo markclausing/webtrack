@@ -265,6 +265,13 @@ left, so left alone they put up chevrons pointing both ways at once, at the one
 moment you most need to be told a single thing. Every board is now bid for, and
 the board about the corner you have not finished yet wins the ground.
 
+Press **F** during a race for a frame meter: how long the last frame took, how
+many simulation steps went into it, and how many triangles came out. The middle
+number is the one that matters. A steady `X1` is a game running at speed; an `X1`
+and `X2` alternating is a game that has run out of frame, and that is the one
+failure that looks like a fault in the road rather than a fault in the clock —
+the car appears to shiver and nothing about the car is wrong.
+
 ## The look
 
 Everything you can see is polygons standing in the world — no sprites, no

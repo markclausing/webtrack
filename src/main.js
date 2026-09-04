@@ -108,10 +108,12 @@ function frame(now) {
   const dt = Math.min(250, now - game.last);
   game.last = now;
 
+  let steps = 0;
   if (game.playing && !game.paused) {
     game.acc += dt;
     while (game.acc >= TICK_MS) {
       game.acc -= TICK_MS;
+      steps++;
       step(game.state, input.mask(0));
       drain(game.state);
       if (game.state.over || game.state.finished) {
@@ -121,6 +123,7 @@ function frame(now) {
     }
     sound.update(game.state);
     renderer.draw(game.state);
+    if (game.meter) meter(dt, steps);
     return;
   }
 
@@ -137,6 +140,29 @@ function frame(now) {
     }
     renderer.draw(game.demo, { chrome: false });
   }
+}
+
+/**
+ * The frame meter, drawn straight onto the finished picture.
+ *
+ * Three numbers and one of them is the point. `ms` is how long the whole frame
+ * took including everything the browser did with it; `x1` or `x2` is how many
+ * simulation steps went into it. A steady x1 is a game running at speed. An x1
+ * and x2 alternating is a game that has run out of frame, and it is the one
+ * failure that looks like a fault in the road rather than a fault in the clock -
+ * the car appears to shiver, and nothing about the car is wrong.
+ */
+const meterTimes = [];
+function meter(dt, steps) {
+  meterTimes.push(dt);
+  if (meterTimes.length > 30) meterTimes.shift();
+  const worst = Math.max(...meterTimes);
+  const rt = renderer.rt;
+  const bad = worst > 18;
+  rt.panel(4, rt.h - 16, 116, 12, 0xff101018, bad ? 0xff4060ff : 0xff40a060);
+  rt.text(`${dt.toFixed(1)}MS X${steps} ${rt.tris}T`, 8, rt.h - 13,
+    bad ? 0xff4060ff : 0xffd0d8e0);
+  renderer.show();
 }
 
 /** Whatever the simulation said happened, said out loud. */
@@ -264,6 +290,19 @@ function togglePause() {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && game.playing) {
     togglePause();
+    e.preventDefault();
+  }
+  // F for frames: how long the last frame took, how many simulation steps went
+  // into it, and how many triangles came out.
+  //
+  // It is here because of a question this could not otherwise answer. A car that
+  // appears to shiver at speed is either the road, the model or the frame rate,
+  // and the first two can be measured from a file while the third can only be
+  // measured on the machine it is happening on: if a frame runs over sixteen and
+  // a half milliseconds the loop puts two simulation steps into the next one,
+  // and one-two-one-two reads exactly like a vibration.
+  if (e.key === 'f' || e.key === 'F') {
+    game.meter = !game.meter;
     e.preventDefault();
   }
 });

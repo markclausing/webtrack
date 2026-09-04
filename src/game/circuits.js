@@ -164,9 +164,16 @@ export const SURVEYED = {
     land: { rise: 7.5, roll: 3.2, plain: -6 },
     scatter: [
       // Walled in on both sides, which is the single fact about the place.
+      //
+      // The near band is the wall and stays as it was. The far one was almost as
+      // dense and is almost entirely hidden behind the near one - it was costing
+      // Spa about fifteen hundred triangles a frame to draw trees behind trees,
+      // which took the circuit close enough to the frame budget that the loop
+      // started alternating one and two simulation steps a frame. That beat is
+      // what you see, and it reads as the car shaking.
       { kind: 'spruce', side: 0, from: 19, to: 46, chance: 0.95, s: [0.85, 1.9] },
-      { kind: 'spruce', side: 0, from: 40, to: 120, chance: 0.8, s: [1.0, 2.2] },
-      { kind: 'pine', side: 0, from: 24, to: 70, chance: 0.22, s: [0.8, 1.4] },
+      { kind: 'spruce', side: 0, from: 40, to: 120, chance: 0.34, s: [1.2, 2.4] },
+      { kind: 'pine', side: 0, from: 24, to: 70, chance: 0.12, s: [0.8, 1.4] },
       { kind: 'rock', side: 0, from: 17, to: 25, chance: 0.05, s: [0.6, 1.1] },
     ],
     marks: [
@@ -226,8 +233,8 @@ export const SURVEYED = {
     scatter: [
       // The Royal Park: broadleaf, dense, and right up to the barrier.
       { kind: 'oak', side: 0, from: 18, to: 44, chance: 0.9, s: [0.9, 1.7] },
-      { kind: 'oak', side: 0, from: 38, to: 110, chance: 0.75, s: [1.0, 2.0] },
-      { kind: 'pine', side: 0, from: 22, to: 80, chance: 0.16, s: [0.9, 1.5] },
+      { kind: 'oak', side: 0, from: 38, to: 110, chance: 0.36, s: [1.2, 2.2] },
+      { kind: 'pine', side: 0, from: 22, to: 80, chance: 0.1, s: [0.9, 1.5] },
     ],
     marks: [
       { at: 0.000, kind: 'pit', side: 1, off: 32, s: 1.2 },

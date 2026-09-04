@@ -233,7 +233,9 @@ export function worldOf(route, s, x, lift = 0) {
     a: a.a + shortTurn(a.a, b.a) * t,
     bank,
     dish,
-    slope: a.slope,
+    // Interpolated like everything else here: taken from the near node alone it
+    // holds for six metres and then steps, and a car pitched by it steps with it.
+    slope: a.slope + (b.slope - a.slope) * t,
     curve: a.curve,
     node: a,
   };

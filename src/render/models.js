@@ -36,10 +36,11 @@ class Placer {
     this.set(0, 0, 0, 0, 0, 1);
   }
 
-  set(x, y, z, yaw, roll, scale) {
+  set(x, y, z, yaw, roll, scale, pitch = 0) {
     this.ox = x; this.oy = y; this.oz = z;
     this.sy = Math.sin(yaw); this.cy = Math.cos(yaw);
     this.sr = Math.sin(roll); this.cr = Math.cos(roll);
+    this.sp = Math.sin(pitch); this.cp = Math.cos(pitch);
     this.s = scale;
     return this;
   }
@@ -53,8 +54,12 @@ class Placer {
       const ly = v[i * 3 + 1];
       const lz = v[i * 3 + 2];
       const rx = (lx * this.cr - ly * this.sr) * this.s;
-      const ry = (lx * this.sr + ly * this.cr) * this.s;
-      const rz = lz * this.s;
+      const ry0 = (lx * this.sr + ly * this.cr) * this.s;
+      const rz0 = lz * this.s;
+      // Pitch after roll and before heading: a car noses down the hill it is on,
+      // not down whatever direction the world happens to run.
+      const ry = ry0 * this.cp - rz0 * this.sp;
+      const rz = ry0 * this.sp + rz0 * this.cp;
       b[i * 3] = this.ox + rx * this.cy + rz * this.sy;
       b[i * 3 + 1] = this.oy + ry;
       b[i * 3 + 2] = this.oz - rx * this.sy + rz * this.cy;
@@ -571,8 +576,8 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
  * One flat hexagon of shadow fixes it completely, and it is the cheapest thing
  * in the renderer.
  */
-export function drawShadow(rt, x, y, z, yaw, wide, long, tint) {
-  put.set(x, y + 0.03, z, yaw, 0, 1);
+export function drawShadow(rt, x, y, z, yaw, wide, long, tint, pitch = 0) {
+  put.set(x, y + 0.03, z, yaw, 0, 1, pitch);
   put.face(rt, tint(C.shadow), [
     -wide, 0, -long * 0.6,
     -wide * 0.7, 0, -long,
@@ -600,9 +605,21 @@ const AXLE = 1.5;
  * wheels standing out in the air are what stop it reading as a saloon; and the
  * helmet is how you tell at a glance that there is somebody in it.
  */
-export function drawRacer(rt, car, x, y, z, yaw, tint, night = 0) {
+/**
+ * The car.
+ *
+ * `pitch` is the slope of the road under it, and it was missing for a long time.
+ * Nothing in the Placer could tilt a model nose-up or nose-down, so on a hill the
+ * car was drawn dead level while the road ran away underneath it: at Spa's
+ * steepest, fifteen in a hundred, that buried the nose a third of a metre in the
+ * tarmac. A buried nose is not a static ugliness, it is a fight in the depth
+ * buffer that resolves differently every frame as the camera moves, and it reads
+ * as the whole car shivering. Spa was the worst of the seven because Spa is the
+ * steepest of the seven, which is how it was found.
+ */
+export function drawRacer(rt, car, x, y, z, yaw, tint, night = 0, pitch = 0) {
   const pal = TEAM_COLOURS[car.team % TEAM_COLOURS.length];
-  put.set(x, y, z, yaw, car.roll || 0, 1);
+  put.set(x, y, z, yaw, car.roll || 0, 1, pitch);
 
   const body = tint(pal.body);
   const dark = tint(shade(pal.body, 0.72));
