@@ -530,7 +530,13 @@ function scatter(nodes, rnd) {
     // they are the reason the third lap is a lap rather than a corridor.
     if (i % 12 === 0 && !nodes[i].bridge) {
       const side = (i / 12) % 2 === 0 ? -1 : 1;
-      add(i, { kind: 'mast', side, off: 17.5, s: 1, r: side < 0 ? 0 : Math.PI, align: true });
+      // The arm is built pointing at local -x, which with the track's heading is
+      // its left. So the mast on the right of the track is placed as drawn and
+      // the one on the left is turned round - the other way about had both of
+      // them leaning out over the scenery.
+      add(i, {
+        kind: 'mast', side, off: 17.5, s: 1, r: side < 0 ? Math.PI : 0, align: true,
+      });
     }
 
     if (warm < 0.55) {
