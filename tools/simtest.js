@@ -346,6 +346,79 @@ for (const tier of ['easy', 'normal', 'hard']) {
       .table('gp', 'pass', 'normal').length === 1);
 }
 
+// --- The corner boards --------------------------------------------------------
+
+// Chevrons on every circuit, and never two of them disagreeing.
+//
+// A chicane is a left and a right forty metres apart. The left wants its boards
+// on the right of the road and the right wants its on the left, so placed as
+// they fell you got chevrons pointing both ways at once, at the one moment you
+// most need to be told a single thing.
+{
+  for (const key of ['pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort']) {
+    const route = buildRoute(key);
+    const count = route.nodes.length;
+    const signs = new Map();
+    for (let i = 0; i < count; i++) {
+      for (const prop of route.props[i] || []) {
+        if (prop.kind === 'sign') signs.set(i, prop);
+      }
+    }
+    let contradicting = 0;
+    for (const [i, a] of signs) {
+      for (let d = -3; d <= 3; d++) {
+        if (d === 0) continue;
+        const b = signs.get(((i + d) % count + count) % count);
+        if (b && b.side !== a.side) contradicting++;
+      }
+    }
+    ok(`${key}: ${signs.size} corner boards, none of them contradicting a neighbour`,
+      signs.size > 40 && contradicting === 0);
+  }
+
+  // And they say something true.
+  //
+  // Two things are checked and a third deliberately is not. Every board stands
+  // on the outside of the bend it points at, which is structural - get the sign
+  // wrong once and every board on every circuit is on the wrong verge. And every
+  // board that is actually standing in a corner points the way that corner goes.
+  //
+  // What is not checked is the approach boards, and the reason is worth writing
+  // down: they stand on straight road, so there is nothing under them to compare
+  // against, and every attempt to work out which corner they must be about by
+  // looking ahead got it wrong somewhere - on a circuit like Zandvoort the next
+  // corner but one is often sharper than the one you are being warned about. The
+  // test that catches a genuinely confusing board is the one above, about
+  // neighbours disagreeing.
+  let outside = 0;
+  let pointing = 0;
+  let inCorner = 0;
+  let boards = 0;
+  for (const key of ['pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort']) {
+    const route = buildRoute(key);
+    const count = route.nodes.length;
+    for (let i = 0; i < count; i++) {
+      for (const prop of route.props[i] || []) {
+        if (prop.kind !== 'sign') continue;
+        boards++;
+        if (prop.side !== -prop.bend) outside++;
+        let here = 0;
+        for (let k = -4; k <= 4; k++) here += route.nodes[((i + k) % count + count) % count].curve;
+        // Unambiguously inside a corner: a two hundred metre radius or tighter.
+        // Looser than that and a board can be warning about the right-hander
+        // ahead while standing on the tail of the gentle left before it, which
+        // is what one board at Eau Rouge does and is exactly where you want it.
+        if (Math.abs(here / 9) < 0.03) continue;
+        inCorner++;
+        if (Math.sign(here) !== prop.bend) pointing++;
+      }
+    }
+  }
+  ok(`all ${boards} boards stand on the outside of the bend they point at`, outside === 0);
+  ok(`and all ${inCorner} of the ones standing in a corner point the way it goes`,
+    inCorner > 200 && pointing === 0);
+}
+
 // --- What the score board is actually given ---------------------------------------
 
 {

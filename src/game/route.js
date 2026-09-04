@@ -977,6 +977,15 @@ function cornerBoards(nodes, add) {
   }
   if (run && run.to - run.from >= 3) corners.push(run);
 
+  // Every board anybody might want, before any of them are allowed to stand.
+  //
+  // Collected rather than placed, because two corners close together both want
+  // the same piece of verge and they want it pointing opposite ways. A chicane
+  // is a left and a right forty metres apart: the left's boards go on the right
+  // of the road and the right's on the left, and placed as they fell you got
+  // chevrons on both sides at once, disagreeing with each other, at the one
+  // moment you most need to be told a single thing.
+  const wanted = [];
   for (const corner of corners) {
     const bend = corner.peak > 0 ? 1 : -1;
     // How many chevrons, from what the corner is actually worth in speed rather
@@ -990,18 +999,54 @@ function cornerBoards(nodes, add) {
     // The outside of the corner, which is the side you are looking at on the way
     // in and the side you end up on if you get it wrong.
     const side = -bend;
-    const board = (i) => {
-      const node = at(i);
-      add(i, {
-        kind: 'sign', side, off: node.wall + 2.4, s: 1, r: 0,
-        align: true, flat: true, bend, sharp,
-      });
+    const want = (i) => {
+      const node = ((i % count) + count) % count;
+      // How much of this corner is still to come, from here. It is what decides
+      // who gets the ground when two corners want it: the board for the corner
+      // you have not finished yet beats the board for the one after it.
+      let left = corner.to - node;
+      if (left < 0) left += count;
+      wanted.push({ node, left, corner, side, bend, sharp });
     };
-    // On the approach: ninety metres and forty-five.
-    board(corner.from - 15);
-    board(corner.from - 8);
-    // And down the outside of the corner itself, every thirty metres.
-    for (let i = corner.from; i <= corner.to; i += 5) board(i);
+    // On the approach: sixty metres and thirty. Late on purpose - a board a
+    // hundred metres out is read, believed and forgotten before the corner
+    // arrives, and the one that does the work is the last one you see.
+    want(corner.from - 10);
+    want(corner.from - 5);
+    // And down the outside of the corner itself, every eighteen metres, which is
+    // close enough that they read as a line following the road round rather than
+    // as three separate signs.
+    for (let i = corner.from; i <= corner.to; i += 3) want(i);
+  }
+
+  /**
+   * One board to a place, and the most relevant one wins it.
+   *
+   * Sorted by how much of its own corner is still ahead, so a board about the
+   * corner you are in beats a board about the corner after it, and placed
+   * greedily. A board keeps three nodes clear of any board belonging to a
+   * different corner - eighteen metres - which is what stops a chicane putting
+   * up two contradictory signs, while leaving a corner free to have as many of
+   * its own as it likes.
+   */
+  const taken = new Int32Array(count).fill(-1);
+  const owner = new Map(corners.map((c, i) => [c, i]));
+  wanted.sort((a, b) => a.left - b.left);
+  for (const board of wanted) {
+    const mine = owner.get(board.corner);
+    let clear = true;
+    for (let k = -3; k <= 3 && clear; k++) {
+      const j = ((board.node + k) % count + count) % count;
+      if (taken[j] < 0) continue;
+      // Its own corner may stand next to itself; anybody else's may not.
+      if (taken[j] !== mine || k === 0) clear = false;
+    }
+    if (!clear) continue;
+    taken[board.node] = mine;
+    add(board.node, {
+      kind: 'sign', side: board.side, off: at(board.node).wall + 2.4, s: 1, r: 0,
+      align: true, flat: true, bend: board.bend, sharp: board.sharp,
+    });
   }
 }
 

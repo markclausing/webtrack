@@ -250,13 +250,20 @@ and exactly what it looked like. The infield is now one flat plain a few metres
 below the average height of the circuit. The outside may still do as it pleases:
 it points away, and nothing it does can ever be in front of anything.
 
-Every corner on every circuit is signed. Two boards on the approach, at about
-ninety metres and forty-five, and then a run of them down the outside of the
-corner itself - one chevron for a bend you take flat, two for a hundred and
+Every corner on every circuit is signed. Two boards on the approach, at sixty
+metres and thirty, and then a board every eighteen metres down the outside of the
+corner itself, so they read as a line following the road round rather than as
+three separate signs. One chevron for a bend you take flat, two for a hundred and
 ninety km/h, three for one that needs the brakes properly. It is the convention
 every rally and half the circuits in the world already use, so it needs no
 explaining, and it is there because at three hundred and fifty a corner arrives
 in under two seconds from the point where the road stops looking straight.
+
+No two of them ever disagree. A chicane is a left and a right forty metres apart:
+the left wants its boards on the right of the road and the right wants its on the
+left, so left alone they put up chevrons pointing both ways at once, at the one
+moment you most need to be told a single thing. Every board is now bid for, and
+the board about the corner you have not finished yet wins the ground.
 
 ## The look
 
