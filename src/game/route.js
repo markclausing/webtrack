@@ -28,7 +28,9 @@
  */
 
 import { CHECKPOINT_EVERY, ROAD_HALF, SEG, WALL_AT } from '../constants.js';
-import { centreLine, NARROWEST, profile, SURVEYED, WIDEN } from './circuits.js';
+import {
+  centreLine, measured, NARROWEST, profile, SURVEYED, tunnels, WIDEN,
+} from './circuits.js';
 
 /**
  * How far out, in metres from the centreline, each ground ring sits.
@@ -481,7 +483,12 @@ export function buildRoute(key) {
   const climb = loopNoise(seeded(seed ^ 0x9e37), 4);
   const roll = loopNoise(seeded(seed ^ 0x1d3f), 7);
   const wobble = loopNoise(seeded(seed ^ 0x51ed), 6);
-  const height0 = real ? profile(real.climb) : null;
+  // Measured if the circuit has a measurement, written by hand if not. The two
+  // are read identically from here on, which is the point of having both.
+  const height0 = real
+    ? (real.height ? measured(real.height) : profile(real.climb))
+    : null;
+  const inTunnel = real && real.tunnel ? tunnels(real.tunnel) : null;
 
   let ring;
   if (real) {
@@ -813,6 +820,8 @@ export function buildRoute(key) {
       half: at(i).half === undefined
         ? ROAD_HALF
         : Math.max(NARROWEST, at(i).half * WIDEN),
+      // How much of this node is under a roof. Nought almost everywhere.
+      tunnel: inTunnel ? inTunnel(t) : 0,
       // The barrier, which has to stay outside the road however wide the road
       // gets. Fifteen metres is a good run-off beside a nine metre track and is
       // inside the kerb of a sixteen metre one.

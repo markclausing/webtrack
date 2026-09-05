@@ -103,6 +103,62 @@ export function centreLine(key) {
 }
 
 /**
+ * A packed list of numbers, unpacked. The same base-36 deltas the lines use.
+ */
+function unpack(src, scale) {
+  const out = [];
+  let at = 0;
+  for (const part of src.split(' ')) {
+    at += parseInt(part, 36);
+    out.push(at / scale);
+  }
+  return out;
+}
+
+/**
+ * The measured height of a circuit, read at any fraction of a lap.
+ *
+ * Sixteen circuits here have a height profile written by hand, because their
+ * survey is flat and there was nothing else to do. The ones that came out of
+ * OpenStreetMap have a measured one instead: every point of the lap was put to
+ * an elevation service and the answers smoothed until they were a road again,
+ * so Monaco's forty-one metres between the harbour and Casino is a measurement
+ * rather than a recollection.
+ *
+ * Read the same way a written profile is, so nothing downstream can tell which
+ * kind a circuit has.
+ */
+export function measured(packed) {
+  const heights = unpack(packed, 10);
+  const n = heights.length;
+  return (t) => {
+    const at = (((t % 1) + 1) % 1) * n;
+    const i = Math.floor(at);
+    const f = at - i;
+    return heights[i % n] + (heights[(i + 1) % n] - heights[i % n]) * f;
+  };
+}
+
+/**
+ * Which parts of the lap are in a tunnel, as a function of lap fraction.
+ *
+ * Stored as one character a point, and read back with the ends softened: a
+ * tunnel that arrives between one node and the next is a wall, and what actually
+ * happens is that the light goes over about thirty metres.
+ */
+export function tunnels(mask) {
+  const n = mask.length;
+  const inside = (i) => (mask[((i % n) + n) % n] === '1' ? 1 : 0);
+  const SOFT = 3;
+  return (t) => {
+    const at = Math.round((((t % 1) + 1) % 1) * n);
+    let sum = 0;
+    for (let d = -SOFT; d <= SOFT; d++) sum += inside(at + d);
+    return sum / (SOFT * 2 + 1);
+  };
+}
+
+/**
  * A height profile, read at any fraction of a lap.
  *
  * Catmull-Rom through the control points and wrapped at both ends, so the

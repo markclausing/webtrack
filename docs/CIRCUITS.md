@@ -108,3 +108,58 @@ sixteen. Jeddah, Miami, Monaco, Madrid, Baku, Singapore, Las Vegas and Losail
 are not in it. They are all in OpenStreetMap as `highway=raceway` and could be
 traced with Overpass under the same ODbL terms, except Madrid, which is new
 enough that the mapping may not be there yet.
+
+## The eight the survey does not have
+
+The sixteen above came from a survey that gives a centre line and a width and
+nothing else, so their height, their surroundings and everything else about them
+was written by hand.
+
+The eight circuits on the 2026 calendar that survey does not cover — Monaco,
+Jeddah, Miami, Las Vegas, Singapore, Madrid, Baku and Losail — need a different
+approach, and `tools/import-osm.js` is it. Rather than authoring what the survey
+lacks, it measures it:
+
+- **The road** comes from OpenStreetMap, `highway=raceway`.
+- **The height** comes from an elevation service, sampled at every point of the
+  lap and smoothed over sixty metres until it is a road rather than a terrain
+  model.
+- **The tunnels** come from OSM's own `tunnel=yes` tags, so Monaco's tunnel is
+  where Monaco's tunnel is and nobody had to decide that.
+
+Three things make it harder than it sounds, and the tool handles all three.
+
+**A circuit is mapped three different ways.** A permanent one is a set of raceway
+ways. Some are a route relation instead — Las Vegas and Madrid are. A street
+circuit is neither: it is public road for fifty weeks of the year, so only the
+parts that are never anything else carry the tag. Measured coverage:
+
+```
+losail    183%    miami      128%    jeddah     124%
+madrid     67%    singapore   41%    monaco      31%    baku  15%
+```
+
+**So the gaps have to be driven.** Where the fragments do not meet, the importer
+routes between them along the ordinary street graph, taking the fragments in the
+order they sit around the loop rather than nearest-first — nearest-first sends
+the route back on itself and put Monaco nineteen per cent over its true length.
+In ring order it comes out at 107 per cent.
+
+**And the elevation services rate limit.** Two are used, Open-Meteo first and
+Open Topo Data as a fallback. They are not equivalent: Open-Meteo reports 41
+metres across Monaco, which is right, and the SRTM behind the fallback reports
+21, because thirty metre SRTM in a town that dense is looking at roofs.
+
+### Where this has got to
+
+Monaco imports correctly: 3.56 km against a true 3.337, 84 points of tunnel
+found from the tags, 41 metres of measured climb. Las Vegas imports correctly at
+96 per cent. The engine reads a measured height profile and a tunnel mask
+wherever a circuit has them.
+
+The other six do not import correctly yet, and the reason is the same for all of
+them: picking which of the raceway ways in a bounding box form the Grand Prix lap
+rather than a pit lane, an alternative layout or a karting circuit. Jeddah comes
+out at 149 per cent, Miami 142, Madrid 187, Losail 43, Singapore 40, and Baku
+times out. That is per-circuit work on the selection rules, not a fault in the
+pipeline.
