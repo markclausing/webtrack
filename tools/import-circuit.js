@@ -33,6 +33,10 @@ const WANTED = {
   SaoPaulo: 'interlagos',
   Spielberg: 'spielberg',
   Montreal: 'montreal',
+  Austin: 'austin',
+  Sakhir: 'sakhir',
+  MexicoCity: 'mexico',
+  Budapest: 'hungaroring',
 };
 
 function read(file) {

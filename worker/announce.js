@@ -28,6 +28,10 @@ const ROADS = {
   interlagos: 'Interlagos',
   spielberg: 'the Red Bull Ring',
   montreal: 'Gilles Villeneuve',
+  austin: 'Austin',
+  sakhir: 'Bahrain',
+  mexico: 'Mexico City',
+  hungaroring: 'the Hungaroring',
 };
 
 const PLACED = {

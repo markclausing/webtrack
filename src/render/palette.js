@@ -266,6 +266,95 @@ export const THEMES = {
     trunk: md(80, 62, 44),
     water: md(72, 108, 130),
   },
+  /** Austin: open scrubland, hot and hazy, with nothing tall in it. */
+  texas: {
+    sky: [
+      [0.20, md(44, 78, 146)],
+      [0.34, md(92, 132, 186)],
+      [0.44, md(152, 184, 206)],
+      [0.52, md(208, 216, 208)],
+      [1.00, md(232, 224, 198)],
+    ],
+    fog: md(226, 218, 196),
+    near: md(116, 128, 66),
+    mid: md(100, 112, 60),
+    far: md(126, 126, 94),
+    ridge: md(154, 148, 134),
+    verge: md(140, 138, 74),
+    rock: md(158, 142, 116),
+    tree: md(62, 90, 48),
+    trunk: md(98, 76, 52),
+    water: md(60, 100, 122),
+  },
+  /**
+   * Bahrain. Sand in every direction, and it hardly matters what colour the sky
+   * is written as here because this circuit is always run at dusk - the
+   * time-of-day pass replaces the bands and pulls everything else towards the
+   * sodium of the floodlights. What matters is the ground.
+   */
+  desert: {
+    sky: [
+      [0.20, md(52, 74, 128)],
+      [0.34, md(104, 126, 164)],
+      [0.44, md(168, 174, 186)],
+      [0.52, md(216, 200, 168)],
+      [1.00, md(232, 210, 172)],
+    ],
+    fog: md(222, 202, 168),
+    near: md(196, 166, 116),
+    mid: md(180, 150, 104),
+    far: md(166, 142, 106),
+    ridge: md(150, 142, 132),
+    verge: md(178, 154, 108),
+    rock: md(170, 146, 112),
+    tree: md(84, 96, 54),
+    trunk: md(110, 88, 58),
+    water: md(58, 96, 118),
+  },
+  /**
+   * Mexico City, two thousand two hundred metres up. There is a fifth less air
+   * overhead than anywhere else in this game and the sky says so: deeper and
+   * harder at the top, with less haze to soften the distance.
+   */
+  altiplano: {
+    sky: [
+      [0.20, md(24, 52, 130)],
+      [0.34, md(56, 96, 178)],
+      [0.44, md(114, 156, 206)],
+      [0.52, md(176, 200, 216)],
+      [1.00, md(212, 216, 208)],
+    ],
+    fog: md(206, 208, 196),
+    near: md(96, 122, 62),
+    mid: md(80, 106, 56),
+    far: md(104, 116, 88),
+    ridge: md(146, 142, 134),
+    verge: md(124, 132, 70),
+    rock: md(150, 138, 118),
+    tree: md(48, 86, 46),
+    trunk: md(92, 72, 50),
+    water: md(58, 98, 124),
+  },
+  /** The Hungaroring: a bowl of dry grass with the heat sitting in it. */
+  puszta: {
+    sky: [
+      [0.20, md(40, 70, 138)],
+      [0.34, md(86, 124, 180)],
+      [0.44, md(146, 178, 204)],
+      [0.52, md(202, 212, 208)],
+      [1.00, md(226, 222, 200)],
+    ],
+    fog: md(220, 216, 196),
+    near: md(122, 130, 68),
+    mid: md(106, 116, 60),
+    far: md(124, 124, 96),
+    ridge: md(148, 144, 132),
+    verge: md(146, 140, 78),
+    rock: md(152, 140, 116),
+    tree: md(58, 92, 48),
+    trunk: md(96, 74, 50),
+    water: md(60, 100, 124),
+  },
   coast: {
     sky: [
       [0.16, md(38, 76, 150)],

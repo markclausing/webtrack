@@ -3,12 +3,12 @@
 ### ▶ [Play it](https://markclausing.github.io/webtrack/)
 
 A polygon racing game in the browser, in the spirit of the first generation of
-them. Eleven closed circuits, eight single seaters, a red suspension bridge to
+them. Fifteen closed circuits, eight single seaters, a red suspension bridge to
 cross, and an afternoon that runs out: you start in daylight, the sun is on the
 horizon by the second lap and you finish in the dark.
 
-Three of the circuits were drawn by a random number generator. Eight of them are
-real places, from surveyed centre lines, with the elevation and the banking
+Three of the circuits were drawn by a random number generator. Twelve of them
+are real places, from surveyed centre lines, with the elevation and the banking
 written in by hand.
 
 Two ways to go out — put a lap in on an empty circuit, or start eighth of eight
@@ -195,7 +195,7 @@ minute up the road by the flag and you were racing two cars rather than seven. A
 it stands somebody is within ninety metres of you for about eighty per cent of a
 race, which is a thing the test suite measures and would notice going away.
 
-## Eleven circuits
+## Fifteen circuits
 
 ### The three that were drawn
 
@@ -209,7 +209,7 @@ long afternoon.
 
 ![The grand circuit, on the coastal half of the lap](docs/screenshots/grand.png)
 
-### The eight that are places
+### The twelve that are places
 
 **Spa-Francorchamps**, 7.0 km, with the hundred metres of height it is famous
 for: Eau Rouge arrives twenty-nine metres below the start line and Les Combes
@@ -232,6 +232,23 @@ between the start line and turn three, over in a little more than a minute.
 round it and the one circuit here with no run-off worth the name — two metres of
 concrete from the kerb instead of the six everywhere else, so a mistake costs you
 the car rather than the corner.
+
+And four more. **Austin**, 5.5 km, also anticlockwise, built out of borrowings
+from better circuits and the better for it: turn one is thirty-three metres
+straight up and blind over the top, and the esses after it are Maggotts and
+Becketts with the brakes off. **Bahrain**, 5.4 km, the one circuit here that runs
+in the dark — the sun is already on the horizon when the lights go out and it is
+night by the flag, whatever the sunset setting says, because that is when they
+run it. **Mexico City**, 4.3 km, two thousand two hundred metres above the sea,
+which is the whole of it: a fifth less air means a fifth less drag, the highest
+top speed of the fifteen, and rather less to hold on with when you get to the end
+of the straight. **The Hungaroring**, 4.4 km, Monaco without the walls and
+without the excuse — corner after corner in a bowl with one straight on it and
+nowhere to pass.
+
+Two of those changed the car rather than the road, which nothing had done before.
+Bahrain switches the sunset on for itself, and Mexico City carries an air density
+that divides the drag and takes a little grip away.
 
 ![Under the flyover at Suzuka, where the circuit crosses itself](docs/screenshots/suzuka.png)
 

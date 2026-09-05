@@ -109,10 +109,29 @@ export function makeCar(kind, slot, s, x, extra = {}) {
 export function makeState({
   route = 'pass', mode = 'gp', tier = 'normal', seed = 1, dusk = false,
 } = {}) {
-  const cfg = TIERS[tier] || TIERS.normal;
+  const real = SURVEYED[route];
   const rules = MODES[mode] || MODES.gp;
   const built = buildRoute(route);
   const field = rules.field;
+
+  /**
+   * How much air there is, and what a fifth less of it does.
+   *
+   * One circuit asks for this and it is the only thing about that circuit worth
+   * knowing: Mexico City is two thousand two hundred metres up, where there is
+   * about a fifth less air. Less air is less drag, which is why it has the
+   * highest trap speed on the calendar, and less of everything a wing is for,
+   * which a game with no downforce model can only stand in for by taking a
+   * little grip away.
+   *
+   * Folded into the difficulty settings rather than added beside them, because
+   * grip already flows from there through both the car and the braking point the
+   * rivals work out - and a rival that did not know the air was thin would brake
+   * for a corner that was not going to be there.
+   */
+  const air = real?.air ?? 1;
+  const base = TIERS[tier] || TIERS.normal;
+  const cfg = air === 1 ? base : { ...base, grip: base.grip * (0.82 + 0.18 * air) };
 
   const grid = [];
   for (let slot = 0; slot < field; slot++) {
@@ -160,7 +179,10 @@ export function makeState({
      * because a lap set at midnight and one set at four in the afternoon go on
      * the same board either way.
      */
-    dusk,
+    // Bahrain runs in the evening whatever the menu says, because it does.
+    dusk: dusk || !!real?.dusk,
+    /** Air density, as a share of sea level. Only Mexico City is not one. */
+    air,
     light: 0,
     prevMask: 0,
     events: [],

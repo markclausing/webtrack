@@ -217,7 +217,9 @@ function drive(state, car) {
   if (ctl.brake) acc -= BRAKE * (0.4 + 0.6 * hold);
   // The tow: less air in front of you is less drag, and it is the only thing
   // that will drag you past somebody on a straight.
-  acc -= DRAG * car.speed * car.speed * (1 - TOW_DRAG * car.tow);
+  // Drag, and how much air there is to make it. A fifth less at Mexico City,
+  // which is most of why the cars are quicker down the straight there.
+  acc -= DRAG * (state.air ?? 1) * car.speed * car.speed * (1 - TOW_DRAG * car.tow);
   acc -= ROLL_DRAG * (0.04 + (surf === 'road' ? 0 : OFFROAD_DRAG));
   acc -= GRAVITY * SLOPE_PULL * node.slope;
 

@@ -156,6 +156,22 @@ if (route === 'docs') {
       const at = player(s).s % s.route.metres;
       return at > s.route.metres * 0.880 && at < s.route.metres * 0.930 && player(s).speed > 40;
     }, 'montreal', 'gp'],
+    // And the last four: the blind climb to turn one in Texas, the desert with
+    // the sun going down, the stadium at Mexico City, and turn one at the
+    // Hungaroring dropping away into the bowl.
+    ['austin', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.090 && at < s.route.metres * 0.130;
+    }, 'austin', 'gp'],
+    ['sakhir', (s) => s.light > 0.55 && player(s).speed > 55, 'sakhir', 'gp'],
+    ['mexico', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.845 && at < s.route.metres * 0.895 && player(s).speed > 45;
+    }, 'mexico', 'gp'],
+    ['hungaroring', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.120 && at < s.route.metres * 0.170 && player(s).speed > 40;
+    }, 'hungaroring', 'gp'],
   ];
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
   for (const [name, when, on, mode, share = 0.95, dusk = false] of want) {

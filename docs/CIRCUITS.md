@@ -1,14 +1,15 @@
-# Where the eight real circuits came from
+# Where the twelve real circuits came from
 
-Three of the eleven circuits in this game were drawn by a random number
-generator. Eight of them are places: Spa-Francorchamps, Monza, Suzuka,
-Zandvoort, Silverstone, Interlagos, the Red Bull Ring and Gilles Villeneuve.
+Three of the fifteen circuits in this game were drawn by a random number
+generator. Twelve of them are places: Spa-Francorchamps, Monza, Suzuka,
+Zandvoort, Silverstone, Interlagos, the Red Bull Ring, Gilles Villeneuve,
+Austin, Bahrain, Mexico City and the Hungaroring.
 This is where the shapes came from, what is ours, and what that obliges us to
 say.
 
 ## The centre lines
 
-`src/game/circuits.js` holds a surveyed centre line for each of the eight, at ten
+`src/game/circuits.js` holds a surveyed centre line for each of the twelve, at ten
 metre spacing, in decimetres, delta encoded. They were produced by
 `tools/import-circuit.js` from the [TUM racetrack
 database](https://github.com/TUMFTM/racetrack-database), published by the
@@ -34,7 +35,7 @@ geometry, and the geometry is confined to one file so that stays true.
 
 ## What is not in the data, and is therefore ours
 
-The survey is two coordinates and a width. Everything else about these eight
+The survey is two coordinates and a width. Everything else about these twelve
 circuits was written by hand in `circuits.js`, and none of it is claimed to be
 measured:
 
@@ -64,8 +65,17 @@ makes each circuit recognisable, invented in the detail.
 
 **How much room there is beside the road.** Six metres of run-off past the kerb
 everywhere except Gilles Villeneuve, which asks for two, because it is a road on
-an island with concrete down both sides. That is the one authored number here
-that changes how a circuit drives rather than how it looks.
+an island with concrete down both sides.
+
+**The air, and the time of day.** Mexico City is two thousand two hundred metres
+up, where there is about a fifth less of the first: less drag, so the highest top
+speed here, and less of everything a wing is for, which a game with no downforce
+model stands in for by taking a little grip away. Bahrain sets the second for
+itself - it is run in the evening, so it switches the sunset on whatever the menu
+says.
+
+Those three - the run-off, the air and the hour - are the only authored values in
+this file that change how a circuit *drives* rather than how it looks.
 
 **The viaduct.** Suzuka's crossover is *found* rather than authored - the
 geometry says the circuit passes within a few metres of itself twice, two and a
@@ -82,11 +92,12 @@ node tools/import-circuit.js racetrack-database/tracks
 which prints the `LINES` table to standard output. Paste it into
 `src/game/circuits.js`.
 
-The importer only reads the eight this game ships — Monza, Spa, Suzuka,
-Zandvoort, Silverstone, SaoPaulo, Spielberg and Montreal in that database, with
-the names this game gives them in `WANTED` at the top of the file. The source
-database has twenty-five, sixteen of which are on the 2026 Formula One
-calendar.
+The importer only reads the twelve this game ships — Monza, Spa, Suzuka,
+Zandvoort, Silverstone, SaoPaulo, Spielberg, Montreal, Austin, Sakhir,
+MexicoCity and Budapest in that database, with the names this game gives them in
+`WANTED` at the top of the file. The source database has twenty-five, sixteen of
+which are on the 2026 Formula One calendar — so four of those sixteen are still
+sitting there unbuilt: Melbourne, Shanghai, Catalunya and Yas Marina.
 
 ## The eight it does not have
 
