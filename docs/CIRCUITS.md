@@ -150,12 +150,27 @@ Open Topo Data as a fallback. They are not equivalent: Open-Meteo reports 41
 metres across Monaco, which is right, and the SRTM behind the fallback reports
 21, because thirty metre SRTM in a town that dense is looking at roofs.
 
+**And the boats go where boats go.** Scattered at random inside the harbour
+polygon they came out in the middle of the water and nowhere a boat would be. A
+harbour is not a lake with boats in it: it is quays and pontoons with boats lying
+alongside them, and OpenStreetMap has every one of those as `man_made=pier` -
+forty-one of them at Monaco. One boat every twenty-two metres along each pier,
+alternating sides, bow on. Eighty-one of them, and none of it decided here.
+
 ### Where this has got to
 
-Monaco imports correctly: 3.56 km against a true 3.337, 84 points of tunnel
-found from the tags, 41 metres of measured climb. Las Vegas imports correctly at
-96 per cent. The engine reads a measured height profile and a tunnel mask
-wherever a circuit has them.
+Monaco is in the game: 3.56 km against a true 3.337, 840 metres of tunnel found
+from the tags, 44 metres of measured climb, 252 buildings at their own footprints
+and their own heights, and 79 boats along the piers of Port Hercule. The scatter
+rule for the whole circuit is one line about palm trees, because everything else
+beside that road was measured. Las Vegas imports correctly at 96 per cent.
+
+One thing about it is not right. Its assembled route doubles back on itself for
+about a fifth of the lap, which shows up as a net turn of zero where a closed
+circuit should turn through exactly two pi - so the *shape* is not quite Monaco
+even though the corners, the tunnel, the height and the buildings all are. That
+is the routing between raceway fragments choosing a path out and back rather than
+round, and it is the same work as getting the other six to import at all.
 
 The other six do not import correctly yet, and the reason is the same for all of
 them: picking which of the raceway ways in a bounding box form the Grand Prix lap

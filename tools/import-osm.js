@@ -146,19 +146,22 @@ async function fetchScenery(circuit) {
   way["natural"="water"](${bbox});
   way["landuse"="harbour"](${bbox});
   way["waterway"="dock"](${bbox});
+  way["man_made"="pier"](${bbox});
 );
 out geom;`;
   const data = await overpass(query);
   const buildings = [];
   const water = [];
+  const piers = [];
   for (const e of data.elements) {
     const g = e.geometry;
     if (!g || g.length < 3) continue;
     const t = e.tags || {};
     if (t.building) buildings.push({ g, tags: t });
+    else if (t.man_made === 'pier') piers.push({ g, tags: t });
     else water.push({ g, tags: t });
   }
-  return { buildings, water };
+  return { buildings, water, piers };
 }
 
 /** Everything in the box that a car could be driven along, plus the raceway. */
@@ -684,32 +687,58 @@ async function build(key) {
     });
   }
 
-  // Boats, moored in whatever water there is beside the circuit. At Monaco that
-  // is Port Hercule and it is the reason anybody recognises the place.
+  /**
+   * Boats, moored where boats are moored: along the piers.
+   *
+   * Scattered at random inside the water polygon first, which put eight of them
+   * in the middle of Port Hercule and none of them anywhere a boat would
+   * actually be. A harbour is not a lake with boats in it - it is a set of
+   * quays and pontoons with boats lying alongside them, and OpenStreetMap has
+   * every one of those as `man_made=pier`. Forty-one of them at Monaco.
+   *
+   * So a boat is put every twenty-two metres along each pier, a few metres off
+   * to the side, facing across it - which is a marina, and takes no deciding.
+   */
   const boats = [];
-  for (const w of scene.water) {
-    const pool = poolOf(w, project);
-    if (pool.reach < 40) continue;
-    const rnd = (() => { let seed = 0x2f6e; return () => {
+  const rnd = (() => {
+    let seed = 0x2f6e;
+    return () => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
       return seed / 0x7fffffff;
-    }; })();
-    for (let tries = 0; tries < 3000 && boats.length < 80; tries++) {
-      const x = pool.x + (rnd() * 2 - 1) * pool.reach;
-      const z = pool.z + (rnd() * 2 - 1) * pool.reach;
-      if (!inside(pool.pts, x, z)) continue;
-      const p = place(x, z);
-      // Further out than a building may stand: a harbour is wide, and the far
-      // side of Port Hercule is three hundred metres from the road.
-      if (p.off > 340 || p.off < 24) continue;
-      if (boats.some((o) => Math.hypot(o.x - x, o.z - z) < 19)) continue;
-      boats.push({
-        x, z, at: p.at, side: p.side, off: Math.round(p.off * 10) / 10,
-        // Big ones nearer the quay, which is how a harbour is arranged.
-        s: Math.round((1.4 + rnd() * 2.6) * 10) / 10,
-        r: Math.round((rnd() * 6.28 - p.heading) * 100) / 100,
-      });
+    };
+  })();
+  for (const w of scene.piers) {
+    const pts = w.g.map((p) => project(p.lat, p.lon));
+    let run = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const len = dist(a, b);
+      const nx = (b.z - a.z) / (len || 1);
+      const nz = -(b.x - a.x) / (len || 1);
+      for (let along = 0; along < len; along += 1) {
+        run += 1;
+        if (run < 22) continue;
+        run = 0;
+        const t = along / (len || 1);
+        // Alternating sides, because a pontoon has boats on both of them.
+        const out = (boats.length % 2 ? 1 : -1) * (7 + rnd() * 5);
+        const x = a.x + (b.x - a.x) * t + nx * out;
+        const z = a.z + (b.z - a.z) * t + nz * out;
+        const p = place(x, z);
+        if (p.off > 340 || p.off < 22) continue;
+        if (boats.some((o) => Math.hypot(o.x - x, o.z - z) < 15)) continue;
+        boats.push({
+          x, z, at: p.at, side: p.side, off: Math.round(p.off * 10) / 10,
+          s: Math.round((1.5 + rnd() * 2.4) * 10) / 10,
+          // Bow on to the pier, which is how they are parked.
+          r: Math.round((Math.atan2(nx, nz) - p.heading) * 100) / 100,
+        });
+        if (boats.length >= 90) break;
+      }
+      if (boats.length >= 90) break;
     }
+    if (boats.length >= 90) break;
   }
   process.stderr.write(`${buildings.length} buildings, ${boats.length} boats\n`);
 

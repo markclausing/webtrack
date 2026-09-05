@@ -599,7 +599,13 @@ export class Renderer {
       // No ground inside a tunnel and none on a viaduct. In a tunnel there is a
       // wall where the verge would be, and drawing the verge through it puts a
       // strip of daylit grass along the inside of a mountain.
-      for (let band = 0; band < BANDS.length && !a.deck && roof < 0.75; band++) {
+      // Ground stops where the tunnel starts, and not a node later. A band
+      // reaches ninety-five metres sideways, so one node at the mouth still
+      // drawing its ground lays a strip of daylit verge along twenty metres of
+      // tunnel floor - which is what it did, and what it looked like was a pale
+      // wedge across the road that no amount of darkening would touch, because
+      // the node it belonged to was outside and therefore not dark.
+      for (let band = 0; band < BANDS.length && !a.deck && roof < 0.05; band++) {
         const [inner0, outer, kind, every] = BANDS[band];
         // The first band starts at the kerb, wherever the kerb happens to be.
         const inner = band === 0 ? Math.max(ha + RUMBLE, inner0 - (ROAD_HALF - ha)) : inner0;
@@ -635,7 +641,14 @@ export class Renderer {
       this.startLine(state, a.i, a, b, tint);
       if (a.bridge !== undefined) this.bridge(route, a, b, tint);
       if (a.deck) this.viaduct(a, b, tint, i);
-      if (roof > 0.02) this.tunnel(a, b, tint, i, roof);
+      // Built only where the tunnel is properly a tunnel. The darkness eases in
+      // over the mouth by itself, and easing the geometry in with it was the
+      // mistake: a roof at five and a half metres times a tenth is a slab six
+      // inches above the road, and what that looks like from inside is a pale
+      // wedge lying across the floor.
+      // And the tunnel takes over from exactly there, at full height, so the
+      // mouth is a portal rather than a gap. It is a portal in life too.
+      if (roof > 0.05) this.tunnel(a, b, tint, i);
 
       const props = route.props[a.i];
       if (props && away < 900) {
@@ -674,10 +687,10 @@ export class Renderer {
    * the position was decided here: OpenStreetMap tags the road as a tunnel and
    * the importer carried the tag through.
    */
-  tunnel(a, b, tint, i, roof) {
+  tunnel(a, b, tint, i) {
     const rt = this.rt;
     const wide = a.wall + 0.4;
-    const high = 5.5 * roof;
+    const high = 5.5;
     const wall = tint(shade(C.chrome, 0.5));
     const ceiling = tint(shade(C.shadow, 1.35));
     const strip = mix(C.lamp, C.hot, 0.25);
@@ -702,7 +715,7 @@ export class Renderer {
       a.x + a.nx * wide, ay, a.z + a.nz * wide,
       ceiling,
     );
-    if ((((i % 3) + 3) % 3) === 0 && roof > 0.6) {
+    if ((((i % 3) + 3) % 3) === 0) {
       rt.quad(
         a.x - a.nx * 1.1, ay - 0.12, a.z - a.nz * 1.1,
         b.x - b.nx * 1.1, by - 0.12, b.z - b.nz * 1.1,
@@ -952,9 +965,23 @@ export class Renderer {
     }
     const scale = Math.min((MAP_W - 5) / Math.max(1, maxX - minX),
       (MAP_H - 5) / Math.max(1, maxZ - minZ));
+    /**
+     * North at the top, which took noticing.
+     *
+     * The world's z is northing and a screen's y counts downward, so mapping one
+     * straight onto the other puts north at the bottom and hands you a track map
+     * that is a mirror image of every track map ever printed. On the three drawn
+     * circuits nobody could tell. On the seventeen real ones it is the first
+     * thing anybody who knows the place will see, and what it reads as is not
+     * "upside down" but "you have mirrored my circuit".
+     *
+     * The circuits themselves were never mirrored - a point placed on the left of
+     * the car lands on the left of the screen, checked - and this is the map
+     * alone.
+     */
     const place = (x, z) => [
       Math.round(2 + (x - minX) * scale + (MAP_W - 4 - (maxX - minX) * scale) / 2),
-      Math.round(2 + (z - minZ) * scale + (MAP_H - 4 - (maxZ - minZ) * scale) / 2),
+      Math.round(2 + (maxZ - z) * scale + (MAP_H - 4 - (maxZ - minZ) * scale) / 2),
     ];
     const pts = [];
     for (let i = 0; i < nodes.length; i += step) pts.push(place(nodes[i].x, nodes[i].z));
