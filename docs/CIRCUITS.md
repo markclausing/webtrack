@@ -165,12 +165,31 @@ and their own heights, and 79 boats along the piers of Port Hercule. The scatter
 rule for the whole circuit is one line about palm trees, because everything else
 beside that road was measured. Las Vegas imports correctly at 96 per cent.
 
-One thing about it is not right. Its assembled route doubles back on itself for
-about a fifth of the lap, which shows up as a net turn of zero where a closed
-circuit should turn through exactly two pi - so the *shape* is not quite Monaco
-even though the corners, the tunnel, the height and the buildings all are. That
-is the routing between raceway fragments choosing a path out and back rather than
-round, and it is the same work as getting the other six to import at all.
+One thing about it is not right, and it is worth writing down what has been
+tried.
+
+Its assembled route doubles back on itself, which shows up as a net turn of zero
+where a closed circuit turns through exactly two pi. So the *shape* is not quite
+Monaco even though the corners, the tunnel, the height and the buildings all are.
+From the car it appears as a length of road hanging in mid-air off to one side,
+because the road really is there - the importer put it there.
+
+The obvious constraint is that a lap does not use a piece of road twice, and the
+router has it now: reusing a node is refused and passing within twelve metres of
+road already driven is charged twenty times the distance. It has to be spatial
+rather than by node id, because the road above Monaco's tunnel and the tunnel are
+two different ways in the map and the same place on the ground.
+
+It is a real improvement and it is not the answer. Doubling falls from 29 per
+cent of the lap to 10, and two things get worse: the route now finds a way past
+the tunnel that only clips a third of it, and the net turn is still zero. So
+something other than reuse is sending the route out and back - the fragment
+ordering, most likely, since angle about the centre is a poor way to order
+fragments on a circuit shaped like Monaco. The constraint is committed and the
+circuit still ships on the earlier import, which has the whole tunnel.
+
+Whatever fixes this is also what gets the other six importing, so it is worth
+getting right rather than getting past.
 
 The other six do not import correctly yet, and the reason is the same for all of
 them: picking which of the raceway ways in a bounding box form the Grand Prix lap

@@ -295,8 +295,26 @@ function graphOf(ways, nodes, project) {
   return links;
 }
 
-/** Dijkstra, because the graphs are small and the answer has to be the road. */
-function shortest(links, from, to) {
+/**
+ * Dijkstra, with a strong dislike of road the lap has already used.
+ *
+ * The plain shortest path is the wrong answer here and it took a picture to see
+ * why. A lap does not use a piece of road twice, and nothing in a shortest-path
+ * search knows that: on Monaco's waterfront the graph offers a way out and a way
+ * back that are the same street, so the router took both and a hundred and seven
+ * of the circuit's nodes ended up with another piece of the same road within a
+ * few metres of them, twenty-five metres above or below. From the car that is a
+ * length of road hanging in mid-air beside you.
+ *
+ * `taken` is what the lap has so far, as a grid of positions. Reusing a node is
+ * refused outright and passing close to one is charged twenty times the distance
+ * - a penalty rather than a ban, because a street circuit does sometimes run
+ * alongside itself for a few metres and a ban would simply find no route at all.
+ * It has to be spatial and not by node id: the road above Monaco's tunnel and
+ * the tunnel are two different ways in the map and the same place on the ground.
+ */
+function shortest(links, from, to, taken) {
+  const near = (a, b) => (taken ? taken.near(a, b) : 0);
   const seen = new Map([[from, 0]]);
   const back = new Map();
   const queue = [[0, from]];
@@ -306,7 +324,11 @@ function shortest(links, from, to) {
     if (at === to) break;
     if (cost > (seen.get(at) ?? Infinity)) continue;
     for (const [next, w] of links.get(at) || []) {
-      const c = cost + w;
+      if (taken && next !== to && taken.has(next)) continue;
+      // And a tunnel is never charged for being near anything, for the same
+      // reason: it is below whatever it is near.
+      const under = taken && taken.tunnel && (taken.tunnel.has(at) || taken.tunnel.has(next));
+      const c = cost + w * (1 + (under ? 0 : 20 * near(at, next)));
       if (c >= (seen.get(next) ?? Infinity)) continue;
       seen.set(next, c);
       back.set(next, at);
@@ -333,7 +355,54 @@ function shortest(links, from, to) {
  * eight or ten fragments and a circuit that is mostly one road, the nearest one
  * is the right one - and where it is not, the reported coverage says so.
  */
-function assemble(runs, links, nodes, project) {
+function assemble(runs, links, nodes, project, inTunnel) {
+  /**
+   * What the lap has used so far: the nodes by id, and their positions on a
+   * twenty metre grid so "is this near something we already drove" is a lookup
+   * rather than a search.
+   */
+  const CELL = 20;
+  const taken = {
+    ids: new Set(),
+    tunnel: inTunnel,
+    grid: new Map(),
+    key: (x, z) => `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`,
+    has(id) { return this.ids.has(id); },
+    add(id) {
+      const p = nodes.get(id);
+      if (!p) return;
+      this.ids.add(id);
+      // A tunnel is not in the way of anything: it is under it. Left in the
+      // index it made the router avoid Monaco's tunnel altogether - the road
+      // above is within twelve metres of it, so taking one made the other
+      // expensive - and the circuit came back with a third of the tunnel it
+      // has. Being under something is the whole point of the tunnel.
+      if (inTunnel && inTunnel.has(id)) return;
+      const at = project(p.lat, p.lon);
+      const k = this.key(at.x, at.z);
+      if (!this.grid.has(k)) this.grid.set(k, []);
+      this.grid.get(k).push(at);
+    },
+    /** 1 if the middle of this edge is within twelve metres of the lap so far. */
+    near(a, b) {
+      const pa = nodes.get(a);
+      const pb = nodes.get(b);
+      if (!pa || !pb) return 0;
+      const x = (project(pa.lat, pa.lon).x + project(pb.lat, pb.lon).x) / 2;
+      const z = (project(pa.lat, pa.lon).z + project(pb.lat, pb.lon).z) / 2;
+      const cx = Math.floor(x / CELL);
+      const cz = Math.floor(z / CELL);
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          for (const p of this.grid.get(`${cx + dx},${cz + dz}`) || []) {
+            if (Math.hypot(p.x - x, p.z - z) < 12) return 1;
+          }
+        }
+      }
+      return 0;
+    },
+  };
+
   const lengthOf = (ns) => {
     let d = 0;
     for (let i = 0; i < ns.length - 1; i++) {
@@ -377,7 +446,9 @@ function assemble(runs, links, nodes, project) {
   const ring = [...runs].sort((a, b) => angle(a) - angle(b));
   const left = ring.slice(1);
   const lap = [...ring[0].nodes];
+  for (const id of lap) taken.add(id);
   let driven = 0;
+  let forced = 0;
 
   while (left.length) {
     const head = lap[lap.length - 1];
@@ -387,23 +458,37 @@ function assemble(runs, links, nodes, project) {
     const next = left.shift();
     for (const flip of [false, true]) {
       const ns = flip ? [...next.nodes].reverse() : next.nodes;
-      const path = shortest(links, head, ns[0]);
+      // Round the road already used, if there is a way round. If there is not,
+      // the constraint is dropped for this leg rather than losing the fragment -
+      // and it is counted, because a lap that had to be forced is a lap worth
+      // looking at.
+      let path = shortest(links, head, ns[0], taken);
+      if (!path) {
+        path = shortest(links, head, ns[0]);
+        if (path) forced++;
+      }
       if (!path) continue;
       const cost = lengthOf(path);
       if (!best || cost < best.cost) best = { ns, path, cost };
     }
     if (!best) continue;
     lap.push(...best.path.slice(1), ...best.ns.slice(1));
+    for (const id of best.path) taken.add(id);
+    for (const id of best.ns) taken.add(id);
     driven += best.cost;
   }
 
-  // And home, so the lap closes.
-  const home = shortest(links, lap[lap.length - 1], lap[0]);
+  // And home, so the lap closes. The start is allowed, obviously.
+  let home = shortest(links, lap[lap.length - 1], lap[0], taken);
+  if (!home) {
+    home = shortest(links, lap[lap.length - 1], lap[0]);
+    if (home) forced++;
+  }
   if (home) {
     lap.push(...home.slice(1, -1));
     driven += lengthOf(home);
   }
-  return { lap, driven, stranded: left.length };
+  return { lap, driven, stranded: left.length, forced };
 }
 
 /** The lap in metres, at a fixed spacing, carrying the tunnel flag along. */
@@ -614,7 +699,7 @@ async function build(key) {
   const inTunnel = tunnelNodes(ways);
   const runs = chain(mine);
   const links = graphOf(streets, nodes, project);
-  const { lap, driven, stranded } = assemble(runs, links, nodes, project);
+  const { lap, driven, stranded, forced } = assemble(runs, links, nodes, project, inTunnel);
 
   const points = lap
     .filter((n) => nodes.has(n))
@@ -643,10 +728,37 @@ async function build(key) {
     }
     if ((turn > 0) !== circuit.clockwise) out = out.reverse();
   }
+  // How much of the lap lies on top of the rest of it. A closed circuit does
+  // not, except in a tunnel, and this is the number that says whether the
+  // routing worked.
+  let overlap = 0;
+  for (let i = 0; i < out.length; i++) {
+    for (let j = 0; j < out.length; j++) {
+      const apart = Math.min(Math.abs(i - j), out.length - Math.abs(i - j));
+      if (apart < 25) continue;
+      if (Math.hypot(out[i].x - out[j].x, out[i].z - out[j].z) < 12
+        && !out[i].tunnel && !out[j].tunnel) {
+        overlap++;
+        break;
+      }
+    }
+  }
+  let turn = 0;
+  for (let i = 0; i < out.length; i++) {
+    const a = out[(i - 1 + out.length) % out.length];
+    const b = out[i];
+    const c = out[(i + 1) % out.length];
+    let d = Math.atan2(c.x - b.x, c.z - b.z) - Math.atan2(b.x - a.x, b.z - a.z);
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    turn += d;
+  }
   process.stderr.write(`${(total / 1000).toFixed(3)} km `
     + `(${Math.round((total / circuit.metres) * 100)}% of ${circuit.metres} m), `
     + `${runs.length} fragments, ${Math.round(driven)} m driven, `
-    + `${out.filter((p) => p.tunnel).length} points in tunnel… `);
+    + `${forced} forced, turn ${(turn / Math.PI).toFixed(2)}pi, `
+    + `${Math.round((overlap / out.length) * 100)}% doubled, `
+    + `${out.filter((p) => p.tunnel).length} in tunnel… `);
 
   const { heights } = await heightsFor(out, lat0, lon0);
   const climb = Math.max(...heights) - Math.min(...heights);
