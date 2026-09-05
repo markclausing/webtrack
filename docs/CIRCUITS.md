@@ -1,4 +1,4 @@
-# Where the four real circuits came from
+# Where the eight real circuits came from
 
 Three of the eleven circuits in this game were drawn by a random number
 generator. Eight of them are places: Spa-Francorchamps, Monza, Suzuka,
@@ -8,7 +8,7 @@ say.
 
 ## The centre lines
 
-`src/game/circuits.js` holds a surveyed centre line for each of the four, at ten
+`src/game/circuits.js` holds a surveyed centre line for each of the eight, at ten
 metre spacing, in decimetres, delta encoded. They were produced by
 `tools/import-circuit.js` from the [TUM racetrack
 database](https://github.com/TUMFTM/racetrack-database), published by the
@@ -34,7 +34,7 @@ geometry, and the geometry is confined to one file so that stays true.
 
 ## What is not in the data, and is therefore ours
 
-The survey is two coordinates and a width. Everything else about these four
+The survey is two coordinates and a width. Everything else about these eight
 circuits was written by hand in `circuits.js`, and none of it is claimed to be
 measured:
 
@@ -42,8 +42,16 @@ measured:
 has a height profile written as metres above its start line at fractions of a
 lap, taken from what these places do rather than from a survey: Eau Rouge
 twenty-nine metres below the line, Les Combes sixty-seven above it, ninety-eight
-metres of spread. Monza gets nine metres, Suzuka forty, Zandvoort seventeen.
-They are authored, and they are much closer to the truth than nothing.
+metres of spread. The Red Bull Ring gets sixty-three over four kilometres,
+Interlagos forty-three with the start line at the top of it, Suzuka forty,
+Zandvoort twenty-five, Silverstone fifteen, Monza nine, and Gilles Villeneuve
+three, because it is an island.
+
+They are authored, and they are much closer to the truth than nothing. One thing
+learned by writing Zandvoort's profile twice: a *steady* gradient is invisible,
+because the camera pitches to meet it. What makes a hill read is where it
+changes, so spend the height on sharp local features rather than spreading it
+evenly.
 
 **Banking.** Zandvoort's two dished corners, Hugenholtz and the last one, at
 eighteen degrees. Written down because a banked corner is taken faster, so it
@@ -53,6 +61,11 @@ changes the lap and not only the picture.
 buildings, the campsites, the wind turbines, the derelict oval alongside the
 Serraglio at Monza and the wheel over the infield at Suzuka. Placed towards what
 makes each circuit recognisable, invented in the detail.
+
+**How much room there is beside the road.** Six metres of run-off past the kerb
+everywhere except Gilles Villeneuve, which asks for two, because it is a road on
+an island with concrete down both sides. That is the one authored number here
+that changes how a circuit drives rather than how it looks.
 
 **The viaduct.** Suzuka's crossover is *found* rather than authored - the
 geometry says the circuit passes within a few metres of itself twice, two and a
@@ -67,9 +80,13 @@ node tools/import-circuit.js racetrack-database/tracks
 ```
 
 which prints the `LINES` table to standard output. Paste it into
-`src/game/circuits.js`. The importer only reads the four circuits this game
-ships; the source database has twenty-five, sixteen of which are on the 2026
-Formula One calendar.
+`src/game/circuits.js`.
+
+The importer only reads the eight this game ships — Monza, Spa, Suzuka,
+Zandvoort, Silverstone, SaoPaulo, Spielberg and Montreal in that database, with
+the names this game gives them in `WANTED` at the top of the file. The source
+database has twenty-five, sixteen of which are on the 2026 Formula One
+calendar.
 
 ## The eight it does not have
 
