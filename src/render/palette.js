@@ -169,6 +169,103 @@ export const THEMES = {
     // shade of the haze in front of it and the beach read as an overexposure.
     water: md(40, 86, 122),
   },
+  /**
+   * Silverstone: a wartime airfield in Northamptonshire. Flat, open, and green
+   * in a way that is nothing like the Ardennes - this is farmland, not forest,
+   * and the sky over it is doing you a favour by holding off.
+   */
+  downs: {
+    sky: [
+      [0.20, md(44, 62, 112)],
+      [0.34, md(84, 110, 152)],
+      [0.44, md(140, 162, 186)],
+      [0.52, md(184, 196, 206)],
+      [1.00, md(208, 212, 210)],
+    ],
+    fog: md(196, 202, 202),
+    near: md(88, 128, 62),
+    mid: md(74, 112, 58),
+    far: md(92, 116, 84),
+    ridge: md(132, 136, 134),
+    verge: md(118, 138, 70),
+    rock: md(140, 138, 130),
+    tree: md(44, 88, 46),
+    trunk: md(84, 66, 46),
+    water: md(64, 100, 124),
+  },
+  /**
+   * Interlagos: a hollow with a city up the sides of it. Warm, hazy, and a
+   * harder light than anywhere else here - the green is dusty rather than lush,
+   * because that is what it is.
+   */
+  brasil: {
+    sky: [
+      [0.20, md(46, 74, 140)],
+      [0.34, md(92, 128, 182)],
+      [0.44, md(150, 180, 204)],
+      [0.52, md(206, 212, 204)],
+      [1.00, md(230, 220, 196)],
+    ],
+    fog: md(222, 214, 194),
+    near: md(102, 122, 62),
+    mid: md(88, 106, 56),
+    far: md(114, 118, 92),
+    ridge: md(150, 142, 130),
+    verge: md(126, 132, 68),
+    rock: md(148, 134, 112),
+    tree: md(52, 92, 44),
+    trunk: md(96, 72, 48),
+    water: md(58, 96, 116),
+  },
+  /**
+   * The Red Bull Ring: Styria, which is spruce and steep grass and a sky with
+   * altitude in it. Colder and cleaner than the Ardennes, and brighter, because
+   * a hillside in Austria in July is not a forest in Belgium in August.
+   */
+  alps: {
+    sky: [
+      [0.20, md(28, 52, 118)],
+      [0.34, md(62, 100, 166)],
+      [0.44, md(118, 158, 198)],
+      [0.52, md(176, 200, 216)],
+      [1.00, md(206, 218, 220)],
+    ],
+    fog: md(198, 210, 214),
+    near: md(84, 132, 62),
+    mid: md(64, 110, 54),
+    far: md(76, 104, 92),
+    ridge: md(126, 132, 136),
+    verge: md(112, 140, 70),
+    rock: md(132, 130, 126),
+    tree: md(26, 66, 42),
+    trunk: md(70, 54, 40),
+    water: md(56, 104, 134),
+  },
+  /**
+   * Ile Notre-Dame: parkland on an island, with the St Lawrence round it and
+   * Montreal on the far bank. The one theme here where the water is a river
+   * rather than a sea, so it takes its colour from the sky rather than from
+   * depth.
+   */
+  island: {
+    sky: [
+      [0.20, md(38, 66, 128)],
+      [0.34, md(80, 118, 172)],
+      [0.44, md(138, 172, 202)],
+      [0.52, md(190, 206, 214)],
+      [1.00, md(214, 218, 214)],
+    ],
+    fog: md(206, 212, 212),
+    near: md(78, 118, 58),
+    mid: md(62, 102, 52),
+    far: md(84, 108, 86),
+    ridge: md(128, 132, 136),
+    verge: md(108, 132, 66),
+    rock: md(134, 132, 126),
+    tree: md(38, 82, 44),
+    trunk: md(80, 62, 44),
+    water: md(72, 108, 130),
+  },
   coast: {
     sky: [
       [0.16, md(38, 76, 150)],

@@ -29,6 +29,10 @@ const WANTED = {
   Spa: 'spa',
   Suzuka: 'suzuka',
   Zandvoort: 'zandvoort',
+  Silverstone: 'silverstone',
+  SaoPaulo: 'interlagos',
+  Spielberg: 'spielberg',
+  Montreal: 'montreal',
 };
 
 function read(file) {

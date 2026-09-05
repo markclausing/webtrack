@@ -138,6 +138,24 @@ if (route === 'docs') {
       const at = player(s).s % s.route.metres;
       return at > s.route.metres * 0.055 && at < s.route.metres * 0.085 && player(s).speed > 55;
     }, 'zandvoort', 'gp'],
+    // And the four after them: the esses at Silverstone, the drop into the Senna
+    // S, the climb to turn three in Styria, and the walls on the island.
+    ['silverstone', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.615 && at < s.route.metres * 0.700 && player(s).speed > 60;
+    }, 'silverstone', 'gp'],
+    ['interlagos', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.070 && at < s.route.metres * 0.110 && player(s).speed > 40;
+    }, 'interlagos', 'gp'],
+    ['spielberg', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.200 && at < s.route.metres * 0.290 && player(s).speed > 70;
+    }, 'spielberg', 'gp'],
+    ['montreal', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.880 && at < s.route.metres * 0.930 && player(s).speed > 40;
+    }, 'montreal', 'gp'],
   ];
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
   for (const [name, when, on, mode, share = 0.95, dusk = false] of want) {

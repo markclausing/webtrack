@@ -24,6 +24,10 @@ const ROADS = {
   monza: 'Monza',
   suzuka: 'Suzuka',
   zandvoort: 'Zandvoort',
+  silverstone: 'Silverstone',
+  interlagos: 'Interlagos',
+  spielberg: 'the Red Bull Ring',
+  montreal: 'Gilles Villeneuve',
 };
 
 const PLACED = {

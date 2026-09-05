@@ -34,18 +34,20 @@ export const KEY = 'webtrack.highscores.v3';
 
 export const MODE_KEYS = ['qual', 'gp'];
 export const ROUTE_KEYS = [
-  'pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort',
+  'pass', 'coast', 'grand',
+  'spa', 'monza', 'suzuka', 'zandvoort',
+  'silverstone', 'interlagos', 'spielberg', 'montreal',
 ];
 export const TIERS = ['easy', 'normal', 'hard'];
 
 /**
  * The lists, keyed `qual:pass:hard`.
  *
- * Forty-two of them, which sounds like a great many for ten rows each and is
+ * Sixty-six of them, which sounds like a great many for ten rows each and is
  * still the right number: a qualifying lap on an empty circuit and a race time
  * over three laps are not the same quantity, and putting them in one table would
  * mean a board on which the top row was always a qualifying lap and nobody could
- * see why. Seven circuits rather than three is what took it from eighteen; the
+ * see why. Eleven circuits rather than three is what took it from eighteen; the
  * lists are empty until somebody drives them and an empty list costs two bytes.
  */
 export const LEVELS = MODE_KEYS.flatMap(

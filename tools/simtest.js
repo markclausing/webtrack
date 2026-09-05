@@ -13,6 +13,10 @@
 
 import { BTN, GRIP, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT } from '../src/constants.js';
 import { buildRoute, RINGS } from '../src/game/route.js';
+import { SURVEYED_KEYS } from '../src/game/circuits.js';
+
+/** Every circuit in the game: the three that were drawn and the ones that are places. */
+const ALL_ROUTES = ['pass', 'coast', 'grand', ...SURVEYED_KEYS];
 import { driveLine, makeRace, step } from '../src/game/sim.js';
 import {
   finalTicks, formatTime, nodeAt, nodeStep, ordinal, player,
@@ -397,7 +401,7 @@ for (const tier of ['easy', 'normal', 'hard']) {
 // they fell you got chevrons pointing both ways at once, at the one moment you
 // most need to be told a single thing.
 {
-  for (const key of ['pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort']) {
+  for (const key of ALL_ROUTES) {
     const route = buildRoute(key);
     const count = route.nodes.length;
     const signs = new Map();
@@ -436,7 +440,7 @@ for (const tier of ['easy', 'normal', 'hard']) {
   let pointing = 0;
   let inCorner = 0;
   let boards = 0;
-  for (const key of ['pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort']) {
+  for (const key of ALL_ROUTES) {
     const route = buildRoute(key);
     const count = route.nodes.length;
     for (let i = 0; i < count; i++) {
@@ -493,7 +497,13 @@ for (const tier of ['easy', 'normal', 'hard']) {
     monza: { km: 5.79, climb: 9, half: [5.2, 8.1] },
     suzuka: { km: 5.80, climb: 40, half: [5.2, 10.1] },
     zandvoort: { km: 4.31, climb: 25, half: [5.3, 10.6] },
+    silverstone: { km: 5.89, climb: 15, half: [7.4, 11.7] },
+    interlagos: { km: 4.30, climb: 43, half: [5.9, 11.7] },
+    spielberg: { km: 4.31, climb: 63, half: [6.7, 9.0] },
+    montreal: { km: 4.36, climb: 3, half: [5.4, 9.6] },
   };
+  ok('every surveyed circuit has an expectation written down here',
+    SURVEYED_KEYS.every((k) => want[k]));
   for (const [key, w] of Object.entries(want)) {
     const route = buildRoute(key);
     const ys = route.nodes.map((n) => n.y);
@@ -517,8 +527,9 @@ for (const tier of ['easy', 'normal', 'hard']) {
     suzuka.flyovers.length === 1 && deck.length > 8 && suzuka.flyovers[0].clear > 12);
   ok('and the parapet on it is inside the road it carries',
     deck.every((n) => n.wall < n.half + 2 && n.wall > n.half));
-  ok('while nowhere else has one', buildRoute('spa').flyovers.length === 0
-    && buildRoute('monza').flyovers.length === 0);
+  ok('while nowhere else has one', SURVEYED_KEYS
+    .filter((k) => k !== 'suzuka')
+    .every((k) => buildRoute(k).flyovers.length === 0));
 
   // Zandvoort's two dished corners, which are the reason it is quicker than its
   // shape suggests.
@@ -567,7 +578,7 @@ for (const tier of ['easy', 'normal', 'hard']) {
   // The same question asked of the camber, on every circuit including the three
   // drawn ones. It was answered wrong on all seven until the banking arrived
   // with the same sign on it and made it impossible to miss.
-  for (const key of ['pass', 'coast', 'grand', 'spa', 'monza', 'suzuka', 'zandvoort']) {
+  for (const key of ALL_ROUTES) {
     const nodes = buildRoute(key).nodes;
     const surface = (n, x) => n.y - n.bank * x * 0.12;
     // Read over sixty-six metres, which is what the camber itself is read over:
@@ -599,7 +610,7 @@ for (const tier of ['easy', 'normal', 'hard']) {
   // folds back on itself puts one node's scenery on another node's road, and a
   // dune twenty-six metres off the main straight at Zandvoort was a dune on the
   // road at Hugenholtz - sixty-two of them, on that circuit alone.
-  for (const key of ['spa', 'monza', 'suzuka', 'zandvoort']) {
+  for (const key of SURVEYED_KEYS) {
     const route = buildRoute(key);
     const nodes = route.nodes;
     let on = 0;
@@ -632,7 +643,7 @@ for (const tier of ['easy', 'normal', 'hard']) {
    * a fifth of its lap and covered the sky in the colour of sand, with every
    * other test in this file green.
    */
-  for (const key of ['spa', 'monza', 'suzuka', 'zandvoort']) {
+  for (const key of SURVEYED_KEYS) {
     const route = buildRoute(key);
     const nodes = route.nodes;
     const n = nodes.length;

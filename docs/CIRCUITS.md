@@ -1,9 +1,10 @@
 # Where the four real circuits came from
 
-Three of the seven circuits in this game were drawn by a random number
-generator. Four of them are places: Spa-Francorchamps, Monza, Suzuka and
-Zandvoort. This is where the shapes came from, what is ours, and what that
-obliges us to say.
+Three of the eleven circuits in this game were drawn by a random number
+generator. Eight of them are places: Spa-Francorchamps, Monza, Suzuka,
+Zandvoort, Silverstone, Interlagos, the Red Bull Ring and Gilles Villeneuve.
+This is where the shapes came from, what is ours, and what that obliges us to
+say.
 
 ## The centre lines
 

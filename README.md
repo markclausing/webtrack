@@ -3,13 +3,13 @@
 ### ▶ [Play it](https://markclausing.github.io/webtrack/)
 
 A polygon racing game in the browser, in the spirit of the first generation of
-them. Seven closed circuits, eight single seaters, a red suspension bridge to
+them. Eleven closed circuits, eight single seaters, a red suspension bridge to
 cross, and an afternoon that runs out: you start in daylight, the sun is on the
 horizon by the second lap and you finish in the dark.
 
-Three of the circuits were drawn by a random number generator. Four of them are
-Spa, Monza, Suzuka and Zandvoort, from surveyed centre lines, with the elevation
-and the banking written in by hand.
+Three of the circuits were drawn by a random number generator. Eight of them are
+real places, from surveyed centre lines, with the elevation and the banking
+written in by hand.
 
 Two ways to go out — put a lap in on an empty circuit, or start eighth of eight
 against seven cars in the same machinery as yours that will shut the door.
@@ -195,7 +195,7 @@ minute up the road by the flag and you were racing two cars rather than seven. A
 it stands somebody is within ninety metres of you for about eighty per cent of a
 race, which is a thing the test suite measures and would notice going away.
 
-## Seven circuits
+## Eleven circuits
 
 ### The three that were drawn
 
@@ -209,7 +209,7 @@ long afternoon.
 
 ![The grand circuit, on the coastal half of the lap](docs/screenshots/grand.png)
 
-### The four that are places
+### The eight that are places
 
 **Spa-Francorchamps**, 7.0 km, with the hundred metres of height it is famous
 for: Eau Rouge arrives twenty-nine metres below the start line and Les Combes
@@ -218,6 +218,20 @@ the derelict banking of the old oval rotting in the trees along the Serraglio.
 **Suzuka**, 5.8 km, the only figure of eight anybody races on — the run down to
 Degner crosses the back straight twenty-one metres above it. **Zandvoort**,
 4.3 km, through the dunes, with two corners dished at eighteen degrees.
+
+Then four more, picked for how differently they drive rather than for how well
+known they are. **Silverstone**, 5.9 km, a wartime airfield: flat, wide open and
+the fastest of the eleven after Monza, with Maggotts, Becketts and Chapel
+arriving as five direction changes in fifteen seconds. **Interlagos**, 4.3 km and
+the only one that runs anticlockwise, in a bowl with forty metres of height in
+it — the start line is at the top, turn one drops away from under you, and
+everything from Junção to the flag is one long climb back. **The Red Bull Ring**,
+4.3 km, the shortest lap here and the steepest: sixty metres of Styrian hillside
+between the start line and turn three, over in a little more than a minute.
+**Gilles Villeneuve**, 4.4 km, an island in the St Lawrence, flat as the water
+round it and the one circuit here with no run-off worth the name — two metres of
+concrete from the kerb instead of the six everywhere else, so a mistake costs you
+the car rather than the corner.
 
 ![Under the flyover at Suzuka, where the circuit crosses itself](docs/screenshots/suzuka.png)
 

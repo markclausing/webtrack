@@ -816,9 +816,17 @@ export function buildRoute(key) {
       // The barrier, which has to stay outside the road however wide the road
       // gets. Fifteen metres is a good run-off beside a nine metre track and is
       // inside the kerb of a sixteen metre one.
-      wall: Math.max(WALL_AT, (at(i).half === undefined
-        ? ROAD_HALF
-        : Math.max(NARROWEST, at(i).half * WIDEN)) + 6),
+      // The barrier. Six metres of run-off past the kerb unless the circuit says
+      // otherwise, and one of them does: an island in the St Lawrence has
+      // concrete where everywhere else has grass, so Montreal asks for two.
+      // Everywhere else the barrier also stays outside fifteen metres, because
+      // fifteen is a good run-off beside a nine metre track; a circuit that has
+      // asked for less has asked for less on purpose.
+      wall: real && real.land.runoff !== undefined
+        ? Math.max(NARROWEST, at(i).half * WIDEN) + real.land.runoff
+        : Math.max(WALL_AT, (at(i).half === undefined
+          ? ROAD_HALF
+          : Math.max(NARROWEST, at(i).half * WIDEN)) + 6),
       warm,
       g: real
         ? capped(groundReal(y, real.land, wob, infield[i], coastAt(real.land.sea, t)),
@@ -995,17 +1003,26 @@ function cornerBoards(nodes, add) {
   const ENOUGH = 0.024;
   const corners = [];
   let run = null;
+  const close = () => {
+    if (run && run.to - run.from >= 3) corners.push(run);
+    run = null;
+  };
   for (let i = 0; i < count; i++) {
     if (Math.abs(smooth[i]) > ENOUGH) {
+      // A corner ends where the road starts turning the other way, and not only
+      // where it stops turning. Without that a chicane is one corner: at
+      // Montreal's turn six and seven, sixty metres apart, the right-hander's
+      // run of boards carried on past the point where the road had already gone
+      // left, so four of them stood in a left-hander pointing right.
+      if (run && Math.sign(smooth[i]) !== Math.sign(run.peak)) close();
       run ||= { from: i, peak: 0 };
       if (Math.abs(smooth[i]) > Math.abs(run.peak)) run.peak = smooth[i];
       run.to = i;
     } else if (run) {
-      if (run.to - run.from >= 3) corners.push(run);
-      run = null;
+      close();
     }
   }
-  if (run && run.to - run.from >= 3) corners.push(run);
+  close();
 
   // Every board anybody might want, before any of them are allowed to stand.
   //
@@ -1289,9 +1306,26 @@ function dress(nodes, real, rnd) {
     palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
     pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
     post: 0.5, mast: 1,
+    // A corner board is six metres wide and a hand's breadth deep, and only the
+    // depth is on the ground. Left to the default of three it needed four and a
+    // half metres of clearance from the kerb, which is more run-off than
+    // Montreal has anywhere - so every board on that circuit was rejected and it
+    // came out with none at all.
+    sign: 1,
   };
 
-  const onRoad = (x, z, spread) => {
+  /**
+   * Is there road here that this prop does not belong to?
+   *
+   * `mine` is the node the prop was placed against, and nodes near it in lap
+   * distance are excused. They have to be: a corner board stands just outside
+   * its own barrier on purpose, and at Montreal the barrier is two metres from
+   * the kerb rather than six - so measured against its own node every board on
+   * the circuit was rejected as standing on the road, and Montreal came out with
+   * none at all. The question this is asking has always been whether a prop has
+   * landed on some *other* piece of the circuit.
+   */
+  const onRoad = (x, z, spread, mine) => {
     const cx = Math.floor((x - minX) / CELL);
     const cz = Math.floor((z - minZ) / CELL);
     // Two cells either way, because the widest thing here needs fifteen metres
@@ -1304,6 +1338,14 @@ function dress(nodes, real, rnd) {
         const cell = grid[col + row * cols];
         if (!cell) continue;
         for (const n of cell) {
+          // Its own node and the two either side, which is the road it was
+          // measured from. Anything wider than that lets a prop back onto the
+          // far side of a hairpin, which is eighty metres away along the lap and
+          // ten across.
+          if (mine !== undefined) {
+            const apart = Math.abs(n.i - mine);
+            if (Math.min(apart, count - apart) <= 2) continue;
+          }
           const want = n.half + 1.5 + spread;
           const ax = x - n.x;
           const az = z - n.z;
@@ -1334,7 +1376,7 @@ function dress(nodes, real, rnd) {
         const tryOff = Math.max(a.half + 1.5 + spread * 0.6, prop.off * share);
         const x = a.x + a.nx * prop.side * tryOff;
         const z = a.z + a.nz * prop.side * tryOff;
-        if (onRoad(x, z, spread)) continue;
+        if (onRoad(x, z, spread, at)) continue;
         off = tryOff;
         room = true;
         break;
