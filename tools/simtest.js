@@ -511,7 +511,7 @@ for (const tier of ['easy', 'normal', 'hard']) {
     yasmarina: { km: 5.54, climb: 9, half: [6.6, 10.2] },
     // Measured rather than authored: the line, the height and the tunnel all
     // came off the map, so this checks a measurement rather than a decision.
-    monaco: { km: 3.53, climb: 43, half: [5.2, 5.2] },
+    monaco: { km: 3.18, climb: 43, half: [5.2, 5.2] },
   };
   ok('every surveyed circuit has an expectation written down here',
     SURVEYED_KEYS.every((k) => want[k]));

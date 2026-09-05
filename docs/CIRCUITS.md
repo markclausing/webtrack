@@ -165,30 +165,57 @@ and their own heights, and 79 boats along the piers of Port Hercule. The scatter
 rule for the whole circuit is one line about palm trees, because everything else
 beside that road was measured. Las Vegas imports correctly at 96 per cent.
 
-One thing about it is not right, and it is worth writing down what has been
-tried.
+### Ordering the fragments
 
-Its assembled route doubles back on itself, which shows up as a net turn of zero
-where a closed circuit turns through exactly two pi. So the *shape* is not quite
-Monaco even though the corners, the tunnel, the height and the buildings all are.
-From the car it appears as a length of road hanging in mid-air off to one side,
-because the road really is there - the importer put it there.
+A street circuit arrives as fragments with gaps between them, and the order the
+lap visits them in is not obvious. Three attempts:
 
-The obvious constraint is that a lap does not use a piece of road twice, and the
-router has it now: reusing a node is refused and passing within twelve metres of
-road already driven is charged twenty times the distance. It has to be spatial
+**Nearest reachable next** is the obvious one and is wrong: two fragments can be
+close together and still be visited a whole lap apart, so the route doubles back.
+Monaco came out 19 per cent too long.
+
+**Sorted by angle about the centre** is better - it is what "in order" means on a
+loop - and is still a guess. On a circuit that wraps a harbour, climbs a hill and
+comes back through a tunnel, the angular order of six fragments is not the order
+a car drives them, and it left the lap turning through nought where a closed
+circuit turns through two pi.
+
+**Every order, priced.** Six fragments have 720 orders and each can be driven
+either way about, and every one of those laps can be costed from a table of the
+distance between each pair of fragment ends - twelve shortest-path searches, done
+once. The cheapest closed lap wins. It is a travelling salesman over six cities,
+which is not a hard problem at six; above eight the count runs away and it falls
+back to the angular order.
+
+That took Monaco from 107 per cent of its true length to 96, from a third of its
+tunnel to all of it, and dropped the worst height difference between two pieces
+of stacked road from twenty-five metres to twelve - which is what the pale slabs
+across the view were.
+
+A junction that doubles back is charged forty metres per radian on top of the
+distance. It was five thousand metres flat, on the reasoning that a reversal is
+never worth a detour; that is true and is not what the number does. At that size
+the penalty stops competing with length and starts choosing the route by itself,
+and Monaco came back four kilometres long turning through six pi - three laps of
+something.
+
+### What is still not right
+
+Twenty-one per cent of Monaco's nodes still have another piece of the same road
+within a few metres of them, and the assembled lap still contains two places
+where it reverses sharply - which is why its net turn reads as nought rather than
+two pi even though the shape is now the right length and the right way round.
+Nothing about it is visible from the car any more, because the stacked road is
+now within twelve metres in height rather than twenty-five, but it is there.
+
+The router also refuses to reuse a node and charges twenty times the distance for
+passing within twelve metres of road already driven. That has to be spatial
 rather than by node id, because the road above Monaco's tunnel and the tunnel are
-two different ways in the map and the same place on the ground.
+two different ways in the map and the same place on the ground. On its own it
+halved the doubling and cost two thirds of the tunnel; it is the ordering above
+that did the work.
 
-It is a real improvement and it is not the answer. Doubling falls from 29 per
-cent of the lap to 10, and two things get worse: the route now finds a way past
-the tunnel that only clips a third of it, and the net turn is still zero. So
-something other than reuse is sending the route out and back - the fragment
-ordering, most likely, since angle about the centre is a poor way to order
-fragments on a circuit shaped like Monaco. The constraint is committed and the
-circuit still ships on the earlier import, which has the whole tunnel.
-
-Whatever fixes this is also what gets the other six importing, so it is worth
+Whatever finishes this is also what gets the other six importing, so it is worth
 getting right rather than getting past.
 
 The other six do not import correctly yet, and the reason is the same for all of

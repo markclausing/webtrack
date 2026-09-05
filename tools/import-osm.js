@@ -413,29 +413,29 @@ function assemble(runs, links, nodes, project, inTunnel) {
     return d;
   };
   /**
-   * The fragments in the order the circuit visits them, which is round.
+   * The fragments in the order the circuit visits them.
    *
-   * Taking the nearest reachable one each time is the obvious thing and it is
-   * wrong: two fragments can be close together and still be visited an entire
-   * lap apart, so the route doubles back and Monaco came out nineteen per cent
-   * too long. A closed circuit puts its fragments in a ring, so they are sorted
-   * by the angle of their middle about the middle of everything - which is what
-   * "in order" means on a loop.
+   * Three attempts at this, and the first two are worth recording.
+   *
+   * Nearest-reachable-next is the obvious one and is wrong: two fragments can
+   * be close together and still be visited an entire lap apart, so the route
+   * doubles back. Sorting them by the angle of their middle about the middle of
+   * everything is better - it is what "in order" means on a loop - and is still
+   * a guess. On a circuit shaped like Monaco, which wraps a harbour, climbs a
+   * hill and comes back through a tunnel, the angular order of six fragments is
+   * not the order a car drives them, and it left the lap turning through zero
+   * where a closed circuit turns through two pi.
+   *
+   * So it is not guessed any more. Six fragments have seven hundred and twenty
+   * orders and each can be driven either way about, which is forty-six thousand
+   * laps - and every one of them can be priced from a table of the distance
+   * between each pair of fragment ends, which is twelve shortest-path searches.
+   * The cheapest lap wins, and a lap that fails to close does not count.
+   *
+   * It is a travelling salesman over six cities, which is not a hard problem at
+   * six. Above eight the count runs away and it falls back to the angular order,
+   * which is what it had.
    */
-  const mid = (ns) => {
-    const p = nodes.get(ns[Math.floor(ns.length / 2)]);
-    return project(p.lat, p.lon);
-  };
-  const centre = { x: 0, z: 0 };
-  for (const r of runs) {
-    const m = mid(r.nodes);
-    centre.x += m.x / runs.length;
-    centre.z += m.z / runs.length;
-  }
-  const angle = (r) => {
-    const m = mid(r.nodes);
-    return Math.atan2(m.z - centre.z, m.x - centre.x);
-  };
   // If the fragments already make one closed loop there is nothing to drive:
   // a permanent circuit is mapped end to end and routing it through the streets
   // would only find a way to make it longer.
@@ -443,52 +443,129 @@ function assemble(runs, links, nodes, project, inTunnel) {
     return { lap: runs[0].nodes.slice(0, -1), driven: 0, stranded: 0 };
   }
 
-  const ring = [...runs].sort((a, b) => angle(a) - angle(b));
-  const left = ring.slice(1);
-  const lap = [...ring[0].nodes];
-  for (const id of lap) taken.add(id);
+  // Every fragment end, and the road between each pair of them. Twelve searches
+  // for six fragments, done once, and after that a lap costs nothing to price.
+  const ends = [];
+  for (const run of runs) {
+    ends.push({ run, flip: false, from: run.nodes[0], to: run.nodes[run.nodes.length - 1] });
+    ends.push({ run, flip: true, from: run.nodes[run.nodes.length - 1], to: run.nodes[0] });
+  }
+  /**
+   * The heading of a run of nodes at one end of it, pointing outwards.
+   *
+   * Used to charge a junction that doubles back. The cheapest cycle over the
+   * fragments is not necessarily a lap: an out-and-back down a spur is short,
+   * and Monaco's shortest cycle had two of them - each contributing a hairpin of
+   * about a hundred and eighty degrees, and two hairpins take a lap that turns
+   * through two pi and turn it through nought. Which is exactly the number that
+   * was wrong.
+   */
+  const heading = (ns, atEnd) => {
+    const i = atEnd ? ns.length - 1 : 0;
+    const j = atEnd ? Math.max(0, ns.length - 4) : Math.min(ns.length - 1, 3);
+    const a = nodes.get(ns[j]);
+    const b = nodes.get(ns[i]);
+    if (!a || !b) return 0;
+    const pa = project(a.lat, a.lon);
+    const pb = project(b.lat, b.lon);
+    return Math.atan2(pb.x - pa.x, pb.z - pa.z);
+  };
+
+  const legs = new Map();
+  const legKey = (a, b) => `${a},${b}`;
+  for (const a of ends) {
+    for (const b of ends) {
+      if (a.run === b.run) continue;
+      const key = legKey(a.to, b.from);
+      if (legs.has(key)) continue;
+      const path = shortest(links, a.to, b.from);
+      if (!path) {
+        legs.set(key, null);
+        continue;
+      }
+      // How sharply the road turns where the fragment hands over to the leg,
+      // and where the leg hands back. A lap does not hairpin at a junction.
+      const bend = (from, to) => {
+        let d = to - from;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        return Math.abs(d);
+      };
+      const out = a.flip ? heading([...a.run.nodes].reverse(), true) : heading(a.run.nodes, true);
+      const into = b.flip ? heading([...b.run.nodes].reverse(), false) : heading(b.run.nodes, false);
+      const legOut = heading(path, false);
+      const legIn = heading(path, true);
+      const kink = Math.max(bend(out, legOut), bend(legIn, into));
+      // Charged as distance so it competes with length on the same terms, and
+      // charged gently.
+      //
+      // It was five thousand metres for anything past two radians, on the
+      // reasoning that a reversal is never worth a detour. That is true and it
+      // is not what the number does: at that size the penalty stops competing
+      // with length and starts choosing the route on its own, and Monaco came
+      // back four kilometres long turning through six pi - three laps of
+      // something. Forty metres a radian leaves length in charge and puts a
+      // thumb on the scale, which is all that was wanted.
+      legs.set(key, { path, cost: lengthOf(path) + kink * 40, real: lengthOf(path) });
+    }
+  }
+
+  const best = { cost: Infinity, order: null };
+  const walk = (chosen, spent, restLeft) => {
+    if (spent >= best.cost) return;
+    if (!restLeft.length) {
+      const home = legs.get(legKey(chosen[chosen.length - 1].to, chosen[0].from));
+      if (!home) return;
+      const total = spent + home.cost;
+      if (total < best.cost) {
+        best.cost = total;
+        best.order = [...chosen];
+      }
+      return;
+    }
+    for (let i = 0; i < restLeft.length; i++) {
+      const run = restLeft[i];
+      const rest = restLeft.slice(0, i).concat(restLeft.slice(i + 1));
+      for (const flip of [false, true]) {
+        const next = ends.find((e) => e.run === run && e.flip === flip);
+        const leg = legs.get(legKey(chosen[chosen.length - 1].to, next.from));
+        if (!leg) continue;
+        walk([...chosen, next], spent + leg.cost, rest);
+      }
+    }
+  };
+
+  // The first fragment is fixed and unflipped: a loop has no beginning, so
+  // every order that differs only by where it starts is the same lap, and
+  // fixing it divides the search by twelve.
+  const searchable = runs.length <= 8;
+  if (searchable) walk([ends[0]], 0, runs.slice(1));
+
+  const order = best.order || [...runs]
+    .sort((a, b) => angle(a) - angle(b))
+    .map((run) => ends.find((e) => e.run === run && !e.flip));
+
+  const lap = [];
   let driven = 0;
   let forced = 0;
-
-  while (left.length) {
-    const head = lap[lap.length - 1];
-    let best = null;
-    // The next one round the ring, taken either way about - a fragment's stored
-    // direction is whichever way it happened to be drawn.
-    const next = left.shift();
-    for (const flip of [false, true]) {
-      const ns = flip ? [...next.nodes].reverse() : next.nodes;
-      // Round the road already used, if there is a way round. If there is not,
-      // the constraint is dropped for this leg rather than losing the fragment -
-      // and it is counted, because a lap that had to be forced is a lap worth
-      // looking at.
-      let path = shortest(links, head, ns[0], taken);
-      if (!path) {
-        path = shortest(links, head, ns[0]);
-        if (path) forced++;
-      }
-      if (!path) continue;
-      const cost = lengthOf(path);
-      if (!best || cost < best.cost) best = { ns, path, cost };
+  for (let i = 0; i < order.length; i++) {
+    const here = order[i];
+    const ns = here.flip ? [...here.run.nodes].reverse() : here.run.nodes;
+    if (i === 0) lap.push(...ns);
+    else lap.push(...ns.slice(1));
+    const next = order[(i + 1) % order.length];
+    const leg = legs.get(legKey(here.to, next.from));
+    if (!leg) {
+      forced++;
+      continue;
     }
-    if (!best) continue;
-    lap.push(...best.path.slice(1), ...best.ns.slice(1));
-    for (const id of best.path) taken.add(id);
-    for (const id of best.ns) taken.add(id);
-    driven += best.cost;
+    // The last leg closes the lap, so its far end is the first node again.
+    const body = i === order.length - 1 ? leg.path.slice(1, -1) : leg.path.slice(1, -1);
+    lap.push(...body);
+    driven += leg.real ?? leg.cost;
   }
-
-  // And home, so the lap closes. The start is allowed, obviously.
-  let home = shortest(links, lap[lap.length - 1], lap[0], taken);
-  if (!home) {
-    home = shortest(links, lap[lap.length - 1], lap[0]);
-    if (home) forced++;
-  }
-  if (home) {
-    lap.push(...home.slice(1, -1));
-    driven += lengthOf(home);
-  }
-  return { lap, driven, stranded: left.length, forced };
+  for (const id of lap) taken.add(id);
+  return { lap, driven, stranded: 0, forced, searched: searchable };
 }
 
 /** The lap in metres, at a fixed spacing, carrying the tunnel flag along. */
