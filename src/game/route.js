@@ -827,6 +827,9 @@ export function buildRoute(key) {
         : (real && real.osm ? at(i).half : Math.max(NARROWEST, at(i).half * WIDEN)),
       // How much of this node is under a roof. Nought almost everywhere.
       tunnel: inTunnel ? inTunnel(t) : 0,
+      // How far out this circuit draws ground. Everywhere but a street circuit
+      // draws all of it.
+      reach: real && real.land.reach !== undefined ? real.land.reach : 99,
       // The barrier, which has to stay outside the road however wide the road
       // gets. Fifteen metres is a good run-off beside a nine metre track and is
       // inside the kerb of a sixteen metre one.
@@ -1413,7 +1416,14 @@ function dress(nodes, real, rnd) {
     const at = ((Math.round(i) % count) + count) % count;
     if (prop.side && prop.off) {
       const a = nodes[at];
-      const spread = (SPREAD[prop.kind] ?? 3) * (prop.s || 1);
+      // A measured building carries its own footprint, and it has to be asked
+      // about with that rather than with a guess. Monaco has one that is a
+      // hundred and three metres by a hundred and fifty-one - a whole block,
+      // mapped as one building - and checked against the default three metres it
+      // sailed through and laid itself across the road.
+      const spread = prop.w !== undefined
+        ? Math.hypot(prop.w, prop.d) / 2
+        : (SPREAD[prop.kind] ?? 3) * (prop.s || 1);
       let off = prop.off;
       let room = false;
       // Its own place first, then three quarters of the way in, then half - but

@@ -794,9 +794,19 @@ export const SURVEYED = {
     boats: '5,0,x,u,e4 5,0,1p,12,e4 9t,0,1a,x,dk 9p,0,1s,g,cw 9t,0,1p,r,3v 4,0,16,z,6a 5,0,19,11,5d 13,0,98,g,d8 13,0,93,i,e 13,0,8s,p,4h i,0,2i,v,2c i,0,2d,n,2c i,0,1y,12,b9 j,0,10,k,11 q,0,1r,i,51 i,0,1d,q,b3 14,0,7s,11,bi 13,0,7h,k,dd 13,0,71,l,dd 13,0,6u,s,4n 13,0,5i,j,db 13,0,65,v,db 13,0,5w,h,db 13,0,6k,13,db 13,0,60,x,4k 13,0,4o,m,db 13,0,49,k,db 13,0,50,11,db 13,0,4y,q,db 13,0,5o,12,db i,0,53,p,ax 13,0,57,11,4l 13,0,5d,v,4l 13,0,4k,10,4l 13,0,4s,l,4l 13,0,49,l,4l 3q,1,4u,11,fp 3q,1,40,z,fp 3q,1,4c,h,bb 3q,1,4u,m,bb 40,1,4g,j,4a 76,0,1w,13,g 4d,1,22,13,9b 71,0,2v,j,dr 72,0,28,m,9b 70,0,1r,q,9f 12,0,r,10,ex 12,0,1m,r,ex 10,0,1q,t,fg v,0,26,g,9x 13,0,13,12,4i 13,0,1z,p,db 12,0,2c,u,ez 13,0,1d,p,4l 5,0,26,n,e5 5,0,2w,x,e5 9q,0,2h,q,c5 5,0,2e,k,5e 5,0,2l,h,5e 6,0,1x,o,47 3k,1,s,t,8o 3k,1,1h,l,8o 3o,1,20,j,8c 3k,1,2o,l,8o 3o,1,35,k,8c 6x,0,2f,f,9b 4i,1,2r,i,e2 6z,0,1z,12,du 4k,1,1p,11,5f 1d,0,8b,13,b8 1d,0,7o,m,b8 1d,0,7i,z,2i 1d,0,84,g,2i 13,0,2w,r,d7 13,0,2p,z,d7 13,0,3f,m,d7 12,0,2z,h,aj 13,0,3u,r,2b 13,0,38,n,4h 13,0,2m,x,8x 5d,1,1a,w,e3',
 
     bank: [],
-    // Barriers where the pavement is, which is the whole character of the place.
-    land: { rise: 5, roll: 2.4, plain: -5, runoff: 1.6,
-      sea: { at: 0.02, span: 0.10, level: -6 } },
+    /**
+     * Barriers where the pavement is, and no landscape at all.
+     *
+     * Every other circuit here gets a bank beside the road and some roll in the
+     * ground beyond it, because every other circuit has some. A street does not.
+     * Given the usual numbers, Monaco drew hillsides - and because the route
+     * folds back on itself with forty-four metres of height in it, the hillside
+     * belonging to Casino came across the view at Sainte Dévote as a pale slab
+     * at an angle. Held flat and close to the road it reads as what it is:
+     * pavement, and then buildings.
+     */
+    land: { rise: 0.5, roll: 0.3, plain: -1.2, runoff: 1.6, reach: 2,
+      sea: { at: 0.02, span: 0.10, level: -4 } },
     scatter: [
       // Almost nothing scattered: what is beside this road is the town, and the
       // town is measured. A few palms along the front is all that is invented.

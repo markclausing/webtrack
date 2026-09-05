@@ -605,7 +605,19 @@ export class Renderer {
       // tunnel floor - which is what it did, and what it looked like was a pale
       // wedge across the road that no amount of darkening would touch, because
       // the node it belonged to was outside and therefore not dark.
-      for (let band = 0; band < BANDS.length && !a.deck && roof < 0.05; band++) {
+      /**
+       * The ground, out as far as this circuit has any.
+       *
+       * All four bands everywhere except a street circuit, where the far ones
+       * are wrong twice over: you cannot see three hundred metres of open
+       * ground down a street because there are buildings in the way, and on a
+       * circuit that folds back on itself those bands belong to other parts of
+       * the lap and arrive across the view at an angle. Fogged to the fog
+       * colour they are invisible in themselves; what gives them away is the
+       * hard edge where they meet the sky.
+       */
+      for (let band = 0; band < BANDS.length && band < a.reach
+        && !a.deck && roof < 0.05; band++) {
         const [inner0, outer, kind, every] = BANDS[band];
         // The first band starts at the kerb, wherever the kerb happens to be.
         const inner = band === 0 ? Math.max(ha + RUMBLE, inner0 - (ROAD_HALF - ha)) : inner0;
