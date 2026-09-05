@@ -32,6 +32,10 @@ const ROADS = {
   sakhir: 'Bahrain',
   mexico: 'Mexico City',
   hungaroring: 'the Hungaroring',
+  melbourne: 'Albert Park',
+  shanghai: 'Shanghai',
+  catalunya: 'Catalunya',
+  yasmarina: 'Yas Marina',
 };
 
 const PLACED = {

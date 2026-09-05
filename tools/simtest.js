@@ -505,6 +505,10 @@ for (const tier of ['easy', 'normal', 'hard']) {
     sakhir: { km: 5.41, climb: 16, half: [7.1, 14.3] },
     mexico: { km: 4.30, climb: 10, half: [6.5, 11.6] },
     hungaroring: { km: 4.38, climb: 32, half: [5.2, 10.6] },
+    melbourne: { km: 5.30, climb: 5, half: [5.3, 10.3] },
+    shanghai: { km: 5.44, climb: 7, half: [7.0, 11.5] },
+    catalunya: { km: 4.65, climb: 30, half: [5.7, 11.7] },
+    yasmarina: { km: 5.54, climb: 9, half: [6.6, 10.2] },
   };
   ok('every surveyed circuit has an expectation written down here',
     SURVEYED_KEYS.every((k) => want[k]));

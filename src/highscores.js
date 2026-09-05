@@ -38,17 +38,18 @@ export const ROUTE_KEYS = [
   'spa', 'monza', 'suzuka', 'zandvoort',
   'silverstone', 'interlagos', 'spielberg', 'montreal',
   'austin', 'sakhir', 'mexico', 'hungaroring',
+  'melbourne', 'shanghai', 'catalunya', 'yasmarina',
 ];
 export const TIERS = ['easy', 'normal', 'hard'];
 
 /**
  * The lists, keyed `qual:pass:hard`.
  *
- * Ninety of them, which sounds like a great many for ten rows each and is
+ * A hundred and fourteen of them, which sounds like a great many for ten rows each and is
  * still the right number: a qualifying lap on an empty circuit and a race time
  * over three laps are not the same quantity, and putting them in one table would
  * mean a board on which the top row was always a qualifying lap and nobody could
- * see why. Fifteen circuits rather than three is what took it from eighteen; the
+ * see why. Nineteen circuits rather than three is what took it from eighteen; the
  * lists are empty until somebody drives them and an empty list costs two bytes.
  */
 export const LEVELS = MODE_KEYS.flatMap(

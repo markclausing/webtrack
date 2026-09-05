@@ -355,6 +355,76 @@ export const THEMES = {
     trunk: md(96, 74, 50),
     water: md(60, 100, 124),
   },
+  /** Shanghai: humid, hazy, and grey-blue rather than blue. Built on marsh. */
+  delta: {
+    sky: [
+      [0.20, md(52, 74, 122)],
+      [0.34, md(98, 124, 164)],
+      [0.44, md(154, 176, 196)],
+      [0.52, md(200, 210, 212)],
+      [1.00, md(220, 222, 216)],
+    ],
+    fog: md(214, 218, 214),
+    near: md(84, 116, 62),
+    mid: md(70, 100, 56),
+    far: md(96, 112, 96),
+    ridge: md(136, 138, 138),
+    verge: md(112, 128, 70),
+    rock: md(140, 138, 132),
+    tree: md(46, 84, 48),
+    trunk: md(86, 68, 48),
+    water: md(70, 100, 118),
+  },
+  /**
+   * Catalunya: dry hillside, ochre under the grass, and a hard clean light. The
+   * sky here is the deepest of any of the daytime themes because that part of
+   * Spain in May genuinely is.
+   */
+  iberia: {
+    sky: [
+      [0.20, md(30, 62, 140)],
+      [0.34, md(72, 114, 184)],
+      [0.44, md(134, 172, 206)],
+      [0.52, md(196, 210, 210)],
+      [1.00, md(224, 218, 198)],
+    ],
+    fog: md(220, 212, 190),
+    near: md(122, 126, 70),
+    mid: md(112, 110, 62),
+    far: md(134, 124, 96),
+    ridge: md(154, 146, 132),
+    verge: md(146, 136, 78),
+    rock: md(164, 144, 114),
+    tree: md(54, 84, 46),
+    trunk: md(94, 72, 50),
+    water: md(56, 98, 124),
+  },
+  /**
+   * Yas Marina. Reclaimed sand beside the water, and like Bahrain it is always
+   * run at dusk, so these daytime colours are a starting point that the
+   * time-of-day pass immediately pulls towards sodium. The ground is paler than
+   * Bahrain's - this is dredged sand rather than desert - and the water is the
+   * point of the place.
+   */
+  marina: {
+    sky: [
+      [0.20, md(44, 68, 124)],
+      [0.34, md(94, 122, 166)],
+      [0.44, md(158, 176, 194)],
+      [0.52, md(210, 202, 178)],
+      [1.00, md(226, 212, 184)],
+    ],
+    fog: md(218, 208, 184),
+    near: md(190, 176, 140),
+    mid: md(176, 162, 128),
+    far: md(160, 150, 128),
+    ridge: md(158, 156, 152),
+    verge: md(176, 166, 128),
+    rock: md(168, 156, 130),
+    tree: md(62, 96, 58),
+    trunk: md(102, 84, 58),
+    water: md(36, 92, 130),
+  },
   coast: {
     sky: [
       [0.16, md(38, 76, 150)],

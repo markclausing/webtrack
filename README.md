@@ -3,13 +3,14 @@
 ### ▶ [Play it](https://markclausing.github.io/webtrack/)
 
 A polygon racing game in the browser, in the spirit of the first generation of
-them. Fifteen closed circuits, eight single seaters, a red suspension bridge to
+them. Nineteen closed circuits, eight single seaters, a red suspension bridge to
 cross, and an afternoon that runs out: you start in daylight, the sun is on the
 horizon by the second lap and you finish in the dark.
 
-Three of the circuits were drawn by a random number generator. Twelve of them
+Three of the circuits were drawn by a random number generator. Sixteen of them
 are real places, from surveyed centre lines, with the elevation and the banking
-written in by hand.
+written in by hand — every circuit the source survey has that is on the 2026
+Formula One calendar.
 
 Two ways to go out — put a lap in on an empty circuit, or start eighth of eight
 against seven cars in the same machinery as yours that will shut the door.
@@ -195,7 +196,7 @@ minute up the road by the flag and you were racing two cars rather than seven. A
 it stands somebody is within ninety metres of you for about eighty per cent of a
 race, which is a thing the test suite measures and would notice going away.
 
-## Fifteen circuits
+## Nineteen circuits
 
 ### The three that were drawn
 
@@ -209,7 +210,7 @@ long afternoon.
 
 ![The grand circuit, on the coastal half of the lap](docs/screenshots/grand.png)
 
-### The twelve that are places
+### The sixteen that are places
 
 **Spa-Francorchamps**, 7.0 km, with the hundred metres of height it is famous
 for: Eau Rouge arrives twenty-nine metres below the start line and Les Combes
@@ -249,6 +250,21 @@ nowhere to pass.
 Two of those changed the car rather than the road, which nothing had done before.
 Bahrain switches the sunset on for itself, and Mexico City carries an air density
 that divides the drag and takes a little grip away.
+
+And four that finish the set. **Albert Park**, 5.3 km, a public park with a
+circuit painted on it for a fortnight a year, round a lake, and quicker than a
+park has any business being. **Shanghai**, 5.4 km, whose first corner is 297
+degrees of right-hander that tightens the whole way round — nothing else here
+does anything like it — followed by a kilometre and a quarter of straight and a
+twenty metre hairpin at the end of it. **Catalunya**, 4.7 km, the circuit every
+team has more data on than any other, with thirty metres of dry hillside and a
+first corner at the top of a climb you spend the whole straight making. **Yas
+Marina**, 5.5 km, the other one run in the dark and a very different dark:
+anticlockwise, a marina with boats in it, and a hotel built over the road.
+
+That is every circuit the source survey has that is on the 2026 calendar. The
+eight it does not have — Jeddah, Miami, Monaco, Madrid, Baku, Singapore, Las
+Vegas and Losail — would have to be traced out of OpenStreetMap directly.
 
 ![Under the flyover at Suzuka, where the circuit crosses itself](docs/screenshots/suzuka.png)
 

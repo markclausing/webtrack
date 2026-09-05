@@ -37,6 +37,10 @@ const WANTED = {
   Sakhir: 'sakhir',
   MexicoCity: 'mexico',
   Budapest: 'hungaroring',
+  Melbourne: 'melbourne',
+  Shanghai: 'shanghai',
+  Catalunya: 'catalunya',
+  YasMarina: 'yasmarina',
 };
 
 function read(file) {

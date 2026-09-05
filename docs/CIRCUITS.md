@@ -1,15 +1,17 @@
-# Where the twelve real circuits came from
+# Where the sixteen real circuits came from
 
-Three of the fifteen circuits in this game were drawn by a random number
-generator. Twelve of them are places: Spa-Francorchamps, Monza, Suzuka,
+Three of the nineteen circuits in this game were drawn by a random number
+generator. Sixteen of them are places: Spa-Francorchamps, Monza, Suzuka,
 Zandvoort, Silverstone, Interlagos, the Red Bull Ring, Gilles Villeneuve,
-Austin, Bahrain, Mexico City and the Hungaroring.
+Austin, Bahrain, Mexico City, the Hungaroring, Albert Park, Shanghai, Catalunya
+and Yas Marina — which is every circuit the source survey has that is on the
+2026 Formula One calendar.
 This is where the shapes came from, what is ours, and what that obliges us to
 say.
 
 ## The centre lines
 
-`src/game/circuits.js` holds a surveyed centre line for each of the twelve, at ten
+`src/game/circuits.js` holds a surveyed centre line for each of the sixteen, at ten
 metre spacing, in decimetres, delta encoded. They were produced by
 `tools/import-circuit.js` from the [TUM racetrack
 database](https://github.com/TUMFTM/racetrack-database), published by the
@@ -35,7 +37,7 @@ geometry, and the geometry is confined to one file so that stays true.
 
 ## What is not in the data, and is therefore ours
 
-The survey is two coordinates and a width. Everything else about these twelve
+The survey is two coordinates and a width. Everything else about these sixteen
 circuits was written by hand in `circuits.js`, and none of it is claimed to be
 measured:
 
@@ -70,9 +72,9 @@ an island with concrete down both sides.
 **The air, and the time of day.** Mexico City is two thousand two hundred metres
 up, where there is about a fifth less of the first: less drag, so the highest top
 speed here, and less of everything a wing is for, which a game with no downforce
-model stands in for by taking a little grip away. Bahrain sets the second for
-itself - it is run in the evening, so it switches the sunset on whatever the menu
-says.
+model stands in for by taking a little grip away. Bahrain and Yas Marina set the
+second for themselves - both are run in the evening, so they switch the sunset on
+whatever the menu says.
 
 Those three - the run-off, the air and the hour - are the only authored values in
 this file that change how a circuit *drives* rather than how it looks.
@@ -92,14 +94,14 @@ node tools/import-circuit.js racetrack-database/tracks
 which prints the `LINES` table to standard output. Paste it into
 `src/game/circuits.js`.
 
-The importer only reads the twelve this game ships — Monza, Spa, Suzuka,
-Zandvoort, Silverstone, SaoPaulo, Spielberg, Montreal, Austin, Sakhir,
-MexicoCity and Budapest in that database, with the names this game gives them in
-`WANTED` at the top of the file. The source database has twenty-five, sixteen of
-which are on the 2026 Formula One calendar — so four of those sixteen are still
-sitting there unbuilt: Melbourne, Shanghai, Catalunya and Yas Marina.
+The importer reads sixteen of the twenty-five that database has: every one of
+them that is on the 2026 Formula One calendar. The names this game gives them are
+in `WANTED` at the top of the file. The nine it skips - Brands Hatch,
+Hockenheim, the Nürburgring, Oschersleben, the Norisring, Moscow Raceway,
+Sepang, Sochi and Indianapolis - are not on that calendar, which is the only
+reason.
 
-## The eight it does not have
+## The eight the calendar has and this does not
 
 Of the twenty-four circuits on the 2026 calendar, the TUM database covers
 sixteen. Jeddah, Miami, Monaco, Madrid, Baku, Singapore, Las Vegas and Losail

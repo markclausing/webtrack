@@ -172,6 +172,25 @@ if (route === 'docs') {
       const at = player(s).s % s.route.metres;
       return at > s.route.metres * 0.120 && at < s.route.metres * 0.170 && player(s).speed > 40;
     }, 'hungaroring', 'gp'],
+    // The last four, which finish the sixteen the source database has: the lake
+    // at Albert Park, the spiral at Shanghai, the climb to turn one at
+    // Catalunya, and the marina after dark.
+    ['melbourne', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.580 && at < s.route.metres * 0.650 && player(s).speed > 55;
+    }, 'melbourne', 'gp'],
+    ['shanghai', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.130 && at < s.route.metres * 0.175;
+    }, 'shanghai', 'gp'],
+    ['catalunya', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.150 && at < s.route.metres * 0.200 && player(s).speed > 45;
+    }, 'catalunya', 'gp'],
+    ['yasmarina', (s) => {
+      const at = player(s).s % s.route.metres;
+      return s.light > 0.5 && at > s.route.metres * 0.760 && at < s.route.metres * 0.850;
+    }, 'yasmarina', 'gp'],
   ];
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
   for (const [name, when, on, mode, share = 0.95, dusk = false] of want) {
