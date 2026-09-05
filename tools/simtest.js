@@ -509,6 +509,9 @@ for (const tier of ['easy', 'normal', 'hard']) {
     shanghai: { km: 5.44, climb: 7, half: [7.0, 11.5] },
     catalunya: { km: 4.65, climb: 30, half: [5.7, 11.7] },
     yasmarina: { km: 5.54, climb: 9, half: [6.6, 10.2] },
+    // Measured rather than authored: the line, the height and the tunnel all
+    // came off the map, so this checks a measurement rather than a decision.
+    monaco: { km: 3.53, climb: 43, half: [5.2, 5.2] },
   };
   ok('every surveyed circuit has an expectation written down here',
     SURVEYED_KEYS.every((k) => want[k]));
@@ -631,6 +634,14 @@ for (const tier of ['easy', 'normal', 'hard']) {
         const x = a.x + a.nx * prop.side * prop.off;
         const z = a.z + a.nz * prop.side * prop.off;
         for (const b of nodes) {
+          // Its own node and the two either side, which is the road it was
+          // measured from - the same exemption the placement makes, because this
+          // is meant to be asking the placement's question. On a fifteen metre
+          // hairpin with a metre and a half of run-off, which is Monaco, a
+          // marker post outside the barrier really is close to the road two
+          // nodes on, and that is a marker post doing its job.
+          const apart = Math.abs(b.i - i);
+          if (Math.min(apart, nodes.length - apart) <= 2) continue;
           if (Math.hypot(x - b.x, z - b.z) < b.half + 1) {
             on++;
             break;

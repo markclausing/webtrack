@@ -29,7 +29,7 @@
 
 import { CHECKPOINT_EVERY, ROAD_HALF, SEG, WALL_AT } from '../constants.js';
 import {
-  centreLine, measured, NARROWEST, profile, SURVEYED, tunnels, WIDEN,
+  centreLine, measured, NARROWEST, profile, SURVEYED, things, tunnels, WIDEN,
 } from './circuits.js';
 
 /**
@@ -817,9 +817,14 @@ export function buildRoute(key) {
       // not stay one: Monza averages four and three quarter metres either side
       // of the line and Spa reaches eight, so one number would have made half of
       // them wrong and the wrong half feel like the other one.
+      // WIDEN corrects the survey, which measures the asphalt and not the width
+      // a car uses. A circuit measured off OpenStreetMap has no width in the
+      // data at all - its width is one number written down beside it, chosen to
+      // be the width the place actually is - so it is not corrected for
+      // something it was never subject to.
       half: at(i).half === undefined
         ? ROAD_HALF
-        : Math.max(NARROWEST, at(i).half * WIDEN),
+        : (real && real.osm ? at(i).half : Math.max(NARROWEST, at(i).half * WIDEN)),
       // How much of this node is under a roof. Nought almost everywhere.
       tunnel: inTunnel ? inTunnel(t) : 0,
       // The barrier, which has to stay outside the road however wide the road
@@ -832,7 +837,8 @@ export function buildRoute(key) {
       // fifteen is a good run-off beside a nine metre track; a circuit that has
       // asked for less has asked for less on purpose.
       wall: real && real.land.runoff !== undefined
-        ? Math.max(NARROWEST, at(i).half * WIDEN) + real.land.runoff
+        ? (real.osm ? at(i).half : Math.max(NARROWEST, at(i).half * WIDEN))
+          + real.land.runoff
         : Math.max(WALL_AT, (at(i).half === undefined
           ? ROAD_HALF
           : Math.max(NARROWEST, at(i).half * WIDEN)) + 6),
@@ -863,7 +869,12 @@ export function buildRoute(key) {
    * property of the survey should be read off the survey.
    */
   const flyovers = [];
-  if (real) {
+  // Not on a circuit that came off the map. Those are assembled by routing
+  // between fragments, so where the road appears to pass near itself it is
+  // usually the route having doubled back rather than a crossing - and where it
+  // genuinely does pass under something, the map has already said so and it is
+  // a tunnel.
+  if (real && !real.osm) {
     const apart = (i, j) => {
       const d = Math.abs(i - j);
       return Math.min(d, count - d);
@@ -877,6 +888,11 @@ export function buildRoute(key) {
         if (gap > 26) continue;
         const drop = nodes[i].y - nodes[j].y;
         if (Math.abs(drop) < 6) continue;
+        // A circuit that says it has a tunnel here has already answered the
+        // question this is asking. Monaco doubles back under itself for eight
+        // hundred metres and the map calls that a tunnel, which it is; building
+        // a viaduct over the top of it as well would be two answers.
+        if (nodes[i].tunnel > 0.2 || nodes[j].tunnel > 0.2) continue;
         const over = drop > 0 ? i : j;
         const under = drop > 0 ? j : i;
         if (flyovers.some((f) => apart(f.at, over) < 60)) continue;
@@ -997,7 +1013,16 @@ function checkpointsFor(count) {
 function cornerBoards(nodes, add) {
   const count = nodes.length;
   const at = (i) => nodes[((i % count) + count) % count];
-  const SPAN = 5;
+  // Four nodes, which is twenty-four metres either side.
+  //
+  // It was five, and five could not tell Monaco's corners apart: they are forty
+  // metres from each other and a sixty-six metre window spans two of them, so
+  // three boards ended up in a right-hander pointing left. The window has to be
+  // shorter than the shortest corner, and Monaco has the shortest corners there
+  // are. Measured over all twenty circuits, four gets every one of one thousand
+  // six hundred and fifty-six boards pointing the way its corner goes; five got
+  // three wrong and three got one.
+  const SPAN = 4;
   const smooth = new Float64Array(count);
   for (let i = 0; i < count; i++) {
     let sum = 0;
@@ -1067,8 +1092,19 @@ function cornerBoards(nodes, add) {
     // On the approach: sixty metres and thirty. Late on purpose - a board a
     // hundred metres out is read, believed and forgotten before the corner
     // arrives, and the one that does the work is the last one you see.
-    want(corner.from - 10);
-    want(corner.from - 5);
+    //
+    // Not if the approach is already somebody else's corner, though. At Monaco
+    // the corners are forty metres apart, so a board sixty metres before one of
+    // them stands in the middle of the one before it - pointing left while the
+    // road under it goes right, which is worse than no board.
+    const inAnother = (i) => {
+      const at = ((i % count) + count) % count;
+      return corners.some((c) => c !== corner
+        && ((at >= c.from && at <= c.to)
+          || (c.from > c.to && (at >= c.from || at <= c.to))));
+    };
+    if (!inAnother(corner.from - 10)) want(corner.from - 10);
+    if (!inAnother(corner.from - 5)) want(corner.from - 5);
     // And down the outside of the corner itself, every eighteen metres, which is
     // close enough that they read as a line following the road round rather than
     // as three separate signs.
@@ -1380,8 +1416,12 @@ function dress(nodes, real, rnd) {
       const spread = (SPREAD[prop.kind] ?? 3) * (prop.s || 1);
       let off = prop.off;
       let room = false;
-      // Its own place first, then three quarters of the way in, then half.
-      for (const share of [1, 0.75, 0.5]) {
+      // Its own place first, then three quarters of the way in, then half - but
+      // only for the things that were placed by rule. Something measured off a
+      // map is where it is: a building that does not fit is dropped rather than
+      // dragged towards the road, because dragging it puts a real building in a
+      // place no building is.
+      for (const share of (prop.fixed ? [1] : [1, 0.75, 0.5])) {
         const tryOff = Math.max(a.half + 1.5 + spread * 0.6, prop.off * share);
         const x = a.x + a.nx * prop.side * tryOff;
         const z = a.z + a.nz * prop.side * tryOff;
@@ -1477,6 +1517,30 @@ function dress(nodes, real, rnd) {
   for (const { under, clear, cross } of real.flyovers || []) {
     add(under, {
       kind: 'flyover', side: 0, off: 0, s: 1, r: cross, lift: clear, align: true,
+    });
+  }
+
+  /**
+   * And whatever the map said was there.
+   *
+   * The circuits measured out of OpenStreetMap carry their surroundings with
+   * them: every building within a hundred and ninety metres of the road, with
+   * the width and depth of its own footprint and the height off its own tags,
+   * and whatever is moored in the water beside it. Nothing here is placed by
+   * rule - a building stands where that building stands and is as tall as it is.
+   *
+   * It is the reason a street circuit is worth importing this way at all. Monaco
+   * with invented buildings is a road between boxes.
+   */
+  for (const b of things(real.buildings, ['at', 'side', 'off', 'w', 'd', 'h', 'r'])) {
+    add(b.at, {
+      kind: 'tower', side: b.side, off: b.off, s: 1, r: b.r,
+      align: true, fixed: true, w: b.w, d: b.d, h: b.h,
+    });
+  }
+  for (const b of things(real.boats, ['at', 'side', 'off', 's', 'r'])) {
+    add(b.at, {
+      kind: 'boat', side: b.side, off: b.off, s: b.s, r: b.r, align: true, fixed: true,
     });
   }
 

@@ -374,6 +374,35 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       }
       break;
     }
+    /**
+     * A building, at the size the map says it is.
+     *
+     * Not a `block`, which is a box of a fixed shape scattered by rule. This one
+     * is handed a width, a depth and a height taken off OpenStreetMap - so a
+     * hotel on the front at Monaco is a hotel-sized building and the thing next
+     * to it is whatever that is. Windows are a single darker band rather than a
+     * grid: at this resolution a grid is noise, and one band reads as glazing
+     * from two hundred metres, which is where these are seen from.
+     */
+    case 'tower': {
+      const w = (prop.w || 10) / 2;
+      const d = (prop.d || 10) / 2;
+      const h = prop.h || 9;
+      // Warmer or cooler by the building, so a street is not one colour.
+      const shift = 0.86 + ((prop.w * 7 + prop.h * 13) % 9) * 0.035;
+      box(rt, tint, shade(theme.ridge, shift), -w, w, 0, h, -d, d);
+      if (h > 7) {
+        const glass = tint(shade(C.glass, night > 0.4 ? 1.5 : 0.95));
+        for (let floor = 1; floor * 6 < h - 3; floor++) {
+          const y = floor * 6;
+          put.face(rt, glass, [-w * 0.86, y, -d - 0.05, w * 0.86, y, -d - 0.05,
+            w * 0.86, y + 2.2, -d - 0.05, -w * 0.86, y + 2.2, -d - 0.05]);
+          put.face(rt, glass, [w * 0.86, y, d + 0.05, -w * 0.86, y, d + 0.05,
+            -w * 0.86, y + 2.2, d + 0.05, w * 0.86, y + 2.2, d + 0.05]);
+        }
+      }
+      break;
+    }
     case 'rock':
     case 'crag': {
       const lit = tint(theme.rock);

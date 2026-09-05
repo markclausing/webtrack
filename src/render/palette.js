@@ -425,6 +425,31 @@ export const THEMES = {
     trunk: md(102, 84, 58),
     water: md(36, 92, 130),
   },
+  /**
+   * Monaco. Pale stone, a hard Mediterranean light and water that is the reason
+   * anybody built there. The built colour matters more here than on any other
+   * circuit in this game, because on this one almost everything you can see is
+   * a building and every one of them was measured rather than invented.
+   */
+  riviera: {
+    sky: [
+      [0.20, md(26, 60, 142)],
+      [0.34, md(68, 112, 186)],
+      [0.44, md(132, 172, 208)],
+      [0.52, md(196, 212, 214)],
+      [1.00, md(226, 220, 202)],
+    ],
+    fog: md(220, 214, 198),
+    near: md(120, 132, 78),
+    mid: md(106, 116, 68),
+    far: md(132, 128, 104),
+    ridge: md(206, 196, 176),
+    verge: md(140, 138, 84),
+    rock: md(176, 164, 138),
+    tree: md(52, 90, 50),
+    trunk: md(94, 74, 50),
+    water: md(30, 96, 142),
+  },
   coast: {
     sky: [
       [0.16, md(38, 76, 150)],

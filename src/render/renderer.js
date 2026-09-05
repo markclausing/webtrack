@@ -104,6 +104,9 @@ const GOOD = md(60, 200, 90);
 const WARN = md(240, 180, 40);
 const BAD = md(220, 50, 40);
 
+/** What a tunnel takes the daylight down to. Not black: black is a hole. */
+const TUNNEL_DARK = md(18, 20, 26);
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -471,9 +474,26 @@ export class Renderer {
           0.34 + 0.2 * Math.cos((((i % 12) + 12) % 12) / 12 * Math.PI * 2),
         )
         : 0;
-      const tint = (colour) => mix(this.lamp(colour), theme.fog, f);
+      /**
+       * Under a roof, and dark under it.
+       *
+       * A tunnel is drawn by taking the daylight away and putting a strip of
+       * sodium back, which is what a tunnel is. The fog goes with it - there is
+       * no distance to lose colour to in there - so the far end of a tunnel is
+       * a bright hole rather than a grey one, which is the whole picture of
+       * Monaco from the inside.
+       */
+      const roof = a.tunnel || 0;
+      // Dark, but not so dark that the road stops being a road. Two thirds of
+      // the way to the tunnel colour and a little sodium put back, which is
+      // about what a lit road tunnel looks like from inside a car.
+      const dark = (colour) => (roof > 0
+        ? mix(mix(colour, TUNNEL_DARK, roof * 0.62), C.lamp, roof * 0.10)
+        : colour);
+      const haze = roof > 0 ? f * (1 - roof) : f;
+      const tint = (colour) => mix(dark(this.lamp(colour)), theme.fog, haze);
       const road = beam > 0
-        ? (colour) => mix(shade(this.lamp(colour), 1 + beam * 2.4), theme.fog, f)
+        ? (colour) => mix(dark(shade(this.lamp(colour), 1 + beam * 2.4)), theme.fog, haze)
         : tint;
       // The ground beside this node takes its colours from this node, which is
       // how a circuit can leave the hills and arrive at the sea inside a lap.
@@ -576,7 +596,10 @@ export class Renderer {
       // No ground at all on a viaduct: the road there is twenty metres in the
       // air over another piece of road, and its ground would be a plain laid
       // across the one underneath.
-      for (let band = 0; band < BANDS.length && !a.deck; band++) {
+      // No ground inside a tunnel and none on a viaduct. In a tunnel there is a
+      // wall where the verge would be, and drawing the verge through it puts a
+      // strip of daylit grass along the inside of a mountain.
+      for (let band = 0; band < BANDS.length && !a.deck && roof < 0.75; band++) {
         const [inner0, outer, kind, every] = BANDS[band];
         // The first band starts at the kerb, wherever the kerb happens to be.
         const inner = band === 0 ? Math.max(ha + RUMBLE, inner0 - (ROAD_HALF - ha)) : inner0;
@@ -612,6 +635,7 @@ export class Renderer {
       this.startLine(state, a.i, a, b, tint);
       if (a.bridge !== undefined) this.bridge(route, a, b, tint);
       if (a.deck) this.viaduct(a, b, tint, i);
+      if (roof > 0.02) this.tunnel(a, b, tint, i, roof);
 
       const props = route.props[a.i];
       if (props && away < 900) {
@@ -634,6 +658,58 @@ export class Renderer {
             tint, local, prop.align ? a.a : 0, state.tick, night);
         }
       }
+    }
+  }
+
+  /**
+   * A tunnel: two walls, a roof and a light in it.
+   *
+   * The walls stand at the barrier and the roof is five and a half metres up,
+   * which is a road tunnel. Both fade in over the same easing the darkness uses,
+   * so the mouth arrives as a mouth rather than as a wall appearing in front of
+   * the car - and the light is a strip down the middle of the roof, on always,
+   * because a tunnel is lit whatever time of day it is outside.
+   *
+   * Monaco's is eight hundred and forty metres of it, and neither the length nor
+   * the position was decided here: OpenStreetMap tags the road as a tunnel and
+   * the importer carried the tag through.
+   */
+  tunnel(a, b, tint, i, roof) {
+    const rt = this.rt;
+    const wide = a.wall + 0.4;
+    const high = 5.5 * roof;
+    const wall = tint(shade(C.chrome, 0.5));
+    const ceiling = tint(shade(C.shadow, 1.35));
+    const strip = mix(C.lamp, C.hot, 0.25);
+
+    for (const side of [-1, 1]) {
+      const at = side * wide;
+      const ax = a.x + a.nx * at;
+      const az = a.z + a.nz * at;
+      const bx = b.x + b.nx * at;
+      const bz = b.z + b.nz * at;
+      const ay = roadY(a, at);
+      const by = roadY(b, at);
+      rt.quad(ax, ay, az, bx, by, bz, bx, by + high, bz, ax, ay + high, az, wall);
+    }
+    // The roof, and a lit strip down the middle of it.
+    const ay = roadY(a, 0) + high;
+    const by = roadY(b, 0) + high;
+    rt.quad(
+      a.x - a.nx * wide, ay, a.z - a.nz * wide,
+      b.x - b.nx * wide, by, b.z - b.nz * wide,
+      b.x + b.nx * wide, by, b.z + b.nz * wide,
+      a.x + a.nx * wide, ay, a.z + a.nz * wide,
+      ceiling,
+    );
+    if ((((i % 3) + 3) % 3) === 0 && roof > 0.6) {
+      rt.quad(
+        a.x - a.nx * 1.1, ay - 0.12, a.z - a.nz * 1.1,
+        b.x - b.nx * 1.1, by - 0.12, b.z - b.nz * 1.1,
+        b.x + b.nx * 1.1, by - 0.12, b.z + b.nz * 1.1,
+        a.x + a.nx * 1.1, ay - 0.12, a.z + a.nz * 1.1,
+        strip,
+      );
     }
   }
 

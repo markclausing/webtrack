@@ -78,7 +78,7 @@ const ELEVATION = [
 const CIRCUITS = {
   monaco: {
     box: [43.72, 7.40, 43.75, 7.44], metres: 3337,
-    name: 'Circuit de Monaco', route: true,
+    name: 'Circuit de Monaco', route: true, clockwise: true,
   },
   jeddah: { box: [21.55, 39.05, 21.70, 39.20], metres: 6174, name: 'حلبة كورنيش جدة' },
   miami: {
@@ -126,6 +126,40 @@ function projector(lat0, lon0) {
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 // --- Getting the road out of the map ------------------------------------------
+
+/**
+ * The buildings and the water beside a circuit.
+ *
+ * Half of these eight are street circuits, and a street circuit without the
+ * street is a road through a field. What is beside the road at Monaco is Monaco,
+ * and OpenStreetMap knows where every building of it stands, how big its
+ * footprint is and - often - how many floors it has. That is a better set of
+ * buildings than anybody would place by hand, and it is the same argument as the
+ * tunnel: the map already knows.
+ */
+async function fetchScenery(circuit) {
+  const [a, b, c, d] = circuit.box;
+  const bbox = `${a},${b},${c},${d}`;
+  const query = `[out:json][timeout:180];
+(
+  way["building"](${bbox});
+  way["natural"="water"](${bbox});
+  way["landuse"="harbour"](${bbox});
+  way["waterway"="dock"](${bbox});
+);
+out geom;`;
+  const data = await overpass(query);
+  const buildings = [];
+  const water = [];
+  for (const e of data.elements) {
+    const g = e.geometry;
+    if (!g || g.length < 3) continue;
+    const t = e.tags || {};
+    if (t.building) buildings.push({ g, tags: t });
+    else water.push({ g, tags: t });
+  }
+  return { buildings, water };
+}
 
 /** Everything in the box that a car could be driven along, plus the raceway. */
 async function fetchRoads(circuit) {
@@ -397,6 +431,82 @@ function resample(points, step) {
   return { out, total };
 }
 
+// --- What is beside the road --------------------------------------------------
+
+/**
+ * A building, as the four numbers this game can draw one with.
+ *
+ * The footprint is reduced to its bounding box in the direction it is longest,
+ * which for a building on a street is the direction of the street: an L-shaped
+ * block becomes one box the size of the L, and at this resolution and this speed
+ * that is a building. Height comes from the `height` tag where there is one, from
+ * `building:levels` times three where there is not, and from a guess where there
+ * is neither - and the guess is deliberately low, because a wrong tall building
+ * is a wall across the view and a wrong short one is scenery.
+ */
+function boxOf(way, project) {
+  const pts = way.g.map((p) => project(p.lat, p.lon));
+  let cx = 0;
+  let cz = 0;
+  for (const p of pts) {
+    cx += p.x / pts.length;
+    cz += p.z / pts.length;
+  }
+  // The longest edge decides which way the building faces.
+  let best = 0;
+  let facing = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x;
+    const dz = pts[i + 1].z - pts[i].z;
+    const len = Math.hypot(dx, dz);
+    if (len > best) {
+      best = len;
+      facing = Math.atan2(dx, dz);
+    }
+  }
+  const co = Math.cos(-facing);
+  const si = Math.sin(-facing);
+  let wide = 0;
+  let deep = 0;
+  for (const p of pts) {
+    const x = (p.x - cx) * co - (p.z - cz) * si;
+    const z = (p.x - cx) * si + (p.z - cz) * co;
+    wide = Math.max(wide, Math.abs(x));
+    deep = Math.max(deep, Math.abs(z));
+  }
+  const t = way.tags;
+  const tall = Number.parseFloat(t.height)
+    || (Number.parseFloat(t['building:levels']) || 0) * 3.2
+    || 9;
+  return { x: cx, z: cz, w: Math.max(3, wide), d: Math.max(3, deep), h: tall, r: facing };
+}
+
+/** The middle of a body of water, and how big it is. */
+function poolOf(way, project) {
+  const pts = way.g.map((p) => project(p.lat, p.lon));
+  let cx = 0;
+  let cz = 0;
+  for (const p of pts) {
+    cx += p.x / pts.length;
+    cz += p.z / pts.length;
+  }
+  let reach = 0;
+  for (const p of pts) reach = Math.max(reach, Math.hypot(p.x - cx, p.z - cz));
+  return { x: cx, z: cz, reach, pts };
+}
+
+/** Is this point inside the ring? Even-odd, which is all a harbour needs. */
+function inside(pts, x, z) {
+  let hit = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i];
+    const b = pts[j];
+    if ((a.z > z) !== (b.z > z)
+      && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) hit = !hit;
+  }
+  return hit;
+}
+
 // --- How high it is -----------------------------------------------------------
 
 /**
@@ -511,7 +621,25 @@ async function build(key) {
       at.tunnel = inTunnel.has(n);
       return at;
     });
-  const { out, total } = resample(points, STORE);
+  let { out, total } = resample(points, STORE);
+
+  // Round the right way. A closed loop turns through exactly two pi, and the
+  // sign of it says which way: Monaco assembled anticlockwise, and Monaco is
+  // not an anticlockwise circuit.
+  if (circuit.clockwise !== undefined) {
+    let turn = 0;
+    const n = out.length;
+    for (let i = 0; i < n; i++) {
+      const a = out[(i - 1 + n) % n];
+      const b = out[i];
+      const c = out[(i + 1) % n];
+      let d = Math.atan2(c.x - b.x, c.z - b.z) - Math.atan2(b.x - a.x, b.z - a.z);
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      turn += d;
+    }
+    if ((turn > 0) !== circuit.clockwise) out = out.reverse();
+  }
   process.stderr.write(`${(total / 1000).toFixed(3)} km `
     + `(${Math.round((total / circuit.metres) * 100)}% of ${circuit.metres} m), `
     + `${runs.length} fragments, ${Math.round(driven)} m driven, `
@@ -519,7 +647,71 @@ async function build(key) {
 
   const { heights } = await heightsFor(out, lat0, lon0);
   const climb = Math.max(...heights) - Math.min(...heights);
-  process.stderr.write(`${climb.toFixed(0)} m of climb\n`);
+  process.stderr.write(`${climb.toFixed(0)} m of climb, `);
+
+  // --- and what stands beside it ---
+  const scene = await fetchScenery(circuit);
+  /** The nearest node of the lap, and which side of it something is on. */
+  const place = (x, z) => {
+    let best = null;
+    for (let i = 0; i < out.length; i++) {
+      const d = Math.hypot(x - out[i].x, z - out[i].z);
+      if (!best || d < best.d) best = { i, d };
+    }
+    const a = out[best.i];
+    const b = out[(best.i + 1) % out.length];
+    // The track's right-hand vector, to decide which side of the road it is on.
+    const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    const nx = (b.z - a.z) / len;
+    const nz = -(b.x - a.x) / len;
+    const side = (x - a.x) * nx + (z - a.z) * nz >= 0 ? 1 : -1;
+    return { at: best.i, off: best.d, side, heading: Math.atan2(b.x - a.x, b.z - a.z) };
+  };
+
+  const REACH = 190;
+  const buildings = [];
+  for (const w of scene.buildings) {
+    const b = boxOf(w, project);
+    const p = place(b.x, b.z);
+    if (p.off > REACH) continue;
+    // Nothing standing where the road is.
+    if (p.off < 11) continue;
+    buildings.push({
+      at: p.at, side: p.side, off: Math.round(p.off * 10) / 10,
+      w: Math.round(b.w), d: Math.round(b.d), h: Math.round(b.h),
+      // Turned relative to the track, because that is what the renderer works in.
+      r: Math.round((b.r - p.heading) * 100) / 100,
+    });
+  }
+
+  // Boats, moored in whatever water there is beside the circuit. At Monaco that
+  // is Port Hercule and it is the reason anybody recognises the place.
+  const boats = [];
+  for (const w of scene.water) {
+    const pool = poolOf(w, project);
+    if (pool.reach < 40) continue;
+    const rnd = (() => { let seed = 0x2f6e; return () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    }; })();
+    for (let tries = 0; tries < 3000 && boats.length < 80; tries++) {
+      const x = pool.x + (rnd() * 2 - 1) * pool.reach;
+      const z = pool.z + (rnd() * 2 - 1) * pool.reach;
+      if (!inside(pool.pts, x, z)) continue;
+      const p = place(x, z);
+      // Further out than a building may stand: a harbour is wide, and the far
+      // side of Port Hercule is three hundred metres from the road.
+      if (p.off > 340 || p.off < 24) continue;
+      if (boats.some((o) => Math.hypot(o.x - x, o.z - z) < 19)) continue;
+      boats.push({
+        x, z, at: p.at, side: p.side, off: Math.round(p.off * 10) / 10,
+        // Big ones nearer the quay, which is how a harbour is arranged.
+        s: Math.round((1.4 + rnd() * 2.6) * 10) / 10,
+        r: Math.round((rnd() * 6.28 - p.heading) * 100) / 100,
+      });
+    }
+  }
+  process.stderr.write(`${buildings.length} buildings, ${boats.length} boats\n`);
 
   return {
     key,
@@ -528,6 +720,8 @@ async function build(key) {
     height: pack(heights, 10),
     // One character a point: the cheapest way to say yes or no six hundred times.
     tunnel: out.map((p) => (p.tunnel ? '1' : '0')).join(''),
+    buildings,
+    boats: boats.map(({ x, z, ...rest }) => rest),
     found: total / circuit.metres,
     stranded,
   };

@@ -39,13 +39,14 @@ export const ROUTE_KEYS = [
   'silverstone', 'interlagos', 'spielberg', 'montreal',
   'austin', 'sakhir', 'mexico', 'hungaroring',
   'melbourne', 'shanghai', 'catalunya', 'yasmarina',
+  'monaco',
 ];
 export const TIERS = ['easy', 'normal', 'hard'];
 
 /**
  * The lists, keyed `qual:pass:hard`.
  *
- * A hundred and fourteen of them, which sounds like a great many for ten rows each and is
+ * A hundred and twenty of them, which sounds like a great many for ten rows each and is
  * still the right number: a qualifying lap on an empty circuit and a race time
  * over three laps are not the same quantity, and putting them in one table would
  * mean a board on which the top row was always a qualifying lap and nobody could

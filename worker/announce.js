@@ -36,6 +36,7 @@ const ROADS = {
   shanghai: 'Shanghai',
   catalunya: 'Catalunya',
   yasmarina: 'Yas Marina',
+  monaco: 'Monaco',
 };
 
 const PLACED = {
