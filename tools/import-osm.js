@@ -202,17 +202,74 @@ out skel qt;`;
   const data = await overpass(query);
   const nodes = new Map();
   const ways = [];
+  const relations = [];
   for (const e of data.elements) {
     if (e.type === 'node') nodes.set(e.id, { lat: e.lat, lon: e.lon });
     else if (e.type === 'way' && e.nodes) ways.push(e);
+    else if (e.type === 'relation' && e.members) relations.push(e);
   }
-  return { nodes, ways };
+  return { nodes, ways, relations };
+}
+
+/**
+ * The same street, mapped twice, kept once.
+ *
+ * A route relation lists the ways a lap runs over, and where a street is mapped
+ * as two one-way carriageways it lists both - which is correct, and is not a
+ * lap. Chained together they glue end to end into an out-and-back, and Madrid
+ * came back at a hundred and ninety-nine per cent turning through four pi with
+ * ninety-five per cent of the lap on top of itself: the circuit, twice.
+ *
+ * So before anything is chained, a way whose middle already lies within fifteen
+ * metres of a way we have kept is dropped. Longest first, so it is the stray
+ * carriageway that goes rather than the road it belongs to.
+ */
+function dedupe(ways, nodes, project) {
+  const CELL = 30;
+  const grid = new Map();
+  const key = (x, z) => `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
+  const points = (w) => w.nodes.map((id) => nodes.get(id)).filter(Boolean)
+    .map((p) => project(p.lat, p.lon));
+
+  const near = (p) => {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        for (const q of grid.get(key(p.x + dx * CELL, p.z + dz * CELL)) || []) {
+          if (Math.hypot(p.x - q.x, p.z - q.z) < 15) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const sorted = [...ways].sort((a, b) => b.nodes.length - a.nodes.length);
+  const kept = [];
+  for (const way of sorted) {
+    const ps = points(way);
+    if (!ps.length) continue;
+    // Sampled over the middle third: a way that shares that with one we have
+    // kept is the same road, and a way that shares only a junction is not.
+    let over = 0;
+    let seen = 0;
+    for (let i = Math.floor(ps.length / 4); i < Math.ceil((ps.length * 3) / 4); i++) {
+      seen++;
+      if (near(ps[i])) over++;
+    }
+    if (seen && over / seen > 0.6) continue;
+    kept.push(way);
+    for (const p of ps) {
+      const k = key(p.x, p.z);
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(p);
+    }
+  }
+  return kept;
 }
 
 /** Is this way part of the circuit itself, rather than of the town around it? */
 function isCircuit(way, circuit, members, loose = false) {
   const t = way.tags || {};
-  if (t.highway !== 'raceway') return false;
+  if (t.highway !== 'raceway' && !(members && members.has(way.id))) return false;
   // Pit lanes, pit entries, penalty loops and alternative layouts are all
   // tagged raceway and none of them is the lap.
   //
@@ -224,6 +281,10 @@ function isCircuit(way, circuit, members, loose = false) {
   if (/pit|stands|paddock|box|penalty|entry|exit|drag|karting|oval|inner|outer/.test(name)) {
     return false;
   }
+  // A route relation is the map saying, in so many words, which ways make up
+  // the lap - including the ones that are ordinary street the rest of the year
+  // and carry no raceway tag at all. That is the whole reason a circuit is
+  // mapped as a relation, so a member is taken on its say-so.
   if (members && members.has(way.id)) return true;
   if (t.service || t.area === 'yes') return false;
   // A circuit with several layouts mapped has them named; if this one told us
@@ -935,7 +996,8 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       + (target && metres < target * 0.6 ? 1e6 : 0);
     if (!winner || score < winner.score) winner = { score, made };
   }
-  return winner ? winner.made : driveOrder(order);
+  if (!winner) return { ...driveOrder(order), score: Infinity };
+  return { ...winner.made, score: winner.score };
 }
 
 /** The lap in metres, at a fixed spacing, carrying the tunnel flag along. */
@@ -1130,12 +1192,21 @@ async function build(key) {
   const circuit = CIRCUITS[key];
   if (!circuit) throw new Error(`no circuit called ${key}`);
   process.stderr.write(`${key}: fetching… `);
-  const { nodes, ways } = await fetchRoads(circuit);
+  const { nodes, ways, relations } = await fetchRoads(circuit);
 
   let members = null;
   if (circuit.relation) {
-    // The relation's own ways, which Overpass returned alongside everything else.
-    members = new Set(ways.filter((w) => (w.tags || {}).highway === 'raceway').map((w) => w.id));
+    // The relation's actual members, read off the relation.
+    //
+    // This used to be every raceway way in the box, which is not the relation
+    // and is not even close to it: the point of a route relation is that it
+    // names the ordinary streets the lap runs on, and Las Vegas is mostly
+    // ordinary street. Read properly it gives the whole lap; guessed at, it gave
+    // eighty-three per cent of one with a straight line across the Strip.
+    const rel = relations.find((r) => r.id === circuit.relation);
+    if (rel) {
+      members = new Set(rel.members.filter((m) => m.type === 'way').map((m) => m.ref));
+    }
   }
   const streets = ways.filter((w) => (w.tags || {}).highway);
   const lat0 = circuit.box[0] / 2 + circuit.box[2] / 2;
@@ -1166,17 +1237,48 @@ async function build(key) {
     return sum;
   }, 0);
 
-  let mine = ways.filter((w) => isCircuit(w, circuit, members));
-  if (spread(mine) < circuit.metres * 0.85) {
-    const wider = ways.filter((w) => isCircuit(w, circuit, members, true));
-    if (spread(wider) > spread(mine)) mine = wider;
-  }
-
+  /**
+   * Three ways of deciding which ways are the circuit, tried, and the one that
+   * assembles into the best lap kept.
+   *
+   * There is no rule that gets all eight right. The named raceway ways are the
+   * lap at Monaco and two thirds of it at Losail, where four more carry no name.
+   * A route relation is the lap at Madrid and, at Las Vegas, a hundred and one
+   * ways that come apart into twenty-two fragments - more than can be searched.
+   * Every version of this as a single rule with conditions on it broke one
+   * circuit to fix another, three times over.
+   *
+   * So all three are assembled and scored on the same measurement the orders are
+   * scored on - real length, turning through two pi once, and no straight lines
+   * across the city - and the best is taken. It costs two extra assemblies of a
+   * few hundred milliseconds and it needs no per-circuit rules at all.
+   */
   const inTunnel = tunnelNodes(ways);
-  const runs = chain(mine);
   const links = graphOf(streets, nodes, project);
-  const { lap, driven, stranded, forced, jumped } = assemble(runs, links, nodes, project, inTunnel,
-    circuit.metres);
+
+  const pools = [
+    ways.filter((w) => isCircuit(w, circuit, members)),
+    ways.filter((w) => isCircuit(w, circuit, members, true)),
+  ];
+  if (members) pools.push(ways.filter((w) => isCircuit(w, circuit, null, true)));
+
+  let made = null;
+  let runs = [];
+  const seen = new Set();
+  for (const pool of pools) {
+    // Two of the three often come to the same thing; assemble it once.
+    const mark = pool.map((w) => w.id).sort().join(',');
+    if (!pool.length || seen.has(mark)) continue;
+    seen.add(mark);
+    const chained = chain(dedupe(pool, nodes, project));
+    const tried = assemble(chained, links, nodes, project, inTunnel, circuit.metres);
+    if (tried.lap.length && (!made || tried.score < made.score)) {
+      made = tried;
+      runs = chained;
+    }
+  }
+  if (!made) throw new Error('no lap could be assembled');
+  const { lap, driven, stranded, forced, jumped } = made;
 
   const points = lap
     .filter((n) => nodes.has(n))
