@@ -486,7 +486,7 @@ export function buildRoute(key) {
   // Measured if the circuit has a measurement, written by hand if not. The two
   // are read identically from here on, which is the point of having both.
   const height0 = real
-    ? (real.height ? measured(real.height) : profile(real.climb))
+    ? (real.height ? measured(real.height, 10, real.flatten ?? 1) : profile(real.climb))
     : null;
   const inTunnel = real && real.tunnel ? tunnels(real.tunnel) : null;
 

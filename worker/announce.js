@@ -37,6 +37,13 @@ const ROADS = {
   catalunya: 'Catalunya',
   yasmarina: 'Yas Marina',
   monaco: 'Monaco',
+  jeddah: 'Jeddah',
+  miami: 'Miami',
+  vegas: 'Las Vegas',
+  singapore: 'Singapore',
+  madrid: 'Madrid',
+  baku: 'Baku',
+  losail: 'Losail',
 };
 
 const PLACED = {

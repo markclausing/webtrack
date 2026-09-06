@@ -512,6 +512,13 @@ for (const tier of ['easy', 'normal', 'hard']) {
     // Measured rather than authored: the line, the height and the tunnel all
     // came off the map, so this checks a measurement rather than a decision.
     monaco: { km: 3.18, climb: 43, half: [5.2, 5.2] },
+    jeddah: { km: 6.39, climb: 13, half: [6.0, 6.0] },
+    miami: { km: 6.40, climb: 13, half: [6.0, 6.0] },
+    vegas: { km: 4.91, climb: 31, half: [7.5, 7.5] },
+    singapore: { km: 3.65, climb: 14, half: [5.5, 5.5] },
+    madrid: { km: 5.46, climb: 33, half: [6.0, 6.0] },
+    baku: { km: 6.04, climb: 35, half: [5.0, 5.0] },
+    losail: { km: 5.42, climb: 8, half: [6.0, 6.0] },
   };
   ok('every surveyed circuit has an expectation written down here',
     SURVEYED_KEYS.every((k) => want[k]));
