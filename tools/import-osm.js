@@ -339,7 +339,7 @@ function graphOf(ways, nodes, project) {
  * It has to be spatial and not by node id: the road above Monaco's tunnel and
  * the tunnel are two different ways in the map and the same place on the ground.
  */
-function shortest(links, from, to, taken) {
+function shortest(links, from, to, taken, avoid) {
   const near = (a, b) => (taken ? taken.near(a, b) : 0);
   const seen = new Map([[from, 0]]);
   const back = new Map();
@@ -356,7 +356,8 @@ function shortest(links, from, to, taken) {
       // And a tunnel is never charged for being near anything, for the same
       // reason: it is below whatever it is near.
       const under = taken && taken.tunnel && (taken.tunnel.has(at) || taken.tunnel.has(next));
-      const c = cost + w * (1 + (under ? 0 : 20 * near(at, next)));
+      const c = cost + w * (1 + (under ? 0 : 20 * near(at, next)))
+        * (avoid && avoid.has(next) ? 4 : 1);
       if (c >= (seen.get(next) ?? Infinity)) continue;
       seen.set(next, c);
       back.set(next, at);
@@ -374,6 +375,38 @@ function shortest(links, from, to, taken) {
 }
 
 // --- One lap, out of fragments ------------------------------------------------
+
+/**
+ * A route of about the length it ought to be, rather than the shortest one.
+ *
+ * Where a street circuit runs on public road, that road carries no raceway tag
+ * and the only thing joining two fragments is the ordinary street graph - so the
+ * router takes the shortest way across, which is right for a gap of forty metres
+ * and wrong for Singapore, where three kilometres of the lap are public road and
+ * the shortest way home is seven hundred metres. Forty per cent of a circuit.
+ *
+ * We do know how long the lap is, so we know roughly how long the gap should be.
+ * This asks for the shortest path, and while that comes back short it discourages
+ * the roads it just used and asks again - eight times at most - and keeps
+ * whichever answer landed nearest the budget. It is the standard way of shaking a
+ * shortest-path search off one road and onto its neighbours, and it needs nothing
+ * the map does not already have.
+ */
+function budgeted(links, from, to, taken, want, lengthOf) {
+  if (!want) return shortest(links, from, to, taken);
+  let best = null;
+  const avoid = new Set();
+  for (let round = 0; round < 8; round++) {
+    const path = shortest(links, from, to, taken, avoid);
+    if (!path) break;
+    const len = lengthOf(path);
+    if (!best || Math.abs(len - want) < Math.abs(best.len - want)) best = { path, len };
+    // Long enough: a longer one is only further from the budget.
+    if (len >= want) break;
+    for (const id of path.slice(1, -1)) avoid.add(id);
+  }
+  return best && best.path;
+}
 
 /**
  * The fragments put in order and the gaps between them driven.
@@ -499,6 +532,31 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     return Math.atan2(pb.x - pa.x, pb.z - pa.z);
   };
 
+  /** A heading difference, kept between minus pi and pi, with its sign. */
+  const signed = (from, to) => {
+    let d = to - from;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  };
+
+  /** How far a run of nodes turns through, in radians, left negative. */
+  const turnOf = (ns) => {
+    let sum = 0;
+    let last = null;
+    for (let i = 0; i < ns.length - 1; i++) {
+      const a = nodes.get(ns[i]);
+      const b = nodes.get(ns[i + 1]);
+      if (!a || !b) continue;
+      const pa = project(a.lat, a.lon);
+      const pb = project(b.lat, b.lon);
+      const h = Math.atan2(pb.x - pa.x, pb.z - pa.z);
+      if (last !== null) sum += signed(last, h);
+      last = h;
+    }
+    return sum;
+  };
+
   /**
    * Every fragment is off limits to the connectors before any of them is drawn.
    *
@@ -542,6 +600,10 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       const legOut = heading(path, false);
       const legIn = heading(path, true);
       const kink = Math.max(bend(out, legOut), bend(legIn, into));
+      // The same two angles kept with their sign, plus whatever the connector
+      // itself turns through, so a candidate lap can be asked which way round it
+      // goes before it is built.
+      const swing = signed(out, legOut) + turnOf(path) + signed(legIn, into);
       // Charged as distance so it competes with length on the same terms, and
       // charged gently.
       //
@@ -552,7 +614,7 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       // back four kilometres long turning through six pi - three laps of
       // something. Forty metres a radian leaves length in charge and puts a
       // thumb on the scale, which is all that was wanted.
-      legs.set(key, { path, cost: lengthOf(path) + kink * 40, real: lengthOf(path) });
+      legs.set(key, { path, cost: lengthOf(path) + kink * 40, real: lengthOf(path), swing });
     }
   }
 
@@ -581,7 +643,11 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       const to = nodes.get(b.from);
       if (!from || !to) continue;
       const gap = dist(project(from.lat, from.lon), project(to.lat, to.lon));
-      legs.set(key, { path: [a.to, b.from], cost: gap * 3, real: gap, jumped: true });
+      const straight = [a.to, b.from];
+      const out = a.flip ? heading([...a.run.nodes].reverse(), true) : heading(a.run.nodes, true);
+      const into = b.flip ? heading([...b.run.nodes].reverse(), false) : heading(b.run.nodes, false);
+      const swing = signed(out, heading(straight, false)) + signed(heading(straight, true), into);
+      legs.set(key, { path: straight, cost: gap * 3, real: gap, jumped: true, swing });
     }
   }
 
@@ -603,7 +669,11 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
    * the real distance.
    */
   const runLen = new Map(runs.map((r) => [r, lengthOf(r.nodes)]));
+  // Reversing a path negates what it turns through, so one number per fragment
+  // covers both directions.
+  const runTurn = new Map(runs.map((r) => [r, turnOf(r.nodes)]));
   const best = { score: Infinity, cost: Infinity, order: null };
+  const shortlist = [];
 
   /**
    * How wrong a candidate lap is, in metres.
@@ -613,13 +683,19 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
    * and one of the wrong length but does decide between two of the right length,
    * and prefers the one that drives less of the town.
    */
-  const scoreOf = (metres, cost) => (target ? Math.abs(metres - target) : 0) + cost * 0.2;
+  const scoreOf = (metres, cost, swing) => (target ? Math.abs(metres - target) : 0)
+    + cost * 0.2
+    // A lap goes round once. Anything else - and what the search kept producing
+    // was a figure of eight, two loops turning opposite ways and cancelling to
+    // nought - is charged three hundred metres a radian, which is dear enough to
+    // rule it out and still leaves length in charge between honest laps.
+    + (swing === undefined ? 0 : Math.abs(Math.abs(swing) - Math.PI * 2) * 300);
 
-  const walk = (chosen, spent, metres, restLeft) => {
-    // Both terms only grow from here, so a branch already this far over the
-    // real length cannot come back.
-    if (scoreOf(metres, spent) - (target ? 0 : 0) >= best.score
-      && (!target || metres >= target)) return;
+  const walk = (chosen, spent, metres, swing, restLeft) => {
+    // Length and cost only grow from here, so a branch already this far over the
+    // real length cannot come back. The turn is left out of the bound because it
+    // can still swing either way.
+    if (scoreOf(metres, spent) >= best.score && (!target || metres >= target)) return;
     if (spent >= best.cost && !target) return;
 
     // Close it here, whatever is left over - including on the first fragment,
@@ -631,13 +707,25 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       // mapped as one loop, and until it was allowed for, every such lap failed
       // to close and fell through to the guess.
       const shut = tail.to === chosen[0].from;
-      const home = shut ? { cost: 0, real: 0 } : legs.get(legKey(tail.to, chosen[0].from));
+      const home = shut ? { cost: 0, real: 0, swing: 0 } : legs.get(legKey(tail.to, chosen[0].from));
       if (home) {
-        const score = scoreOf(metres + (home.real ?? home.cost), spent + home.cost);
+        const round = swing + (home.swing ?? 0);
+        const score = scoreOf(metres + (home.real ?? home.cost), spent + home.cost, round);
         if (score < best.score) {
           best.score = score;
           best.cost = spent + home.cost;
           best.order = [...chosen];
+        }
+        // A short list, not just the winner. What the search compares is an
+        // estimate - the legs are priced against the fragments alone and then
+        // driven for real against each other - and the two can disagree, which
+        // is how Las Vegas went from ninety-six per cent to sixty-three on a
+        // change that improved the estimate. So the best few are built properly
+        // and judged on what actually comes out.
+        shortlist.push({ score, order: [...chosen] });
+        if (shortlist.length > 200) {
+          shortlist.sort((a, b) => a.score - b.score);
+          shortlist.length = 24;
         }
       }
     }
@@ -650,7 +738,8 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
         const leg = legs.get(legKey(chosen[chosen.length - 1].to, next.from));
         if (!leg) continue;
         walk([...chosen, next], spent + leg.cost,
-          metres + (leg.real ?? leg.cost) + runLen.get(run), rest);
+          metres + (leg.real ?? leg.cost) + runLen.get(run),
+          swing + (leg.swing ?? 0) + (flip ? -runTurn.get(run) : runTurn.get(run)), rest);
       }
     }
   };
@@ -670,6 +759,7 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     const chosen = [at];
     let spent = 0;
     let metres = runLen.get(ends[0].run);
+    let swing = runTurn.get(ends[0].run);
     const left = runs.slice(1);
     while (left.length) {
       let pick = null;
@@ -683,6 +773,8 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       if (!pick) break;
       spent += pick.leg.cost;
       metres += (pick.leg.real ?? pick.leg.cost) + runLen.get(pick.to.run);
+      swing += (pick.leg.swing ?? 0)
+        + (pick.to.flip ? -runTurn.get(pick.to.run) : runTurn.get(pick.to.run));
       at = pick.to;
       chosen.push(at);
       left.splice(pick.i, 1);
@@ -690,7 +782,8 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     const home = legs.get(legKey(at.to, ends[0].from));
     if (!home) return;
     best.cost = spent + home.cost;
-    best.score = scoreOf(metres + (home.real ?? home.cost), best.cost);
+    best.score = scoreOf(metres + (home.real ?? home.cost), best.cost,
+      swing + (home.swing ?? 0));
     best.order = chosen;
   };
 
@@ -705,7 +798,7 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
   const searchable = runs.length <= 11;
   if (searchable) {
     greedy();
-    walk([ends[0]], 0, runLen.get(ends[0].run), runs.slice(1));
+    walk([ends[0]], 0, runLen.get(ends[0].run), runTurn.get(ends[0].run), runs.slice(1));
   }
 
   /**
@@ -724,11 +817,6 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     return Math.atan2(p.z - heart.z, p.x - heart.x);
   };
 
-  if (process.env.TSP) {
-    process.stderr.write(`\n  TSP runs=${runs.length} ends=${ends.length} legs=${legs.size}`
-      + ` searchable=${searchable} score=${best.score.toFixed(0)}`
-      + ` order=${best.order ? best.order.length : 'null'}\n`);
-  }
   const order = best.order || [...runs]
     .sort((a, b) => angle(a) - angle(b))
     .map((run) => ends.find((e) => e.run === run && !e.flip));
@@ -746,20 +834,42 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
    * each one told where the ones before it went. It costs one more search per
    * leg, which is nothing next to the table.
    */
+  const driveOrder = (order) => {
   const drive = { ids: new Set(taken.ids), tunnel: taken.tunnel, grid: new Map(),
     key: taken.key, has: taken.has, add: taken.add, near: taken.near };
   for (const [k, v] of taken.grid) drive.grid.set(k, [...v]);
 
+  /**
+   * How much road the gaps have to make up between them, shared out.
+   *
+   * The fragments are as long as they are; whatever is left of the real lap has
+   * to be driven, and each gap gets a share in proportion to how wide it is.
+   */
+  const chosenLen = order.reduce((sum, e) => sum + runLen.get(e.run), 0);
+  const gaps = order.map((here, i) => {
+    const next = order[(i + 1) % order.length];
+    const leg = legs.get(legKey(here.to, next.from));
+    return leg ? (leg.real ?? leg.cost) : 0;
+  });
+  const gapTotal = gaps.reduce((a, b) => a + b, 0);
+  const budget = Math.max(0, target - chosenLen);
+
   const lap = [];
   let driven = 0;
   let forced = 0;
+  let jumped = 0;
   for (let i = 0; i < order.length; i++) {
     const here = order[i];
     const ns = here.flip ? [...here.run.nodes].reverse() : here.run.nodes;
     if (i === 0) lap.push(...ns);
     else lap.push(...ns.slice(1));
     const next = order[(i + 1) % order.length];
-    let path = shortest(links, here.to, next.from, drive);
+    // Only worth asking for a longer way round when the gap is a real piece of
+    // circuit rather than a joint between two ways that nearly touch.
+    const want = gapTotal > 0 && budget > 200 ? (budget * gaps[i]) / gapTotal : 0;
+    let path = want > 200
+      ? budgeted(links, here.to, next.from, drive, want, lengthOf)
+      : shortest(links, here.to, next.from, drive);
     if (!path) {
       path = legs.get(legKey(here.to, next.from))?.path;
       if (path) forced++;
@@ -768,11 +878,41 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       forced++;
       continue;
     }
+    if (path.jumped || legs.get(legKey(here.to, next.from))?.jumped === true) {
+      const a = nodes.get(here.to); const b = nodes.get(next.from);
+      if (a && b) jumped = Math.max(jumped, dist(project(a.lat, a.lon), project(b.lat, b.lon)));
+    }
     lap.push(...path.slice(1, -1));
     for (const id of path) drive.add(id);
     driven += lengthOf(path);
   }
-  return { lap, driven, stranded: 0, forced, searched: searchable };
+  return { lap, driven, stranded: 0, forced, jumped, searched: searchable };
+  };
+
+  /**
+   * The short list, built for real, and the one that comes out best kept.
+   *
+   * Judged on the two things we can check against the world: how long the lap is
+   * and that it goes round once. Everything above is an estimate of those; this
+   * is the measurement.
+   */
+  const candidates = [{ score: best.score, order }, ...shortlist]
+    .filter((c) => c.order)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 6);
+  let winner = null;
+  for (const candidate of candidates) {
+    const made = driveOrder(candidate.order);
+    const metres = lengthOf(made.lap);
+    // Round the corner at the start line too: the lap is a loop, and measured as
+    // an open list it comes up a turn short of what it really does.
+    const round = Math.abs(turnOf([...made.lap, made.lap[0], made.lap[1]]));
+    const score = (target ? Math.abs(metres - target) : 0)
+      + Math.abs(round - Math.PI * 2) * 300
+      + made.jumped * 2;
+    if (!winner || score < winner.score) winner = { score, made };
+  }
+  return winner ? winner.made : driveOrder(order);
 }
 
 /** The lap in metres, at a fixed spacing, carrying the tunnel flag along. */
@@ -983,7 +1123,7 @@ async function build(key) {
   const inTunnel = tunnelNodes(ways);
   const runs = chain(mine);
   const links = graphOf(streets, nodes, project);
-  const { lap, driven, stranded, forced } = assemble(runs, links, nodes, project, inTunnel,
+  const { lap, driven, stranded, forced, jumped } = assemble(runs, links, nodes, project, inTunnel,
     circuit.metres);
 
   const points = lap
@@ -1041,7 +1181,7 @@ async function build(key) {
   process.stderr.write(`${(total / 1000).toFixed(3)} km `
     + `(${Math.round((total / circuit.metres) * 100)}% of ${circuit.metres} m), `
     + `${runs.length} fragments, ${Math.round(driven)} m driven, `
-    + `${forced} forced, turn ${(turn / Math.PI).toFixed(2)}pi, `
+    + `${forced} forced, longest jump ${Math.round(jumped)} m, turn ${(turn / Math.PI).toFixed(2)}pi, `
     + `${Math.round((overlap / out.length) * 100)}% doubled, `
     + `${out.filter((p) => p.tunnel).length} in tunnel… `);
 
