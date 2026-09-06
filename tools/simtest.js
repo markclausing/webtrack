@@ -511,13 +511,13 @@ for (const tier of ['easy', 'normal', 'hard']) {
     yasmarina: { km: 5.54, climb: 9, half: [6.6, 10.2] },
     // Measured rather than authored: the line, the height and the tunnel all
     // came off the map, so this checks a measurement rather than a decision.
-    monaco: { km: 3.18, climb: 43, half: [5.2, 5.2] },
-    jeddah: { km: 6.39, climb: 13, half: [6.0, 6.0] },
-    miami: { km: 6.40, climb: 13, half: [6.0, 6.0] },
-    vegas: { km: 4.91, climb: 31, half: [7.5, 7.5] },
-    singapore: { km: 3.65, climb: 14, half: [5.5, 5.5] },
-    madrid: { km: 5.46, climb: 33, half: [6.0, 6.0] },
-    baku: { km: 6.04, climb: 35, half: [5.0, 5.0] },
+    monaco: { km: 3.36, climb: 41, half: [5.2, 5.2] },
+    jeddah: { km: 6.28, climb: 12, half: [6.0, 6.0] },
+    miami: { km: 6.62, climb: 10, half: [6.0, 6.0] },
+    vegas: { km: 6.38, climb: 20, half: [7.5, 7.5] },
+    singapore: { km: 3.65, climb: 13, half: [5.5, 5.5] },
+    madrid: { km: 5.53, climb: 34, half: [6.0, 6.0] },
+    baku: { km: 5.84, climb: 35, half: [5.0, 5.0] },
     losail: { km: 5.42, climb: 8, half: [6.0, 6.0] },
   };
   ok('every surveyed circuit has an expectation written down here',

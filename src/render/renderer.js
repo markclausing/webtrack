@@ -1293,13 +1293,27 @@ function roadY(n, off) {
  * ninety metres apart is not a hillside anybody would model by hand, and at this
  * resolution it is indistinguishable from one.
  */
+/**
+ * How far under the kerb the ground starts, so that a road is never lost to
+ * another piece of the circuit's ground in the depth test.
+ */
+const GROUND_DROP = 0.15;
+
 function groundY(n, side, off) {
   const g = side < 0 ? n.g.l : n.g.r;
   const far = side < 0 ? n.g.far[0] : n.g.far[1];
   const kerb = n.half + RUMBLE;
   if (off <= kerb) return roadY(n, side * off);
+  // Past the kerb the ground steps down a hand's breadth.
+  //
+  // Not for the look of it - at fifteen centimetres under the kerb nobody will
+  // ever see it - but so that a road always beats somebody else's ground in the
+  // depth test. Where a circuit runs close to itself the two are at the same
+  // height and coplanar, and the ground of the far one was winning: at Monaco a
+  // slab of it lay across the track for two hundred metres, with the barriers of
+  // the other carriageway drawn over the road as well.
   if (off <= RINGS[0]) {
-    return lerp(roadY(n, side * kerb), g[0], (off - kerb) / (RINGS[0] - kerb));
+    return lerp(roadY(n, side * kerb) - GROUND_DROP, g[0], (off - kerb) / (RINGS[0] - kerb));
   }
   if (off <= RINGS[1]) return lerp(g[0], g[1], (off - RINGS[0]) / (RINGS[1] - RINGS[0]));
   if (off <= RINGS[2]) return lerp(g[1], g[2], (off - RINGS[1]) / (RINGS[2] - RINGS[1]));

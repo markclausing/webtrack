@@ -675,6 +675,26 @@ export function buildRoute(key) {
   }
 
   /**
+   * How many bands of ground this node may draw before one of them turns into a
+   * cliff. See `reach` below for what this is for.
+   */
+  const baseReach = real && real.land.reach !== undefined ? real.land.reach : 99;
+  const CLIFF = 5;
+  const bandsAt = (i) => {
+    // Only where the circuit has already said its ground stops close by, which
+    // is the eight measured ones and nowhere else. On a circuit in open country
+    // a band clamped thirty metres down is a hillside and is meant to be there:
+    // applied to all of them this took the landscape off eight hundred and
+    // twenty-nine of Spa's eleven hundred nodes.
+    if (!real || real.land.reach === undefined) return baseReach;
+    let n = baseReach;
+    for (let k = 0; k < 3; k++) {
+      if (ceiling[k][i] < height[i] - CLIFF) { n = Math.min(n, k); break; }
+    }
+    return n;
+  };
+
+  /**
    * Extra banking, for the circuits that are dished.
    *
    * Zandvoort is the only one of the four, and it matters there: eighteen
@@ -827,9 +847,20 @@ export function buildRoute(key) {
         : (real && real.osm ? at(i).half : Math.max(NARROWEST, at(i).half * WIDEN)),
       // How much of this node is under a roof. Nought almost everywhere.
       tunnel: inTunnel ? inTunnel(t) : 0,
-      // How far out this circuit draws ground. Everywhere but a street circuit
-      // draws all of it.
-      reach: real && real.land.reach !== undefined ? real.land.reach : 99,
+      // How far out this circuit draws ground.
+      //
+      // Everywhere but a street circuit draws all of it - but a band is also
+      // dropped, node by node, when its ceiling sits far below the road, because
+      // a band clamped a long way down is not ground, it is a cliff.
+      //
+      // Monaco is where this shows. It climbs forty-one metres on a site four
+      // hundred metres across, so almost every point on it has a much lower
+      // piece of road within the ninety-five metres the second band's ceiling
+      // looks at - and the ceiling did its job, pulled the band down to the
+      // harbour, and drew a thirty-four metre wall of ground beside the track,
+      // over the road on the other side of it. The ceiling was right and the
+      // band should not have been there at all.
+      reach: bandsAt(i),
       // The barrier, which has to stay outside the road however wide the road
       // gets. Fifteen metres is a good run-off beside a nine metre track and is
       // inside the kerb of a sixteen metre one.
@@ -1090,6 +1121,18 @@ function cornerBoards(nodes, add) {
       // you have not finished yet beats the board for the one after it.
       let left = corner.to - node;
       if (left < 0) left += count;
+      // And not if the road it would actually stand on bends the other way.
+      //
+      // A board belongs to a corner, but it is put down somewhere on the
+      // approach to it, and on a circuit where one bend runs straight into the
+      // opposite one that somewhere can be the tail of the corner before. One
+      // board at Madrid ended up on a right-hander pointing left. A board that
+      // disagrees with the road under it is worse than no board, so it is
+      // dropped rather than turned - turning it would make it point away from
+      // the corner it was put there for.
+      let round = 0;
+      for (let k = -4; k <= 4; k++) round += nodes[((node + k) % count + count) % count].curve;
+      if (Math.abs(round / 9) >= 0.03 && Math.sign(round) !== bend) return;
       wanted.push({ node, left, corner, side, bend, sharp });
     };
     // On the approach: sixty metres and thirty. Late on purpose - a board a

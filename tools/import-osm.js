@@ -235,7 +235,7 @@ function dedupe(ways, nodes, project) {
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
         for (const q of grid.get(key(p.x + dx * CELL, p.z + dz * CELL)) || []) {
-          if (Math.hypot(p.x - q.x, p.z - q.z) < 15) return true;
+          if (Math.hypot(p.x - q.x, p.z - q.z) < 18) return true;
         }
       }
     }
@@ -247,15 +247,22 @@ function dedupe(ways, nodes, project) {
   for (const way of sorted) {
     const ps = points(way);
     if (!ps.length) continue;
-    // Sampled over the middle third: a way that shares that with one we have
-    // kept is the same road, and a way that shares only a junction is not.
+    // Measured over the whole way, at eighteen metres, and dropped at two fifths.
+    //
+    // It was the middle third at fifteen metres and sixty per cent, which caught
+    // Madrid, where each carriageway is its own way from end to end, and missed
+    // Monaco, where the return along Boulevard Albert 1er is two hundred metres
+    // of a way that is far longer. Two hundred metres is nothing to a middle
+    // third and is a fifth of a lap to look at: thirteen metres between centre
+    // lines, ten metres of road either side, and the two sets of kerbs almost
+    // touching, with the ground and the barriers of one drawn across the other.
+    //
+    // Eighteen rather than fifteen because two road widths is what "the same
+    // street twice" actually measures, and two fifths rather than three fifths
+    // because a stretch does not have to be most of a way to ruin it.
     let over = 0;
-    let seen = 0;
-    for (let i = Math.floor(ps.length / 4); i < Math.ceil((ps.length * 3) / 4); i++) {
-      seen++;
-      if (near(ps[i])) over++;
-    }
-    if (seen && over / seen > 0.6) continue;
+    for (const q of ps) if (near(q)) over++;
+    if (ps.length > 3 && over / ps.length > 0.4) continue;
     kept.push(way);
     for (const p of ps) {
       const k = key(p.x, p.z);
@@ -525,7 +532,15 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       for (let dz = -1; dz <= 1; dz++) {
         for (let dx = -1; dx <= 1; dx++) {
           for (const p of this.grid.get(`${cx + dx},${cz + dz}`) || []) {
-            if (Math.hypot(p.x - x, p.z - z) < 12) return 1;
+            // Eighteen metres, not twelve.
+            //
+            // Twelve is narrower than the road: two centre lines thirteen metres
+            // apart are two carriageways of one boulevard with their kerbs
+            // almost touching, and the router was free to come back along the
+            // other side of Boulevard Albert 1er because thirteen is more than
+            // twelve. Two hundred metres of Monaco was drawn with the ground and
+            // the barriers of one carriageway lying across the other.
+            if (Math.hypot(p.x - x, p.z - z) < 18) return 1;
           }
         }
       }
@@ -975,6 +990,50 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
    * and that it goes round once. Everything above is an estimate of those; this
    * is the measurement.
    */
+  /**
+   * How much of a lap is driving alongside another part of itself.
+   *
+   * A circuit does not run beside itself. Where the map has a divided boulevard
+   * as two one-way ways, a lap that goes out along one and back along the other
+   * is thirteen metres from itself for hundreds of metres at a time - and at ten
+   * metres of road either side, that is two roads whose kerbs nearly touch. It
+   * draws as a wall of ground and barrier lying across the track, which is what
+   * "Monaco is not right" turned out to be.
+   *
+   * Eighteen metres between centre lines, which is under two road widths. A
+   * tunnel is exempt: it is below whatever it is near, and Monaco's is under a
+   * road that is genuinely there.
+   */
+  const alongside = (lap) => {
+    const CELL = 20;
+    const cells = new Map();
+    const pts = lap.map((id) => nodes.get(id)).map((p) => (p ? project(p.lat, p.lon) : null));
+    const key = (x, z) => `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
+    for (let i = 0; i < pts.length; i++) {
+      if (!pts[i] || taken.tunnel.has(lap[i])) continue;
+      const k = key(pts[i].x, pts[i].z);
+      if (!cells.has(k)) cells.set(k, []);
+      cells.get(k).push(i);
+    }
+    let hit = 0;
+    for (let i = 0; i < pts.length; i++) {
+      if (!pts[i] || taken.tunnel.has(lap[i])) continue;
+      let near = false;
+      for (let dx = -1; dx <= 1 && !near; dx++) {
+        for (let dz = -1; dz <= 1 && !near; dz++) {
+          for (const j of cells.get(key(pts[i].x + dx * CELL, pts[i].z + dz * CELL)) || []) {
+            // Far enough apart along the lap to be a different piece of road.
+            const apart = Math.abs(i - j);
+            if (Math.min(apart, pts.length - apart) < 30) continue;
+            if (Math.hypot(pts[i].x - pts[j].x, pts[i].z - pts[j].z) < 18) { near = true; break; }
+          }
+        }
+      }
+      if (near) hit++;
+    }
+    return hit / Math.max(1, pts.length);
+  };
+
   const candidates = [{ score: best.score, order }, ...shortlist]
     .filter((c) => c.order)
     .sort((a, b) => a.score - b.score)
@@ -991,6 +1050,11 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       // A straight line across a kilometre of city is a worse fault than being
       // ten per cent long, and is charged like one.
       + made.jumped * 4
+      // Running alongside itself, charged at fifty metres per per-cent of the
+      // lap. A tenth of the lap beside itself is worth five hundred metres of
+      // being the wrong length, which is about right: one is a circuit that
+      // measures a little long and the other is a circuit you cannot see across.
+      + alongside(made.lap) * 100 * 50
       // And the same floor as above: three fifths of the stated distance is not
       // a short lap, it is a failure.
       + (target && metres < target * 0.6 ? 1e6 : 0);
@@ -1315,7 +1379,7 @@ async function build(key) {
     for (let j = 0; j < out.length; j++) {
       const apart = Math.min(Math.abs(i - j), out.length - Math.abs(i - j));
       if (apart < 25) continue;
-      if (Math.hypot(out[i].x - out[j].x, out[i].z - out[j].z) < 12
+      if (Math.hypot(out[i].x - out[j].x, out[i].z - out[j].z) < 18
         && !out[i].tunnel && !out[j].tunnel) {
         overlap++;
         break;

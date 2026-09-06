@@ -256,7 +256,46 @@ cent of its measured range: the shape of the profile is still the map's, and onl
 the size of it is ours. It is the only measured circuit whose height has been
 touched, and `flatten` in `circuits.js` is the whole of it.
 
+### Twelve metres was narrower than the road
+
+Three separate thresholds in this pipeline were set to twelve metres: the
+router's refusal to drive near road it has already driven, the reported doubling
+figure, and the test for one way duplicating another. Twelve metres between two
+centre lines is two carriageways of one boulevard with their kerbs almost
+touching - so the router was free to come back along the other side of Boulevard
+Albert 1er, the doubling figure said nought per cent because the two were
+thirteen metres apart, and the dedupe agreed. Two hundred metres of Monaco was
+drawn with the ground and the barriers of one carriageway lying across the
+other. All three now ask for eighteen, which is about two road widths, and the
+dedupe measures a way over its whole length rather than its middle third.
+
+  monaco 13% of the lap beside itself -> 8%      vegas 18% -> 0%
+  jeddah  2% -> 0%                               miami  6% -> 4%
+
+Las Vegas went from 80 per cent of its length with a 1.3 kilometre straight line
+in it to 104 per cent with a 25 metre one, and Jeddah from 112 per cent with a
+300 metre jump to 102 with none.
+
+### A band of ground that is a cliff is not drawn
+
+The ground beside the road is clamped so it can never be drawn over a lower
+piece of the circuit. That is right and it was drawing cliffs: Monaco climbs
+forty-one metres on a site four hundred metres across, so nearly every point has
+a much lower piece of road within the ninety-five metres the second band's
+ceiling looks at, and the ceiling pulled that band down to the harbour - a
+thirty-four metre wall of ground beside the track, over the road on the other
+side of it. The ceiling was right; the band should not have been there.
+
+A band whose ceiling sits more than five metres below the road it belongs to is
+now dropped, node by node. Only on the eight measured circuits, which have
+already said their ground stops close by: on a circuit in open country a band
+clamped thirty metres down is a hillside and is meant to be there. Applied to
+all of them it took the landscape off eight hundred and twenty-nine of Spa's
+eleven hundred nodes.
+
 ### What is still not right
+
+
 
 Miami comes out 18 per cent long and Las Vegas 20 per cent short, and Las Vegas
 has a 1.3 kilometre straight line in it where no street the map knows about
