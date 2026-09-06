@@ -461,6 +461,34 @@ for (const tier of ['easy', 'normal', 'hard']) {
     }
   }
   ok(`all ${boards} boards stand on the outside of the bend they point at`, outside === 0);
+
+  // A recovery crane at every place a car is likely to end up, and none of them
+  // in the same shot as the next one.
+  {
+    let worst = null;
+    let least = Infinity;
+    let most = 0;
+    for (const key of ALL_ROUTES) {
+      const route = buildRoute(key);
+      const at = [];
+      for (let i = 0; i < route.nodes.length; i++) {
+        for (const prop of route.props[i] || []) if (prop.kind === 'crane') at.push(i);
+      }
+      least = Math.min(least, at.length);
+      most = Math.max(most, at.length);
+      if (at.length < 2) worst = `${key} has ${at.length}`;
+      const count = route.nodes.length;
+      for (const a of at) {
+        for (const b of at) {
+          if (a === b) continue;
+          const apart = Math.abs(a - b);
+          if (Math.min(apart, count - apart) < 24) worst = `${key} has two ${apart} nodes apart`;
+        }
+      }
+    }
+    ok(`every circuit has between ${least} and ${most} recovery cranes, none of them `
+      + 'within six hundred metres of another', worst === null, worst);
+  }
   ok(`and all ${inCorner} of the ones standing in a corner point the way it goes`,
     inCorner > 200 && pointing === 0);
 }

@@ -1044,7 +1044,15 @@ function checkpointsFor(count) {
  * The curvature is read over a stretch rather than off a node: one node of a
  * circuit is six metres, and six metres of anything is noise.
  */
-function cornerBoards(nodes, add) {
+/**
+ * The corners of a circuit, as runs of nodes with the sharpest curvature in
+ * each one.
+ *
+ * Pulled out of `cornerBoards` so that the recovery cranes can be put at the
+ * same corners the boards warn about, which is where they are in life: the two
+ * belong to the same list and working it out twice would let them disagree.
+ */
+function cornersOf(nodes) {
   const count = nodes.length;
   const at = (i) => nodes[((i % count) + count) % count];
   // Four nodes, which is twenty-four metres either side.
@@ -1091,6 +1099,60 @@ function cornerBoards(nodes, add) {
     }
   }
   close();
+  return corners;
+}
+
+/**
+ * A recovery crane on the outside of the corners cars actually leave at.
+ *
+ * There is one at every place an F1 car is likely to end up, standing behind
+ * the barrier all weekend doing nothing until it is the only thing anybody is
+ * looking at. Placed by rule rather than by hand, because the rule is the same
+ * on all twenty-seven circuits: the outside of a corner, beyond the barrier,
+ * and not two of them in sight of each other.
+ */
+function cranes(nodes, add) {
+  const count = nodes.length;
+  const corners = cornersOf(nodes)
+    // Worth a crane: a hundred and twenty metre corner or tighter. Anything
+    // faster than that and a car that leaves the road is still going in roughly
+    // the direction of the road.
+    .filter((c) => Math.abs(c.peak) > 0.05)
+    .sort((a, b) => Math.abs(b.peak) - Math.abs(a.peak));
+
+  // Six hundred metres between them, so a circuit gets the eight or ten a
+  // circuit has rather than one per corner.
+  const GAP = Math.max(24, Math.round(600 / SEG));
+  const taken = [];
+  for (const corner of corners) {
+    // A third of the way into the corner: past the turn-in, which is where a
+    // car that has lost it is heading, and where the crane can reach both the
+    // apex and the exit.
+    let node = Math.round(corner.from + (corner.to - corner.from) / 3);
+    node = ((node % count) + count) % count;
+    if (taken.some((t) => {
+      const apart = Math.abs(t - node);
+      return Math.min(apart, count - apart) < GAP;
+    })) continue;
+    taken.push(node);
+    const n = nodes[node];
+    // Outside of the bend, and clear of the barrier: the boom reaches over it,
+    // the truck does not.
+    const side = corner.peak > 0 ? -1 : 1;
+    add(node, {
+      kind: 'crane', side, off: n.wall + 8, s: 1,
+      // The boom is built reaching to the track's left, so the one standing on
+      // the left of the road is turned round to reach back across it.
+      r: side < 0 ? Math.PI : 0, align: true, flat: true,
+    });
+  }
+}
+
+/** The boards for those corners. */
+function cornerBoards(nodes, add) {
+  const count = nodes.length;
+  const at = (i) => nodes[((i % count) + count) % count];
+  const corners = cornersOf(nodes);
 
   // Every board anybody might want, before any of them are allowed to stand.
   //
@@ -1343,6 +1405,7 @@ function scatter(nodes, rnd) {
   add(Math.floor(third * 1.5), { kind: 'chopper', side: 1, off: 30, s: 1, r: 0, lift: 32, align: true });
 
   cornerBoards(nodes, add);
+  cranes(nodes, add);
 
   // The gantry is the checkpoint. It is placed on the node the clock is actually
   // reading, not near it, because a gate you go under half a second before the
@@ -1358,7 +1421,7 @@ export const SPREAD = {
   dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
   palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
   pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
-  post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7,
+  post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7, crane: 6,
   // A corner board is six metres wide and a hand's breadth deep, and only the
   // depth is on the ground. Left to the default of three it needed four and a
   // half metres of clearance from the kerb, which is more run-off than
@@ -1647,6 +1710,7 @@ function dress(nodes, real, rnd) {
   }
 
   cornerBoards(nodes, add);
+  cranes(nodes, add);
 
   // The gantry is the checkpoint, on the node the clock actually reads.
   for (const at of checkpointsFor(count)) {

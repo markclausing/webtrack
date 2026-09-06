@@ -312,6 +312,62 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       break;
     }
     /**
+     * A recovery crane, behind the barrier on the outside of a corner.
+     *
+     * There is one of these at every place an F1 car is likely to end up, and
+     * they are half the reason a run-off area looks the way it does on
+     * television: a yellow lorry with a lattice boom over the fence and a hook
+     * hanging off it, sitting there all weekend doing nothing until it is the
+     * only thing anybody is looking at.
+     *
+     * Built with the boom reaching towards the track - local +z - so that
+     * standing it on the outside of the bend points it at the road.
+     */
+    case 'crane': {
+      const yellow = shade(C.board, 1.0);
+      const dark = shade(C.metal, 0.7);
+      // Built the way a marker post's arm is: length along the track, which is
+      // local z, and the boom reaching towards local -x, which is the track's
+      // left. So a crane on the right of the road is placed as drawn and one on
+      // the left is turned round. Built the other way about - carrier across the
+      // road, boom pointing down it - it parked in the run-off sideways and
+      // waved its jib at the scenery.
+      box(rt, tint, yellow, -1.4, 1.4, 1.0, 2.1, -4.6, 3.4);
+      box(rt, tint, yellow, -1.3, 1.3, 2.1, 3.9, 2.0, 4.4);
+      put.face(rt, tint(C.glass), [-1.35, 2.6, 3.4, -1.35, 2.6, 4.4, -1.35, 3.6, 4.4, -1.35, 3.6, 3.4]);
+      for (const wz of [-4.0, -2.2, 2.6]) {
+        put.face(rt, tint(C.tyre), [-1.45, 0.1, wz, -1.45, 0.1, wz + 1.3,
+          -1.45, 1.1, wz + 1.3, -1.45, 1.1, wz]);
+        put.face(rt, tint(C.tyre), [1.45, 0.1, wz + 1.3, 1.45, 0.1, wz,
+          1.45, 1.1, wz, 1.45, 1.1, wz + 1.3]);
+      }
+      // Outriggers, down and planted, which is how one of these actually stands.
+      for (const oz of [-3.4, 1.6]) {
+        put.face(rt, tint(dark), [-2.6, 0.9, oz, -2.6, 0.9, oz + 0.5, 1.4, 1.3, oz + 0.5, 1.4, 1.3, oz]);
+        put.face(rt, tint(dark), [2.6, 0.9, oz, 2.6, 0.9, oz + 0.5, -1.4, 1.3, oz + 0.5, -1.4, 1.3, oz]);
+      }
+      // The turntable, and the boom off it. Three faces - two sides and a top -
+      // so it is a beam from every angle: as two thin plates it vanished
+      // whenever you were level with it, which beside a track is most of the
+      // time.
+      box(rt, tint, shade(yellow, 0.9), -1.1, 1.1, 2.1, 3.3, -2.6, -0.4);
+      const tipX = -9.2;
+      const tipY = 12.4;
+      const lit = tint(shade(yellow, 1.06));
+      const shadow = tint(shade(yellow, 0.74));
+      // Near side, far side, and the top edge between them.
+      put.face(rt, lit, [-0.6, 3.2, -1.9, -0.6, 3.2, -1.1, tipX, tipY, -1.4, tipX, tipY, -1.7]);
+      put.face(rt, shadow, [0.6, 3.2, -1.1, 0.6, 3.2, -1.9, tipX, tipY, -1.7, tipX, tipY, -1.4]);
+      put.face(rt, tint(yellow), [-0.6, 3.2, -1.9, 0.6, 3.2, -1.9, tipX, tipY, -1.7, tipX, tipY, -1.4]);
+      // The cable and the hook, hanging where the boom ends.
+      put.face(rt, tint(dark),
+        [tipX, tipY, -1.7, tipX, tipY, -1.4, tipX, tipY - 4.6, -1.4, tipX, tipY - 4.6, -1.7]);
+      put.face(rt, tint(shade(C.metal, 1.1)),
+        [tipX - 0.3, tipY - 4.6, -1.85, tipX - 0.3, tipY - 4.6, -1.25,
+          tipX - 0.3, tipY - 5.5, -1.25, tipX - 0.3, tipY - 5.5, -1.85]);
+      break;
+    }
+    /**
      * A team transporter: cab, trailer, and the team's colour down the side.
      *
      * What is actually behind a pit building on a race weekend is forty of

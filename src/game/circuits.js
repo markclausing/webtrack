@@ -928,7 +928,14 @@ export const SURVEYED = {
      * at an angle. Held flat and close to the road it reads as what it is:
      * pavement, and then buildings.
      */
-    land: { rise: 0.5, roll: 0.3, plain: -1.2, runoff: 1.6, reach: 2,
+    // One band of ground and no more.
+    //
+    // Two reached thirty-two metres either side, which is sixty-four metres of
+    // apron on a street where the buildings start at the kerb - and where the
+    // lap comes back past itself it was drawn as a shelf hanging over the road
+    // below. There is nothing beside this road but pavement and then a wall, so
+    // that is all it draws.
+    land: { rise: 0.5, roll: 0.3, plain: -1.2, runoff: 1.6, reach: 1,
       sea: { at: 0.02, span: 0.10, level: -4 } },
     scatter: [
       // Almost nothing scattered: what is beside this road is the town, and the
