@@ -210,7 +210,7 @@ out skel qt;`;
 }
 
 /** Is this way part of the circuit itself, rather than of the town around it? */
-function isCircuit(way, circuit, members) {
+function isCircuit(way, circuit, members, loose = false) {
   const t = way.tags || {};
   if (t.highway !== 'raceway') return false;
   // Pit lanes, pit entries, penalty loops and alternative layouts are all
@@ -227,8 +227,16 @@ function isCircuit(way, circuit, members) {
   if (members && members.has(way.id)) return true;
   if (t.service || t.area === 'yes') return false;
   // A circuit with several layouts mapped has them named; if this one told us
-  // its name, anything else in the box is somebody else's lap.
-  if (circuit.name) return t.name === circuit.name;
+  // its name, anything else *named* in the box is somebody else's lap.
+  //
+  // Unnamed raceway is let through rather than dropped. Losail has four such
+  // ways and two carrying the circuit's name, and taking only the named pair
+  // left sixty-eight per cent of a lap; Jeddah has eight. There is no way to
+  // tell from the tags whether an unnamed piece of raceway is this circuit or
+  // the run-off beside it - but the assembly downstream is scored on the real
+  // lap length and can drop what does not fit, which is a better judge than a
+  // missing tag.
+  if (circuit.name) return loose ? !t.name || t.name === circuit.name : t.name === circuit.name;
   return true;
 }
 
@@ -683,19 +691,25 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
    * and one of the wrong length but does decide between two of the right length,
    * and prefers the one that drives less of the town.
    */
-  const scoreOf = (metres, cost, swing) => (target ? Math.abs(metres - target) : 0)
+  const scoreOf = (metres, cost, swing, jumps = 0) => (target ? Math.abs(metres - target) : 0)
     + cost * 0.2
+    // Straight lines across the city, priced the same here as they are when the
+    // finished lap is measured. Left out, the short list filled up with orders
+    // that looked cheap and drove through buildings, and the measurement further
+    // down never got to see a better one.
+    + jumps * 4
     // A lap goes round once. Anything else - and what the search kept producing
     // was a figure of eight, two loops turning opposite ways and cancelling to
     // nought - is charged three hundred metres a radian, which is dear enough to
     // rule it out and still leaves length in charge between honest laps.
     + (swing === undefined ? 0 : Math.abs(Math.abs(swing) - Math.PI * 2) * 300);
 
-  const walk = (chosen, spent, metres, swing, restLeft) => {
+  const walk = (chosen, spent, metres, swing, jumps, restLeft) => {
     // Length and cost only grow from here, so a branch already this far over the
     // real length cannot come back. The turn is left out of the bound because it
     // can still swing either way.
-    if (scoreOf(metres, spent) >= best.score && (!target || metres >= target)) return;
+    if (scoreOf(metres, spent, undefined, jumps) >= best.score
+      && (!target || metres >= target)) return;
     if (spent >= best.cost && !target) return;
 
     // Close it here, whatever is left over - including on the first fragment,
@@ -710,7 +724,8 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       const home = shut ? { cost: 0, real: 0, swing: 0 } : legs.get(legKey(tail.to, chosen[0].from));
       if (home) {
         const round = swing + (home.swing ?? 0);
-        const score = scoreOf(metres + (home.real ?? home.cost), spent + home.cost, round);
+        const score = scoreOf(metres + (home.real ?? home.cost), spent + home.cost, round,
+          jumps + (home.jumped ? home.real : 0));
         if (score < best.score) {
           best.score = score;
           best.cost = spent + home.cost;
@@ -739,7 +754,8 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
         if (!leg) continue;
         walk([...chosen, next], spent + leg.cost,
           metres + (leg.real ?? leg.cost) + runLen.get(run),
-          swing + (leg.swing ?? 0) + (flip ? -runTurn.get(run) : runTurn.get(run)), rest);
+          swing + (leg.swing ?? 0) + (flip ? -runTurn.get(run) : runTurn.get(run)),
+          jumps + (leg.jumped ? leg.real : 0), rest);
       }
     }
   };
@@ -760,6 +776,7 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     let spent = 0;
     let metres = runLen.get(ends[0].run);
     let swing = runTurn.get(ends[0].run);
+    let jumps = 0;
     const left = runs.slice(1);
     while (left.length) {
       let pick = null;
@@ -775,6 +792,7 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       metres += (pick.leg.real ?? pick.leg.cost) + runLen.get(pick.to.run);
       swing += (pick.leg.swing ?? 0)
         + (pick.to.flip ? -runTurn.get(pick.to.run) : runTurn.get(pick.to.run));
+      if (pick.leg.jumped) jumps += pick.leg.real;
       at = pick.to;
       chosen.push(at);
       left.splice(pick.i, 1);
@@ -783,7 +801,7 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     if (!home) return;
     best.cost = spent + home.cost;
     best.score = scoreOf(metres + (home.real ?? home.cost), best.cost,
-      swing + (home.swing ?? 0));
+      swing + (home.swing ?? 0), jumps + (home.jumped ? home.real : 0));
     best.order = chosen;
   };
 
@@ -798,7 +816,7 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
   const searchable = runs.length <= 11;
   if (searchable) {
     greedy();
-    walk([ends[0]], 0, runLen.get(ends[0].run), runTurn.get(ends[0].run), runs.slice(1));
+    walk([ends[0]], 0, runLen.get(ends[0].run), runTurn.get(ends[0].run), 0, runs.slice(1));
   }
 
   /**
@@ -909,7 +927,12 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     const round = Math.abs(turnOf([...made.lap, made.lap[0], made.lap[1]]));
     const score = (target ? Math.abs(metres - target) : 0)
       + Math.abs(round - Math.PI * 2) * 300
-      + made.jumped * 2;
+      // A straight line across a kilometre of city is a worse fault than being
+      // ten per cent long, and is charged like one.
+      + made.jumped * 4
+      // And the same floor as above: three fifths of the stated distance is not
+      // a short lap, it is a failure.
+      + (target && metres < target * 0.6 ? 1e6 : 0);
     if (!winner || score < winner.score) winner = { score, made };
   }
   return winner ? winner.made : driveOrder(order);
@@ -1114,11 +1137,40 @@ async function build(key) {
     // The relation's own ways, which Overpass returned alongside everything else.
     members = new Set(ways.filter((w) => (w.tags || {}).highway === 'raceway').map((w) => w.id));
   }
-  const mine = ways.filter((w) => isCircuit(w, circuit, members));
   const streets = ways.filter((w) => (w.tags || {}).highway);
   const lat0 = circuit.box[0] / 2 + circuit.box[2] / 2;
   const lon0 = circuit.box[1] / 2 + circuit.box[3] / 2;
   const project = projector(lat0, lon0);
+
+  /**
+   * The named ways first, and the unnamed ones only if they are needed.
+   *
+   * A circuit that gives its name has everything else *named* in the box
+   * belonging to somebody else - but plenty of raceway carries no name at all,
+   * and whether an unnamed piece is this lap or the run-off beside it is not in
+   * the tags. Losail is two named ways and four unnamed, and the named pair is
+   * sixty-eight per cent of a lap; Jeddah is nine named and eight unnamed, and
+   * letting the unnamed ones in took it from a hundred and two per cent to
+   * seventy-nine, because the extra fragments are somewhere the street graph
+   * cannot reach and the lap ends up jumping a kilometre to get to them.
+   *
+   * So: take the named ways, and reach for the unnamed ones only when the named
+   * ones do not add up to a lap. Losail 100 per cent, Jeddah unharmed.
+   */
+  const spread = (list) => list.reduce((sum, w) => {
+    for (let i = 0; i < w.nodes.length - 1; i++) {
+      const a = nodes.get(w.nodes[i]);
+      const b = nodes.get(w.nodes[i + 1]);
+      if (a && b) sum += dist(project(a.lat, a.lon), project(b.lat, b.lon));
+    }
+    return sum;
+  }, 0);
+
+  let mine = ways.filter((w) => isCircuit(w, circuit, members));
+  if (spread(mine) < circuit.metres * 0.85) {
+    const wider = ways.filter((w) => isCircuit(w, circuit, members, true));
+    if (spread(wider) > spread(mine)) mine = wider;
+  }
 
   const inTunnel = tunnelNodes(ways);
   const runs = chain(mine);
