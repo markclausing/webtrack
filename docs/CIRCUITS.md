@@ -1,7 +1,8 @@
 # Where the sixteen real circuits came from
 
-Three of the nineteen circuits in this game were drawn by a random number
-generator. Sixteen of them are places: Spa-Francorchamps, Monza, Suzuka,
+Three of the twenty-seven circuits in this game were drawn by a random number
+generator. Sixteen came from a survey, and eight were measured off
+OpenStreetMap. The surveyed sixteen are: Spa-Francorchamps, Monza, Suzuka,
 Zandvoort, Silverstone, Interlagos, the Red Bull Ring, Gilles Villeneuve,
 Austin, Bahrain, Mexico City, the Hungaroring, Albert Park, Shanghai, Catalunya
 and Yas Marina — which is every circuit the source survey has that is on the
@@ -101,14 +102,6 @@ Hockenheim, the Nürburgring, Oschersleben, the Norisring, Moscow Raceway,
 Sepang, Sochi and Indianapolis - are not on that calendar, which is the only
 reason.
 
-## The eight the calendar has and this does not
-
-Of the twenty-four circuits on the 2026 calendar, the TUM database covers
-sixteen. Jeddah, Miami, Monaco, Madrid, Baku, Singapore, Las Vegas and Losail
-are not in it. They are all in OpenStreetMap as `highway=raceway` and could be
-traced with Overpass under the same ODbL terms, except Madrid, which is new
-enough that the mapping may not be there yet.
-
 ## The eight the survey does not have
 
 The sixteen above came from a survey that gives a centre line and a width and
@@ -159,11 +152,41 @@ alternating sides, bow on. Eighty-one of them, and none of it decided here.
 
 ### Where this has got to
 
-Monaco is in the game: 3.56 km against a true 3.337, 840 metres of tunnel found
-from the tags, 44 metres of measured climb, 252 buildings at their own footprints
-and their own heights, and 79 boats along the piers of Port Hercule. The scatter
-rule for the whole circuit is one line about palm trees, because everything else
-beside that road was measured. Las Vegas imports correctly at 96 per cent.
+All eight are in the game, and all eight assemble into a lap that closes and
+turns through two pi exactly once. Measured against their published length:
+
+```
+losail 100%   madrid 100%   monaco 100%   baku 101%   jeddah 104%
+miami  118%   vegas   80%   singapore 74%
+```
+
+Five of those - Losail, Madrid, Monaco, Baku and Jeddah - contain no
+straight-line jump anywhere in the lap and no stretch of road lying on top of
+another. Losail needed nothing at all: the whole lap carries the map's own
+raceway tag, so not a metre of it had to be driven along a public road.
+
+### Choosing which ways are the circuit
+
+There is no single rule, and three were written before that was admitted. The
+named raceway ways are the whole lap at Monaco and two thirds of it at Losail,
+where four more carry no name. A route relation is the whole lap at Madrid and,
+at Las Vegas, a hundred and one ways that come apart into twenty-two fragments -
+more than can be searched. Every version of this as one rule with conditions
+attached broke one circuit to fix another.
+
+So all three selections are assembled, and each is scored on the same
+measurement the fragment orders are scored on: real length, turning through two
+pi once, and no straight lines across the city. The best is kept. Two extra
+assemblies of a few hundred milliseconds, and not one per-circuit rule.
+
+Two things had to be right before a relation was worth reading. It was being
+fetched and thrown away - membership was guessed at as "every raceway way in the
+box", which misses the entire point of a route relation, which is that it names
+the ordinary streets the lap runs on. And read properly it lists both
+carriageways of a divided street, which chain end to end into an out-and-back:
+Madrid came back at 199 per cent turning through four pi with 95 per cent of the
+lap on top of itself. A way whose middle third already lies within fifteen
+metres of one already kept is now dropped before anything is chained.
 
 ### Ordering the fragments
 
@@ -171,8 +194,8 @@ A street circuit arrives as fragments with gaps between them, and the order the
 lap visits them in is not obvious. Three attempts:
 
 **Nearest reachable next** is the obvious one and is wrong: two fragments can be
-close together and still be visited a whole lap apart, so the route doubles back.
-Monaco came out 19 per cent too long.
+close together and still be visited a whole lap apart, so the route doubles
+back. Monaco came out 19 per cent too long.
 
 **Sorted by angle about the centre** is better - it is what "in order" means on a
 loop - and is still a guess. On a circuit that wraps a harbour, climbs a hill and
@@ -183,44 +206,63 @@ circuit turns through two pi.
 **Every order, priced.** Six fragments have 720 orders and each can be driven
 either way about, and every one of those laps can be costed from a table of the
 distance between each pair of fragment ends - twelve shortest-path searches, done
-once. The cheapest closed lap wins. It is a travelling salesman over six cities,
-which is not a hard problem at six; above eight the count runs away and it falls
-back to the angular order.
+once. The cheapest closed lap wins. A greedy lap is handed to the search first so
+that its bound has something to cut against from the start, which is what makes
+eleven fragments affordable where eight was the ceiling.
 
-That took Monaco from 107 per cent of its true length to 96, from a third of its
-tunnel to all of it, and dropped the worst height difference between two pieces
-of stacked road from twenty-five metres to twelve - which is what the pale slabs
-across the view were.
+The lap may also close before every fragment has been used. Tags can tell a pit
+lane from a circuit and can do no more than that: Jeddah arrives as nine ways all
+called حلبة كورنيش جدة and Miami as ten all named after the autodrome, and in
+both cases that is half again as much road as the lap has. Since the order is
+free, skipping a fragment is the same as closing before it is reached, so every
+closed tour over every subset is already reachable from the same walk - and each
+is scored on how near it comes to the real distance.
 
-A junction that doubles back is charged forty metres per radian on top of the
-distance. It was five thousand metres flat, on the reasoning that a reversal is
-never worth a detour; that is true and is not what the number does. At that size
-the penalty stops competing with length and starts choosing the route by itself,
-and Monaco came back four kilometres long turning through six pi - three laps of
-something.
+### Five faults that were in the way of that working
+
+- the leg table was built without the no-reuse rule, so a connector was free to
+  run the length of a fragment it had not reached yet, and did: five circuits
+  came back with between 33 and 90 per cent of the lap on top of itself
+- the legs were priced together and then driven independently, so with two
+  fragments and only one possible order Las Vegas took the same road both ways
+- a fragment that already closes on itself had no way to say so, which is the
+  ordinary case for a permanent circuit
+- a failed search was remembered as null, and the straight-line fallback tested
+  for the key rather than the value, so it skipped the very gaps it was for
+- and that fallback measured in degrees, giving every leg a cost of NaN, which
+  loses every comparison and therefore chose nothing
+
+A floor goes with all of it: below three fifths of the published distance an
+assembly has failed rather than found a shorter lap. Without one the search kept
+choosing a 283 metre loop off the end of Jeddah, which closes cleanly, jumps
+nowhere and beats better laps on every other term in the score.
+
+### Long enough, rather than shortest
+
+Where a street circuit runs on public road there is no raceway tag, and the
+router took the shortest way across the gap. That is right for a forty metre
+joint and wrong for Singapore, where three kilometres of the lap are public road
+and the shortest way home is seven hundred metres - forty per cent of a circuit.
+The gap is now given a budget, from the length the lap is missing, and the search
+is shaken onto neighbouring roads until it finds a route near it. Singapore 40 to
+74 per cent.
+
+### The one authored height
+
+Marina Bay is about five metres above the sea for the whole lap. The terrain
+service returned a range of sixty-six metres with a peak of a hundred and nine,
+because in a city that dense it is looking at roofs. Singapore keeps twelve per
+cent of its measured range: the shape of the profile is still the map's, and only
+the size of it is ours. It is the only measured circuit whose height has been
+touched, and `flatten` in `circuits.js` is the whole of it.
 
 ### What is still not right
 
-Twenty-one per cent of Monaco's nodes still have another piece of the same road
-within a few metres of them, and the assembled lap still contains two places
-where it reverses sharply - which is why its net turn reads as nought rather than
-two pi even though the shape is now the right length and the right way round.
-Nothing about it is visible from the car any more, because the stacked road is
-now within twelve metres in height rather than twenty-five, but it is there.
+Miami comes out 18 per cent long and Las Vegas 20 per cent short, and Las Vegas
+has a 1.3 kilometre straight line in it where no street the map knows about
+joins two fragments. Singapore is 74 per cent, which is as far as budgeted
+routing gets it without knowing which public roads the circuit actually uses -
+and that is the one thing about these circuits that is not written down anywhere
+we can read.
 
-The router also refuses to reuse a node and charges twenty times the distance for
-passing within twelve metres of road already driven. That has to be spatial
-rather than by node id, because the road above Monaco's tunnel and the tunnel are
-two different ways in the map and the same place on the ground. On its own it
-halved the doubling and cost two thirds of the tunnel; it is the ordering above
-that did the work.
-
-Whatever finishes this is also what gets the other six importing, so it is worth
-getting right rather than getting past.
-
-The other six do not import correctly yet, and the reason is the same for all of
-them: picking which of the raceway ways in a bounding box form the Grand Prix lap
-rather than a pit lane, an alternative layout or a karting circuit. Jeddah comes
-out at 149 per cent, Miami 142, Madrid 187, Losail 43, Singapore 40, and Baku
-times out. That is per-circuit work on the selection rules, not a fault in the
-pipeline.
+Overpass answers are cached in `.osm-cache`. Delete it to fetch again.
