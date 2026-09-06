@@ -36,7 +36,12 @@
  *    the part that is true.
  */
 
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const CACHE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.osm-cache');
 
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
 /**
@@ -101,6 +106,19 @@ async function overpass(query) {
   // is a reasonable thing for a free public service to insist on, and takes an
   // hour to work out, because curl sends a User-Agent by itself and so the same
   // query works from the shell and not from here.
+  /**
+   * Answers are kept on disk, keyed by the query.
+   *
+   * Overpass is free and public and asks, politely and in its documentation, not
+   * to be hammered - and tuning the assembly means running the same eight
+   * queries over and over, which has nothing to do with the map and everything
+   * to do with the code downstream of it. Cached, the second run costs nothing
+   * and the service is left alone. Delete `.osm-cache` to fetch again.
+   */
+  const key = createHash('sha1').update(query).digest('hex').slice(0, 16);
+  const file = path.join(CACHE, `${key}.json`);
+  if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8'));
+
   const res = await fetch(OVERPASS, {
     method: 'POST',
     headers: {
@@ -110,7 +128,10 @@ async function overpass(query) {
     body: `data=${encodeURIComponent(query)}`,
   });
   if (!res.ok) throw new Error(`overpass ${res.status}`);
-  return res.json();
+  const json = await res.json();
+  mkdirSync(CACHE, { recursive: true });
+  writeFileSync(file, JSON.stringify(json));
+  return json;
 }
 
 /** Metres per degree, about a given latitude. A circuit is small enough for flat earth. */
@@ -191,14 +212,19 @@ out skel qt;`;
 /** Is this way part of the circuit itself, rather than of the town around it? */
 function isCircuit(way, circuit, members) {
   const t = way.tags || {};
-  if (members && members.has(way.id)) return true;
   if (t.highway !== 'raceway') return false;
   // Pit lanes, pit entries, penalty loops and alternative layouts are all
   // tagged raceway and none of them is the lap.
+  //
+  // Checked before the relation membership below, not after. It used to be
+  // after, on the reasoning that a circuit which names its own ways knows best -
+  // and Madrid's relation contains a way called "Madring pit lane", which sailed
+  // straight past this and into the lap.
   const name = `${t.name || ''}`.toLowerCase();
   if (/pit|stands|paddock|box|penalty|entry|exit|drag|karting|oval|inner|outer/.test(name)) {
     return false;
   }
+  if (members && members.has(way.id)) return true;
   if (t.service || t.area === 'yes') return false;
   // A circuit with several layouts mapped has them named; if this one told us
   // its name, anything else in the box is somebody else's lap.
@@ -324,6 +350,8 @@ function shortest(links, from, to, taken) {
     if (at === to) break;
     if (cost > (seen.get(at) ?? Infinity)) continue;
     for (const [next, w] of links.get(at) || []) {
+      // The target is always allowed - it is a fragment end, and every leg ends
+      // on one.
       if (taken && next !== to && taken.has(next)) continue;
       // And a tunnel is never charged for being near anything, for the same
       // reason: it is below whatever it is near.
@@ -355,7 +383,7 @@ function shortest(links, from, to, taken) {
  * eight or ten fragments and a circuit that is mostly one road, the nearest one
  * is the right one - and where it is not, the reported coverage says so.
  */
-function assemble(runs, links, nodes, project, inTunnel) {
+function assemble(runs, links, nodes, project, inTunnel, target = 0) {
   /**
    * What the lap has used so far: the nodes by id, and their positions on a
    * twenty metre grid so "is this near something we already drove" is a lookup
@@ -471,14 +499,32 @@ function assemble(runs, links, nodes, project, inTunnel) {
     return Math.atan2(pb.x - pa.x, pb.z - pa.z);
   };
 
+  /**
+   * Every fragment is off limits to the connectors before any of them is drawn.
+   *
+   * The rule that a lap does not drive the same road twice was already here and
+   * was doing nothing, because it was applied while assembling and the distances
+   * between fragments were worked out before that - so a connector was free to
+   * run the length of a fragment it had not reached yet, and did. Five of the
+   * eight circuits came back with between thirty-nine and ninety per cent of the
+   * lap lying on top of the rest of it, and a net turn of nought, which is what a
+   * lap driven out and back reads as.
+   *
+   * Seeded with all of them up front, a connector has to go round.
+   */
+  for (const run of runs) for (const id of run.nodes) taken.add(id);
+
   const legs = new Map();
   const legKey = (a, b) => `${a},${b}`;
   for (const a of ends) {
     for (const b of ends) {
-      if (a.run === b.run) continue;
+      // A fragment is allowed to be joined to its own far end. That is a lap of
+      // one piece, closed by driving from where the fragment stops back to where
+      // it starts, and at Miami it is the whole circuit - the other two ways
+      // named after the autodrome are half as much road again as the lap has.
       const key = legKey(a.to, b.from);
-      if (legs.has(key)) continue;
-      const path = shortest(links, a.to, b.from);
+      if (legs.has(key) || a.to === b.from) continue;
+      const path = shortest(links, a.to, b.from, taken);
       if (!path) {
         legs.set(key, null);
         continue;
@@ -510,19 +556,92 @@ function assemble(runs, links, nodes, project, inTunnel) {
     }
   }
 
-  const best = { cost: Infinity, order: null };
-  const walk = (chosen, spent, restLeft) => {
-    if (spent >= best.cost) return;
-    if (!restLeft.length) {
-      const home = legs.get(legKey(chosen[chosen.length - 1].to, chosen[0].from));
-      if (!home) return;
-      const total = spent + home.cost;
-      if (total < best.cost) {
-        best.cost = total;
-        best.order = [...chosen];
-      }
-      return;
+  /**
+   * A fragment that no street reaches still has to be worth something.
+   *
+   * Jeddah's raceway is mapped as its own thing, joined to no public road, so
+   * every search above came back empty, the table was empty, and the ordering
+   * had nothing to compare - it fell through to the angular guess and jumped
+   * between fragments in straight lines. The same is true of any circuit inside
+   * a fence.
+   *
+   * So where there is no route, the gap is crossed straight and charged three
+   * times its length. That is dear enough that a real road is always taken when
+   * there is one, and cheap enough that the search can still tell a good subset
+   * of the fragments from a bad one - which is the whole point of having it.
+   */
+  for (const a of ends) {
+    for (const b of ends) {
+      const key = legKey(a.to, b.from);
+      // A failed search is remembered as null so it is not run twice, which is
+      // why this asks for the value and not for the key: `has` is true for the
+      // very gaps this loop exists to fill.
+      if (legs.get(key) || a.to === b.from) continue;
+      const from = nodes.get(a.to);
+      const to = nodes.get(b.from);
+      if (!from || !to) continue;
+      const gap = dist(project(from.lat, from.lon), project(to.lat, to.lon));
+      legs.set(key, { path: [a.to, b.from], cost: gap * 3, real: gap, jumped: true });
     }
+  }
+
+  /**
+   * The lap may close before every fragment has been used.
+   *
+   * Tags can tell a pit lane from a circuit and cannot do any more than that.
+   * Jeddah arrives as nine ways all called حلبة كورنيش جدة and Miami as ten all
+   * called Miami International Autodrome, and in both cases that is half again
+   * as much road as the lap has - a circuit is mapped with the bits that are
+   * only ever raceway, and around a stadium or a corniche that includes access
+   * roads and older layouts nobody has retagged. There is nothing left in the
+   * tags to choose by.
+   *
+   * So it is chosen by the one measurement we actually have: how long the lap
+   * is. Every closed tour over every subset of the fragments is reachable from
+   * this walk, because the order is free and skipping a fragment is the same as
+   * closing before it is reached, and each one is scored on how near it comes to
+   * the real distance.
+   */
+  const runLen = new Map(runs.map((r) => [r, lengthOf(r.nodes)]));
+  const best = { score: Infinity, cost: Infinity, order: null };
+
+  /**
+   * How wrong a candidate lap is, in metres.
+   *
+   * Length first, because that is the thing we know. The cost is worth a fifth
+   * of itself on top, which does not decide between a lap of the right length
+   * and one of the wrong length but does decide between two of the right length,
+   * and prefers the one that drives less of the town.
+   */
+  const scoreOf = (metres, cost) => (target ? Math.abs(metres - target) : 0) + cost * 0.2;
+
+  const walk = (chosen, spent, metres, restLeft) => {
+    // Both terms only grow from here, so a branch already this far over the
+    // real length cannot come back.
+    if (scoreOf(metres, spent) - (target ? 0 : 0) >= best.score
+      && (!target || metres >= target)) return;
+    if (spent >= best.cost && !target) return;
+
+    // Close it here, whatever is left over - including on the first fragment,
+    // which is a lap of one piece and is what Miami turns out to be.
+    {
+      const tail = chosen[chosen.length - 1];
+      // Already closed: the fragment ends where the first one began, so there
+      // is nothing to drive. This is the ordinary case for a permanent circuit
+      // mapped as one loop, and until it was allowed for, every such lap failed
+      // to close and fell through to the guess.
+      const shut = tail.to === chosen[0].from;
+      const home = shut ? { cost: 0, real: 0 } : legs.get(legKey(tail.to, chosen[0].from));
+      if (home) {
+        const score = scoreOf(metres + (home.real ?? home.cost), spent + home.cost);
+        if (score < best.score) {
+          best.score = score;
+          best.cost = spent + home.cost;
+          best.order = [...chosen];
+        }
+      }
+    }
+
     for (let i = 0; i < restLeft.length; i++) {
       const run = restLeft[i];
       const rest = restLeft.slice(0, i).concat(restLeft.slice(i + 1));
@@ -530,20 +649,106 @@ function assemble(runs, links, nodes, project, inTunnel) {
         const next = ends.find((e) => e.run === run && e.flip === flip);
         const leg = legs.get(legKey(chosen[chosen.length - 1].to, next.from));
         if (!leg) continue;
-        walk([...chosen, next], spent + leg.cost, rest);
+        walk([...chosen, next], spent + leg.cost,
+          metres + (leg.real ?? leg.cost) + runLen.get(run), rest);
       }
     }
+  };
+
+  /**
+   * A first lap, taken greedily, so the search has something to cut against.
+   *
+   * The walk above abandons a branch the moment it costs more than the best lap
+   * found so far, which is worth nothing until a lap has been found - the first
+   * complete order costs a full descent. Handing it a nearest-next lap before it
+   * starts means the very first branch is already being measured against a real
+   * number, and that is what makes eleven fragments affordable where eight was
+   * the ceiling before.
+   */
+  const greedy = () => {
+    let at = ends[0];
+    const chosen = [at];
+    let spent = 0;
+    let metres = runLen.get(ends[0].run);
+    const left = runs.slice(1);
+    while (left.length) {
+      let pick = null;
+      for (let i = 0; i < left.length; i++) {
+        for (const flip of [false, true]) {
+          const to = ends.find((e) => e.run === left[i] && e.flip === flip);
+          const leg = legs.get(legKey(at.to, to.from));
+          if (leg && (!pick || leg.cost < pick.leg.cost)) pick = { i, to, leg };
+        }
+      }
+      if (!pick) break;
+      spent += pick.leg.cost;
+      metres += (pick.leg.real ?? pick.leg.cost) + runLen.get(pick.to.run);
+      at = pick.to;
+      chosen.push(at);
+      left.splice(pick.i, 1);
+    }
+    const home = legs.get(legKey(at.to, ends[0].from));
+    if (!home) return;
+    best.cost = spent + home.cost;
+    best.score = scoreOf(metres + (home.real ?? home.cost), best.cost);
+    best.order = chosen;
   };
 
   // The first fragment is fixed and unflipped: a loop has no beginning, so
   // every order that differs only by where it starts is the same lap, and
   // fixing it divides the search by twelve.
-  const searchable = runs.length <= 8;
-  if (searchable) walk([ends[0]], 0, runs.slice(1));
+  //
+  // Eleven rather than eight because of the greedy lap above: Jeddah, Miami and
+  // Madrid all arrive with nine or more fragments, and all three used to fall
+  // through to the angular guess, which is the one that leaves a lap turning
+  // through nought.
+  const searchable = runs.length <= 11;
+  if (searchable) {
+    greedy();
+    walk([ends[0]], 0, runLen.get(ends[0].run), runs.slice(1));
+  }
 
+  /**
+   * The fallback, for a circuit that arrives in more pieces than can be priced:
+   * the order the fragments sit round the loop, by the angle of each one's
+   * middle about the middle of them all.
+   */
+  const heart = { x: 0, z: 0 };
+  for (const run of runs) for (const id of run.nodes) {
+    const p = nodes.get(id);
+    heart.x += p.x / run.nodes.length / runs.length;
+    heart.z += p.z / run.nodes.length / runs.length;
+  }
+  const angle = (run) => {
+    const p = nodes.get(run.nodes[Math.floor(run.nodes.length / 2)]);
+    return Math.atan2(p.z - heart.z, p.x - heart.x);
+  };
+
+  if (process.env.TSP) {
+    process.stderr.write(`\n  TSP runs=${runs.length} ends=${ends.length} legs=${legs.size}`
+      + ` searchable=${searchable} score=${best.score.toFixed(0)}`
+      + ` order=${best.order ? best.order.length : 'null'}\n`);
+  }
   const order = best.order || [...runs]
     .sort((a, b) => angle(a) - angle(b))
     .map((run) => ends.find((e) => e.run === run && !e.flip));
+
+  /**
+   * The order decided, the legs driven again one at a time.
+   *
+   * The table above prices every leg against the fragments alone, which is what
+   * makes comparing forty-six thousand laps affordable - but it means two legs
+   * are priced without knowing about each other, and with two fragments there is
+   * only one order, so Las Vegas took the same road out and back and eighty-nine
+   * per cent of the lap lay on top of itself.
+   *
+   * So the table chooses the order and then the legs are driven in that order,
+   * each one told where the ones before it went. It costs one more search per
+   * leg, which is nothing next to the table.
+   */
+  const drive = { ids: new Set(taken.ids), tunnel: taken.tunnel, grid: new Map(),
+    key: taken.key, has: taken.has, add: taken.add, near: taken.near };
+  for (const [k, v] of taken.grid) drive.grid.set(k, [...v]);
 
   const lap = [];
   let driven = 0;
@@ -554,17 +759,19 @@ function assemble(runs, links, nodes, project, inTunnel) {
     if (i === 0) lap.push(...ns);
     else lap.push(...ns.slice(1));
     const next = order[(i + 1) % order.length];
-    const leg = legs.get(legKey(here.to, next.from));
-    if (!leg) {
+    let path = shortest(links, here.to, next.from, drive);
+    if (!path) {
+      path = legs.get(legKey(here.to, next.from))?.path;
+      if (path) forced++;
+    }
+    if (!path) {
       forced++;
       continue;
     }
-    // The last leg closes the lap, so its far end is the first node again.
-    const body = i === order.length - 1 ? leg.path.slice(1, -1) : leg.path.slice(1, -1);
-    lap.push(...body);
-    driven += leg.real ?? leg.cost;
+    lap.push(...path.slice(1, -1));
+    for (const id of path) drive.add(id);
+    driven += lengthOf(path);
   }
-  for (const id of lap) taken.add(id);
   return { lap, driven, stranded: 0, forced, searched: searchable };
 }
 
@@ -776,7 +983,8 @@ async function build(key) {
   const inTunnel = tunnelNodes(ways);
   const runs = chain(mine);
   const links = graphOf(streets, nodes, project);
-  const { lap, driven, stranded, forced } = assemble(runs, links, nodes, project, inTunnel);
+  const { lap, driven, stranded, forced } = assemble(runs, links, nodes, project, inTunnel,
+    circuit.metres);
 
   const points = lap
     .filter((n) => nodes.has(n))

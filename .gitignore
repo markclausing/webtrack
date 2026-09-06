@@ -8,3 +8,4 @@ highscores.json
 # standing between a public board and anybody who wants to wipe it.
 worker/.admin-key
 shots
+.osm-cache/

@@ -450,6 +450,31 @@ export const THEMES = {
     trunk: md(94, 74, 50),
     water: md(30, 96, 142),
   },
+  /**
+   * The Las Vegas Strip, which is run at night and is the only circuit here
+   * where that is the whole point rather than a detail. The ground is desert
+   * under asphalt and the buildings do the work; what these colours mostly do is
+   * give the time-of-day pass something dark and warm to pull towards.
+   */
+  strip: {
+    sky: [
+      [0.20, md(32, 40, 88)],
+      [0.34, md(64, 78, 128)],
+      [0.44, md(118, 132, 166)],
+      [0.52, md(176, 176, 178)],
+      [1.00, md(206, 194, 172)],
+    ],
+    fog: md(200, 188, 166),
+    near: md(158, 146, 118),
+    mid: md(144, 132, 108),
+    far: md(138, 128, 110),
+    ridge: md(178, 172, 164),
+    verge: md(150, 142, 112),
+    rock: md(160, 146, 120),
+    tree: md(74, 96, 60),
+    trunk: md(104, 86, 60),
+    water: md(48, 88, 116),
+  },
   coast: {
     sky: [
       [0.16, md(38, 76, 150)],
