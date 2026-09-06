@@ -1192,6 +1192,18 @@ function scatter(nodes, rnd) {
       add(i, { kind: 'post', side: 1, off: 16.4, s: 1, r: 0, align: true, flat: true });
     }
 
+    // Flags at the start line, the same as the real circuits get. The three
+    // drawn ones had none, because everything here is placed by rule and there
+    // was no rule for them.
+    if (i % 8 === 0 && i < 56) {
+      add(i, { kind: 'flag', side: -1, off: 21, s: 1, align: true, flat: true, paint: i / 8 });
+      add(i, { kind: 'flag', side: 1, off: 21, s: 1, align: true, flat: true, paint: 3 + i / 8 });
+    }
+    // And the paddock, past the pit exit where it can be seen.
+    if (i % 6 === 0 && i > 60 && i < 108) {
+      add(i, { kind: 'lorry', side: 1, off: 40, s: 1, align: true, flat: true, paint: i / 6 });
+    }
+
     // Floodlights, alternating sides every seventy metres, leaning out over the
     // track. On a circuit that finishes in the dark they are not decoration -
     // they are the reason the third lap is a lap rather than a corridor.
@@ -1303,7 +1315,7 @@ export const SPREAD = {
   dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
   palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
   pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
-  post: 0.5, mast: 1,
+  post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7,
   // A corner board is six metres wide and a hand's breadth deep, and only the
   // depth is on the ground. Left to the default of three it needed four and a
   // half metres of clearance from the kerb, which is more run-off than
@@ -1528,6 +1540,9 @@ function dress(nodes, real, rnd) {
       flat: mark.lift === undefined,
     };
     if (mark.lift !== undefined) shape.lift = mark.lift;
+    // Which paint a transporter or a flag wears. Left off, they take their
+    // colour from the run of them, so a row is not all one colour.
+    if (mark.paint !== undefined) shape.paint = mark.paint;
     // A stand faces across the track, so it is turned a quarter turn and turned
     // the other quarter on the other side of the road.
     if (mark.kind === 'stand' || mark.kind === 'pit') {
@@ -1537,8 +1552,12 @@ function dress(nodes, real, rnd) {
       add(node(mark.at), shape);
       continue;
     }
+    // Numbered along the run, so a row of transporters is a row of teams and a
+    // line of flags is not one colour repeated twenty times.
+    let nth = 0;
     for (let t = mark.from; t <= mark.to + 1e-9; t += mark.every) {
-      add(node(t), { ...shape });
+      add(node(t), { ...shape, i: nth, paint: shape.paint ?? nth });
+      nth++;
     }
   }
 

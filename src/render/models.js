@@ -244,6 +244,103 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       put.face(rt, tint(C.tyre), [1.1, 0, -1.15, 1.9, 0, -1.15, 1.9, 0.7, -1.15, 1.1, 0.7, -1.15]);
       break;
     }
+    /**
+     * A flag on a pole, and the pole is most of the point.
+     *
+     * A row of these along a straight does something no static prop does: they
+     * are the only thing on the circuit that says which way the wind is going,
+     * and at a hundred metres apart they give a straight a rhythm. The banner
+     * ripples in three panels rather than one, because a flat rectangle that
+     * merely swings reads as a door.
+     */
+    case 'flag': {
+      const pole = tint(shade(C.chrome, 0.9));
+      // A team colour is three colours - body, wing and trim - so the one that
+      // is wanted has to be asked for. Handed the whole entry, `shade` does
+      // arithmetic on an object and every flag on the circuit came out black.
+      const cloth = prop.paint !== undefined
+        ? TEAM_COLOURS[prop.paint % TEAM_COLOURS.length].body
+        : theme.ridge;
+      put.face(rt, pole, [-0.12, 0, 0, 0.12, 0, 0, 0.12, 9, 0, -0.12, 9, 0]);
+      // Three panels, each lagging the one before it, which is what a flag does.
+      const wave = time * 0.05 + (prop.off || 0);
+      for (let k = 0; k < 3; k++) {
+        const x0 = 0.1 + k * 1.15;
+        const x1 = x0 + 1.15;
+        const z0 = Math.sin(wave - k * 0.9) * 0.34 * (k + 0.4);
+        const z1 = Math.sin(wave - (k + 1) * 0.9) * 0.34 * (k + 1.4);
+        // Lit on the near panel and shaded on the far one, so the ripple is
+        // visible as shading and not only as a wobble.
+        put.face(rt, tint(shade(cloth, k === 1 ? 0.82 : 1)),
+          [x0, 6.2, z0, x1, 6.2, z1, x1, 8.9, z1, x0, 8.9, z0]);
+      }
+      break;
+    }
+    /**
+     * A train, on the embankment beside the circuit.
+     *
+     * Four circuits here run alongside a railway that is genuinely there - the
+     * line through the park at Monza, the MRT viaduct at Marina Bay, the metro
+     * above Baku's seafront and the freight line behind Miami - and a train is
+     * the one piece of scenery that moves across the view rather than past it.
+     * It is drawn as a rake of boxes with a window stripe, which at a hundred
+     * metres is a train and at three hundred is still a train.
+     */
+    case 'train': {
+      const livery = prop.paint !== undefined
+        ? TEAM_COLOURS[prop.paint % TEAM_COLOURS.length].trim
+        : shade(C.chrome, 0.86);
+      // The rails it stands on, so it is not floating on the grass.
+      put.face(rt, tint(shade(C.metal, 0.7)),
+        [-30, 0.1, -1.5, 30, 0.1, -1.5, 30, 0.1, 1.5, -30, 0.1, 1.5]);
+      for (let k = 0; k < 3; k++) {
+        const x0 = -28 + k * 19;
+        const x1 = x0 + 17.4;
+        box(rt, tint, livery, x0, x1, 0.9, 4.2, -1.4, 1.4);
+        // The window stripe, both sides, which is what makes it read as
+        // carriages rather than as containers.
+        put.face(rt, tint(C.glass), [x0 + 1, 2.5, 1.45, x1 - 1, 2.5, 1.45,
+          x1 - 1, 3.6, 1.45, x0 + 1, 3.6, 1.45]);
+        put.face(rt, tint(shade(C.glass, 0.7)), [x1 - 1, 2.5, -1.45, x0 + 1, 2.5, -1.45,
+          x0 + 1, 3.6, -1.45, x1 - 1, 3.6, -1.45]);
+        // Bogies.
+        put.face(rt, tint(C.tyre), [x0 + 2, 0.2, -1.45, x0 + 5, 0.2, -1.45,
+          x0 + 5, 0.9, -1.45, x0 + 2, 0.9, -1.45]);
+        put.face(rt, tint(C.tyre), [x1 - 5, 0.2, -1.45, x1 - 2, 0.2, -1.45,
+          x1 - 2, 0.9, -1.45, x1 - 5, 0.9, -1.45]);
+      }
+      break;
+    }
+    /**
+     * A team transporter: cab, trailer, and the team's colour down the side.
+     *
+     * What is actually behind a pit building on a race weekend is forty of
+     * these in a row, and a paddock without them looks like a car park on a
+     * Tuesday.
+     */
+    case 'lorry': {
+      const paint = TEAM_COLOURS[((prop.paint ?? prop.i ?? 0) * 5) % TEAM_COLOURS.length].body;
+      // White, because a transporter is. Left at plain chrome the only face you
+      // ever see from the track is the shaded one, and a row of them read as a
+      // row of dark boxes.
+      const shell = shade(C.chrome, 1.24);
+      box(rt, tint, shell, -6.5, 2.5, 1.1, 4.6, -1.3, 1.3);
+      box(rt, tint, paint, 2.5, 6.5, 0.8, 3.6, -1.25, 1.25);
+      put.face(rt, tint(C.glass), [5.6, 2.4, -1.3, 6.5, 2.4, -1.3, 6.5, 3.5, -1.3, 5.6, 3.5, -1.3]);
+      // The team's colour down both sides of the trailer, deep enough to be the
+      // thing you see rather than a pinstripe.
+      put.face(rt, tint(paint),
+        [-6.2, 2.2, 1.35, 2.2, 2.2, 1.35, 2.2, 4.2, 1.35, -6.2, 4.2, 1.35]);
+      put.face(rt, tint(shade(paint, 0.8)),
+        [2.2, 2.2, -1.35, -6.2, 2.2, -1.35, -6.2, 4.2, -1.35, 2.2, 4.2, -1.35]);
+      for (const wx of [-5.2, -3.4, 4.4]) {
+        put.face(rt, tint(C.tyre), [wx, 0.2, -1.35, wx + 1.4, 0.2, -1.35,
+          wx + 1.4, 1.2, -1.35, wx, 1.2, -1.35]);
+        put.face(rt, tint(C.tyre), [wx + 1.4, 0.2, 1.35, wx, 0.2, 1.35,
+          wx, 1.2, 1.35, wx + 1.4, 1.2, 1.35]);
+      }
+      break;
+    }
     /** A beach pavilion: a flat-roofed box on legs with a deck in front of it. */
     case 'pavilion': {
       box(rt, tint, C.chrome, -5, 5, 1.2, 4.2, -3, 3);

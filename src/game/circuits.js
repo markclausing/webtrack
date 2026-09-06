@@ -341,6 +341,18 @@ export const SURVEYED = {
       { kind: 'rock', side: 0, from: 17, to: 25, chance: 0.05, s: [0.6, 1.1] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 30, s: 1.1 },
       { at: 0.010, kind: 'screen', side: 1, off: 34, s: 1 },
       { from: -0.030, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 27, s: 1.1 },
@@ -401,6 +413,20 @@ export const SURVEYED = {
       { kind: 'pine', side: 0, from: 22, to: 80, chance: 0.1, s: [0.9, 1.5] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
+      // The Milan line runs along the western edge of the park.
+      { at: 0.760, kind: 'train', side: -1, off: 140, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 32, s: 1.2 },
       { at: 0.012, kind: 'screen', side: 1, off: 36, s: 1.1 },
       // The main straight, which at Monza is a grandstand on both sides for
@@ -459,6 +485,21 @@ export const SURVEYED = {
       { kind: 'rock', side: 0, from: 17, to: 24, chance: 0.04, s: [0.5, 1] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
+      // Suzuka has its own railway station - Suzuka Circuit Ino, on the Ise
+      // line, a few hundred metres from the back of the circuit.
+      { at: 0.640, kind: 'train', side: 1, off: 132, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 30, s: 1.15 },
       { at: 0.014, kind: 'screen', side: 1, off: 34, s: 1 },
       { from: -0.034, to: 0.034, every: 0.006, kind: 'stand', side: -1, off: 27, s: 1.2 },
@@ -546,6 +587,22 @@ export const SURVEYED = {
       { kind: 'pine', side: 0, from: 34, to: 90, chance: 0.1, s: [0.6, 1.1] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
+      // The train, which at Zandvoort is not decoration: the line from Haarlem
+      // ends at a station in the dunes beside the circuit, and it is how most of
+      // the crowd arrives.
+      { at: 0.120, kind: 'train', side: -1, off: 118, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 28, s: 1.1 },
       { at: 0.012, kind: 'screen', side: 1, off: 32, s: 1 },
       { from: -0.040, to: 0.040, every: 0.006, kind: 'stand', side: -1, off: 26, s: 1.2 },
@@ -607,6 +664,18 @@ export const SURVEYED = {
       { kind: 'pine', side: 0, from: 60, to: 140, chance: 0.18, s: [0.9, 1.6] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 34, s: 1.3 },
       { at: 0.014, kind: 'screen', side: 1, off: 40, s: 1.1 },
       { from: -0.036, to: 0.036, every: 0.006, kind: 'stand', side: -1, off: 30, s: 1.25 },
@@ -665,6 +734,18 @@ export const SURVEYED = {
       { kind: 'block', side: 0, from: 90, to: 220, chance: 0.5, s: [1.6, 4.2] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 30, s: 1.15 },
       { at: 0.012, kind: 'screen', side: 1, off: 36, s: 1 },
       { from: -0.040, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 27, s: 1.25 },
@@ -714,6 +795,18 @@ export const SURVEYED = {
       { kind: 'crag', side: 0, from: 70, to: 170, chance: 0.05, s: [2, 5] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 30, s: 1.1 },
       { at: 0.012, kind: 'screen', side: 1, off: 36, s: 1 },
       { from: -0.038, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 27, s: 1.2 },
@@ -765,6 +858,18 @@ export const SURVEYED = {
       { kind: 'pine', side: 0, from: 20, to: 70, chance: 0.15, s: [0.9, 1.5] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 24, s: 1.1 },
       { at: 0.012, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.036, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 22, s: 1.2 },
@@ -831,6 +936,18 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 14, to: 34, chance: 0.16, s: [0.9, 1.4] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 22, s: 1 },
       { at: 0.012, kind: 'screen', side: 1, off: 26, s: 0.9 },
       { from: -0.030, to: 0.026, every: 0.007, kind: 'stand', side: -1, off: 20, s: 1.1 },
@@ -872,6 +989,18 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 18, to: 44, chance: 0.22, s: [1.0, 1.6] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.1 },
       { at: 0.014, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.032, to: 0.028, every: 0.007, kind: 'stand', side: -1, off: 22, s: 1.15 },
@@ -907,6 +1036,18 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 22, to: 60, chance: 0.18, s: [0.9, 1.5] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.1 },
       { at: 0.014, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.032, to: 0.028, every: 0.007, kind: 'stand', side: -1, off: 22, s: 1.15 },
@@ -943,6 +1084,18 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 20, to: 50, chance: 0.14, s: [1.0, 1.7] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.1 },
       { at: 0.014, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.032, to: 0.028, every: 0.007, kind: 'stand', side: -1, off: 22, s: 1.15 },
@@ -984,6 +1137,20 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 16, to: 38, chance: 0.2, s: [0.9, 1.4] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
+      // The MRT runs across Marina Bay on a viaduct, in sight of the circuit.
+      { at: 0.420, kind: 'train', side: -1, off: 110, s: 1, lift: 9 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.1 },
       { at: 0.014, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.032, to: 0.028, every: 0.007, kind: 'stand', side: -1, off: 22, s: 1.15 },
@@ -1019,6 +1186,18 @@ export const SURVEYED = {
       { kind: 'oak', side: 0, from: 26, to: 70, chance: 0.16, s: [0.8, 1.4] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.1 },
       { at: 0.014, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.032, to: 0.028, every: 0.007, kind: 'stand', side: -1, off: 22, s: 1.15 },
@@ -1055,6 +1234,18 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 18, to: 40, chance: 0.14, s: [0.9, 1.5] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.1 },
       { at: 0.014, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.032, to: 0.028, every: 0.007, kind: 'stand', side: -1, off: 22, s: 1.15 },
@@ -1092,6 +1283,18 @@ export const SURVEYED = {
       { kind: 'rock', side: 0, from: 22, to: 90, chance: 0.1, s: [0.5, 1.2] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.1 },
       { at: 0.014, kind: 'screen', side: 1, off: 30, s: 1 },
       { from: -0.032, to: 0.028, every: 0.007, kind: 'stand', side: -1, off: 22, s: 1.15 },
@@ -1127,6 +1330,18 @@ export const SURVEYED = {
       { kind: 'rock', side: 0, from: 24, to: 70, chance: 0.08, s: [0.6, 1.3] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 32, s: 1.2 },
       { at: 0.014, kind: 'screen', side: 1, off: 38, s: 1.1 },
       { from: -0.036, to: 0.032, every: 0.006, kind: 'stand', side: -1, off: 29, s: 1.2 },
@@ -1178,6 +1393,18 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 26, to: 60, chance: 0.1, s: [0.9, 1.4] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 32, s: 1.25 },
       { at: 0.014, kind: 'screen', side: 1, off: 38, s: 1.1 },
       { from: -0.038, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 28, s: 1.25 },
@@ -1231,6 +1458,18 @@ export const SURVEYED = {
       { kind: 'block', side: 0, from: 110, to: 230, chance: 0.3, s: [1.8, 4] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 30, s: 1.15 },
       { at: 0.012, kind: 'screen', side: 1, off: 36, s: 1 },
       { from: -0.040, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 27, s: 1.25 },
@@ -1277,6 +1516,18 @@ export const SURVEYED = {
       { kind: 'rock', side: 0, from: 20, to: 50, chance: 0.06, s: [0.5, 1.1] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 28, s: 1.15 },
       { at: 0.012, kind: 'screen', side: 1, off: 34, s: 1 },
       { from: -0.040, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 26, s: 1.25 },
@@ -1328,6 +1579,21 @@ export const SURVEYED = {
       { kind: 'palm', side: 0, from: 20, to: 60, chance: 0.14, s: [0.9, 1.4] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
+      // Albert Park is ringed by tram and rail lines; one of them is always
+      // going past behind the trees.
+      { at: 0.300, kind: 'train', side: 1, off: 126, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 26, s: 1.15 },
       { at: 0.012, kind: 'screen', side: 1, off: 32, s: 1 },
       { from: -0.038, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 24, s: 1.2 },
@@ -1370,6 +1636,18 @@ export const SURVEYED = {
       { kind: 'block', side: 0, from: 120, to: 260, chance: 0.35, s: [2, 5] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 34, s: 1.3 },
       { at: 0.014, kind: 'screen', side: 1, off: 40, s: 1.1 },
       { from: -0.036, to: 0.032, every: 0.006, kind: 'stand', side: -1, off: 29, s: 1.25 },
@@ -1416,6 +1694,18 @@ export const SURVEYED = {
       { kind: 'rock', side: 0, from: 20, to: 60, chance: 0.1, s: [0.5, 1.3] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 30, s: 1.2 },
       { at: 0.012, kind: 'screen', side: 1, off: 36, s: 1 },
       { from: -0.040, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 27, s: 1.3 },
@@ -1462,6 +1752,18 @@ export const SURVEYED = {
       { kind: 'block', side: 0, from: 80, to: 200, chance: 0.4, s: [2, 5] },
     ],
     marks: [
+      // Flags along the pit straight, and the paddock behind it.
+      //
+      // Both are true of every circuit on the calendar and neither was here: a
+      // row of flags is the only thing on a circuit that says which way the wind
+      // is blowing, and what is actually behind a pit building on a race weekend
+      // is forty transporters in a row.
+      { from: -0.026, to: 0.030, every: 0.007, kind: 'flag', side: -1, off: 21, s: 1 },
+      { from: -0.020, to: 0.024, every: 0.008, kind: 'flag', side: 1, off: 21, s: 1 },
+      // Past the pit exit rather than behind the pit building. Behind it is
+      // where a paddock is and is also where the pit building hides it: at
+      // Monza the row was there and not one of them was ever on screen.
+      { from: 0.052, to: 0.094, every: 0.006, kind: 'lorry', side: 1, off: 30, s: 1 },
       { at: 0.000, kind: 'pit', side: 1, off: 32, s: 1.25 },
       { at: 0.014, kind: 'screen', side: 1, off: 38, s: 1.1 },
       { from: -0.036, to: 0.030, every: 0.006, kind: 'stand', side: -1, off: 28, s: 1.2 },
