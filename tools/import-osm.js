@@ -83,7 +83,13 @@ const ELEVATION = [
 const CIRCUITS = {
   monaco: {
     box: [43.72, 7.40, 43.75, 7.44], metres: 3337,
-    name: 'Circuit de Monaco', route: true, clockwise: true,
+    // The map has the lap itself: relation 148194, type=circuit, name Circuit de
+    // Monaco, length 3337 - the same number the calendar prints. Without it only
+    // five hundred metres of this lap carried a raceway tag and the other two
+    // thousand nine hundred were the router's guess through the street graph,
+    // which is how it came to drive Boulevard Albert 1er twice and hang a shelf
+    // of one carriageway over the other.
+    name: 'Circuit de Monaco', relation: 148194, route: true, clockwise: true,
   },
   jeddah: { box: [21.55, 39.05, 21.70, 39.20], metres: 6174, name: 'حلبة كورنيش جدة' },
   miami: {
@@ -201,14 +207,27 @@ out body;
 out skel qt;`;
   const data = await overpass(query);
   const nodes = new Map();
-  const ways = [];
+  /**
+   * By id, and the copy with tags wins.
+   *
+   * The query says `out body; >; out skel qt;`, so every way comes back twice -
+   * once with its tags and once as a skeleton with none - and this was keeping
+   * both. Everything selected by tag quietly dropped the skeletons, because a
+   * skeleton has no `highway=raceway` to match, so it never showed. A relation's
+   * members are taken by id, and there it did: forty-one member ways came back
+   * as eighty-two, chained end to end, and Monaco's own circuit relation
+   * assembled into six thousand seven hundred metres - the lap, exactly twice.
+   */
+  const byId = new Map();
   const relations = [];
   for (const e of data.elements) {
     if (e.type === 'node') nodes.set(e.id, { lat: e.lat, lon: e.lon });
-    else if (e.type === 'way' && e.nodes) ways.push(e);
-    else if (e.type === 'relation' && e.members) relations.push(e);
+    else if (e.type === 'way' && e.nodes) {
+      const had = byId.get(e.id);
+      if (!had || (!had.tags && e.tags)) byId.set(e.id, e);
+    } else if (e.type === 'relation' && e.members) relations.push(e);
   }
-  return { nodes, ways, relations };
+  return { nodes, ways: [...byId.values()], relations };
 }
 
 /**
@@ -1058,10 +1077,11 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
       // And the same floor as above: three fifths of the stated distance is not
       // a short lap, it is a failure.
       + (target && metres < target * 0.6 ? 1e6 : 0);
-    if (!winner || score < winner.score) winner = { score, made };
+    if (process.env.POOLS) process.stderr.write(`      kandidaat: ${metres.toFixed(0)} m, draai ${(round/Math.PI).toFixed(2)}pi, sprong ${made.jumped.toFixed(0)} m, naast zichzelf ${(alongside(made.lap)*100).toFixed(0)}% -> ${score.toFixed(0)}\n`);
+    if (!winner || score < winner.score) winner = { score, made, metres, round };
   }
-  if (!winner) return { ...driveOrder(order), score: Infinity };
-  return { ...winner.made, score: winner.score };
+  if (!winner) return { ...driveOrder(order), score: Infinity, metres: 0, round: 0 };
+  return { ...winner.made, score: winner.score, metres: winner.metres, round: winner.round };
 }
 
 /** The lap in metres, at a fixed spacing, carrying the tunnel flag along. */
@@ -1269,7 +1289,11 @@ async function build(key) {
     // eighty-three per cent of one with a straight line across the Strip.
     const rel = relations.find((r) => r.id === circuit.relation);
     if (rel) {
-      members = new Set(rel.members.filter((m) => m.type === 'way').map((m) => m.ref));
+      // A circuit relation says which of its members is the pit lane, so there
+      // is no need to guess at that one from its name.
+      members = new Set(rel.members
+        .filter((m) => m.type === 'way' && m.role !== 'pit_lane')
+        .map((m) => m.ref));
     }
   }
   const streets = ways.filter((w) => (w.tags || {}).highway);
@@ -1321,24 +1345,61 @@ async function build(key) {
   const links = graphOf(streets, nodes, project);
 
   const pools = [
-    ways.filter((w) => isCircuit(w, circuit, members)),
-    ways.filter((w) => isCircuit(w, circuit, members, true)),
+    { ways: ways.filter((w) => isCircuit(w, circuit, members)), trim: true },
+    { ways: ways.filter((w) => isCircuit(w, circuit, members, true)), trim: true },
   ];
-  if (members) pools.push(ways.filter((w) => isCircuit(w, circuit, null, true)));
+  if (members) {
+    // The relation on its own, and not trimmed.
+    //
+    // Dropping a way that runs alongside one already kept is for a pool picked
+    // out of the tags, where the same street can appear twice as two one-way
+    // carriageways. A relation is the map saying this is the lap: there is
+    // nothing in it to drop, and trimming it broke Monaco's forty ways into
+    // eleven fragments where they chain into one.
+    pools.push({ ways: ways.filter((w) => members.has(w.id)), trim: false, stated: true });
+    pools.push({ ways: ways.filter((w) => isCircuit(w, circuit, null, true)), trim: true });
+  }
 
   let made = null;
   let runs = [];
   const seen = new Set();
   for (const pool of pools) {
-    // Two of the three often come to the same thing; assemble it once.
-    const mark = pool.map((w) => w.id).sort().join(',');
-    if (!pool.length || seen.has(mark)) continue;
+    // Several of them often come to the same thing; assemble it once.
+    const mark = `${pool.trim}:${pool.ways.map((w) => w.id).sort().join(',')}`;
+    if (!pool.ways.length || seen.has(mark)) continue;
     seen.add(mark);
-    const chained = chain(dedupe(pool, nodes, project));
+    const chained = chain(pool.trim ? dedupe(pool.ways, nodes, project) : pool.ways);
     const tried = assemble(chained, links, nodes, project, inTunnel, circuit.metres);
+    if (process.env.POOLS) {
+      process.stderr.write(`\n  pool of ${pool.ways.length} ways -> ${chained.length} fragments,`
+        + ` score ${tried.score.toFixed(0)}, ${tried.lap.length} points,`
+        + ` ${Math.round(tried.driven)} m driven\n`);
+    }
     if (tried.lap.length && (!made || tried.score < made.score)) {
       made = tried;
       runs = chained;
+    }
+    /**
+     * A circuit relation that assembles into a lap is the answer, not a
+     * candidate.
+     *
+     * Everything else here infers the lap from tags and then scores the guesses
+     * against each other. A `type=circuit` relation is not a guess: it is the
+     * map naming the ways that make up the circuit, and Monaco's even carries
+     * `length=3337`, the number the calendar prints. Where it comes out the
+     * right length, closing, and without a long straight line in it, the scoring
+     * has nothing to add - and left to score it, it preferred a lap the router
+     * had guessed through the streets by four per cent on a measure of running
+     * alongside itself, which was the thing that lap was actually doing wrong.
+     */
+    if (pool.stated && tried.lap.length) {
+      const shut = Math.abs(tried.round - Math.PI * 2) < 0.5;
+      if (shut && tried.jumped < 120
+        && Math.abs(tried.metres - circuit.metres) < circuit.metres * 0.06) {
+        made = tried;
+        runs = chained;
+        break;
+      }
     }
   }
   if (!made) throw new Error('no lap could be assembled');

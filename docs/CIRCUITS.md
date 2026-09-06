@@ -293,7 +293,49 @@ clamped thirty metres down is a hillside and is meant to be there. Applied to
 all of them it took the landscape off eight hundred and twenty-nine of Spa's
 eleven hundred nodes.
 
+### The map has the lap: relation 148194
+
+Monaco was the last circuit still being guessed at. Five hundred metres of it
+carried a raceway tag and the other two thousand nine hundred were the router's
+route through the street graph - which is how it came to drive Boulevard Albert
+1er twice, thirteen metres from itself, with the ground and the barriers of one
+carriageway drawn across the other.
+
+OpenStreetMap has the answer and has had it all along: **relation 148194**,
+`type=circuit`, `name=Circuit de Monaco`, `length=3337` - the same number the
+calendar prints. Forty-one member ways, one of them tagged with the role
+`pit_lane` so there is nothing to guess at there either. Read properly it comes
+out at 3.325 km, a hundred per cent, twenty-nine metres of it driven, turning
+through two pi, with no part of the lap within thirty metres of another except
+the hairpin at the Fairmont, where the real circuit doubles back on itself.
+
+  Monaco 14% of the lap beside itself -> 1%     Madrid 3114 m driven -> 0
+  Vegas 104% of its length -> 100%
+
+Three things were in the way of reading it.
+
+**Every way came back twice.** The query says `out body; >; out skel qt;`, so
+each way arrives once with its tags and once as a skeleton with none, and both
+were kept. Anything selected by tag quietly dropped the skeletons - a skeleton
+has no `highway=raceway` to match - so it never showed. A relation's members are
+taken by id, and there it did: forty-one member ways came back as eighty-two,
+chained end to end, and Monaco's relation assembled into 6,763 metres. The lap,
+exactly twice.
+
+**The relation was being trimmed.** Dropping a way that runs alongside one
+already kept is for a pool picked out of tags, where a street can appear twice as
+two one-way carriageways. A relation has nothing in it to drop, and trimming it
+broke forty ways into eleven fragments where they chain into three.
+
+**And it was being scored rather than believed.** Left to compete, a lap the
+router had guessed beat the relation by four per cent on a measure of running
+alongside itself - which was the thing that lap was doing wrong. A relation that
+assembles into a lap of the right length, closing, with no long straight line in
+it, is now taken as the answer.
+
 ### What is still not right
+
+
 
 
 
