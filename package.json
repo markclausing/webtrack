@@ -6,12 +6,13 @@
   "description": "A motorcycle road war in the browser, in software-rendered polygons. Shares its plumbing with websoccer, webtennis, webracing and webtype.",
   "scripts": {
     "start": "node server/board.js",
-    "test": "node tools/simtest.js && node tools/pagecheck.js && node tools/boardtest.js && node tools/touchtest.js && node tools/sync-shared.js",
+    "test": "node tools/simtest.js && node tools/pagecheck.js && node tools/boardtest.js && node tools/touchtest.js && node tools/clearance.js && node tools/sync-shared.js",
     "test:sim": "node tools/simtest.js",
     "test:page": "node tools/pagecheck.js",
     "shots": "node tools/screenshot.js",
     "test:board": "node tools/boardtest.js",
     "test:touch": "node tools/touchtest.js",
+    "test:clear": "node tools/clearance.js",
     "test:shared": "node tools/sync-shared.js"
   }
 }

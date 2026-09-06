@@ -1156,11 +1156,23 @@ function cornerBoards(nodes, add) {
 function scatter(nodes, rnd) {
   const out = nodes.map(() => null);
   const count = nodes.length;
+  const onRoad = roadGuard(nodes);
   const add = (i, prop) => {
     // Rounded, because a prop placed on node 355.5 is stored under a key the
     // renderer never asks for and is simply never drawn - which is a silent
     // failure and took a helicopter going missing to notice.
     const at = ((Math.round(i) % count) + count) % count;
+    // And the same question the measured circuits are asked: is this standing on
+    // some other piece of the road? A generated circuit was assumed not to fold
+    // back on itself tightly enough to matter, and the Pass does, at the hairpin
+    // - where a pine stood two and a half metres inside the tarmac.
+    if (prop.side && prop.off) {
+      const a = nodes[at];
+      const spread = spreadOf(prop);
+      const x = a.x + a.nx * prop.side * prop.off;
+      const z = a.z + a.nz * prop.side * prop.off;
+      if (onRoad(x, z, spread, at)) return;
+    }
     (out[at] ||= []).push(prop);
   };
 
@@ -1286,6 +1298,98 @@ function scatter(nodes, rnd) {
   return out;
 }
 
+/** How far from a piece of road a prop of each kind needs for its own footprint. */
+export const SPREAD = {
+  dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
+  palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
+  pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
+  post: 0.5, mast: 1,
+  // A corner board is six metres wide and a hand's breadth deep, and only the
+  // depth is on the ground. Left to the default of three it needed four and a
+  // half metres of clearance from the kerb, which is more run-off than
+  // Montreal has anywhere - so every board on that circuit was rejected and it
+  // came out with none at all.
+  sign: 1,
+};
+
+/** The ground a prop covers: a measured building carries its own footprint. */
+export function spreadOf(prop) {
+  if (prop.w !== undefined && prop.d !== undefined) return Math.hypot(prop.w, prop.d) / 2;
+  return (SPREAD[prop.kind] ?? 3) * (prop.s || 1);
+}
+
+/**
+ * Is there road here that this prop does not belong to?
+ *
+ * Every node on the circuit, in a grid, and one question asked of it. `mine` is
+ * the node the prop was placed against, and nodes near it in lap distance are
+ * excused. They have to be: a corner board stands just outside its own barrier
+ * on purpose, and at Montreal the barrier is two metres from the kerb rather
+ * than six - so measured against its own node every board on the circuit was
+ * rejected as standing on the road, and Montreal came out with none at all. The
+ * question this is asking has always been whether a prop has landed on some
+ * *other* piece of the circuit.
+ *
+ * Pulled out of `dress` so that `scatter` can ask it too. The three drawn
+ * circuits had no such check at all, on the reasoning that a generated circuit
+ * does not fold back on itself - which it does, at the hairpin on the Pass,
+ * where a pine was standing two and a half metres inside the road.
+ */
+function roadGuard(nodes) {
+  const CELL = 20;
+  const count = nodes.length;
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x);
+    maxX = Math.max(maxX, n.x);
+    minZ = Math.min(minZ, n.z);
+    maxZ = Math.max(maxZ, n.z);
+  }
+  const cols = Math.max(1, Math.ceil((maxX - minX) / CELL) + 1);
+  const rows = Math.max(1, Math.ceil((maxZ - minZ) / CELL) + 1);
+  const grid = new Array(cols * rows);
+  const cellOf = (x, z) => Math.max(0, Math.min(cols - 1, Math.floor((x - minX) / CELL)))
+    + Math.max(0, Math.min(rows - 1, Math.floor((z - minZ) / CELL))) * cols;
+  for (const n of nodes) (grid[cellOf(n.x, n.z)] ||= []).push(n);
+
+  return (x, z, spread, mine) => {
+    const cx = Math.floor((x - minX) / CELL);
+    const cz = Math.floor((z - minZ) / CELL);
+    // As far out as the prop itself reaches, plus the widest road.
+    //
+    // This was two cells - forty metres - on the reasoning that the widest thing
+    // here needs fifteen metres of clearance. That is true of everything placed
+    // by rule and not of a measured building: Losail has one whose footprint
+    // reaches sixty metres, so the road it was standing on lay outside the
+    // search and it was waved through. Eight buildings across the six imported
+    // circuits were sitting on the track for exactly this reason.
+    const reach = Math.ceil((spread + 20) / CELL);
+    for (let dz = -reach; dz <= reach; dz++) {
+      for (let dx = -reach; dx <= reach; dx++) {
+        const col = cx + dx;
+        const row = cz + dz;
+        if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+        const cell = grid[col + row * cols];
+        if (!cell) continue;
+        for (const n of cell) {
+          if (mine !== undefined) {
+            const apart = Math.abs(n.i - mine);
+            if (Math.min(apart, count - apart) <= 2) continue;
+          }
+          const want = n.half + 1.5 + spread;
+          const ax = x - n.x;
+          const az = z - n.z;
+          if (ax * ax + az * az < want * want) return true;
+        }
+      }
+    }
+    return false;
+  };
+}
+
 /**
  * Everything standing beside a circuit that is a real place.
  *
@@ -1330,79 +1434,7 @@ function dress(nodes, real, rnd) {
    * about every prop on the circuit, which is the only way to be sure: the ways
    * a circuit can fold back on itself are not worth enumerating.
    */
-  const CELL = 20;
-  let minX = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxZ = -Infinity;
-  for (const n of nodes) {
-    minX = Math.min(minX, n.x);
-    maxX = Math.max(maxX, n.x);
-    minZ = Math.min(minZ, n.z);
-    maxZ = Math.max(maxZ, n.z);
-  }
-  const cols = Math.max(1, Math.ceil((maxX - minX) / CELL) + 1);
-  const rows = Math.max(1, Math.ceil((maxZ - minZ) / CELL) + 1);
-  const grid = new Array(cols * rows);
-  const cellOf = (x, z) => Math.max(0, Math.min(cols - 1, Math.floor((x - minX) / CELL)))
-    + Math.max(0, Math.min(rows - 1, Math.floor((z - minZ) / CELL))) * cols;
-  for (const n of nodes) (grid[cellOf(n.x, n.z)] ||= []).push(n);
-
-  /** How far from a piece of road this prop's own footprint needs. */
-  const SPREAD = {
-    dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
-    palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
-    pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
-    post: 0.5, mast: 1,
-    // A corner board is six metres wide and a hand's breadth deep, and only the
-    // depth is on the ground. Left to the default of three it needed four and a
-    // half metres of clearance from the kerb, which is more run-off than
-    // Montreal has anywhere - so every board on that circuit was rejected and it
-    // came out with none at all.
-    sign: 1,
-  };
-
-  /**
-   * Is there road here that this prop does not belong to?
-   *
-   * `mine` is the node the prop was placed against, and nodes near it in lap
-   * distance are excused. They have to be: a corner board stands just outside
-   * its own barrier on purpose, and at Montreal the barrier is two metres from
-   * the kerb rather than six - so measured against its own node every board on
-   * the circuit was rejected as standing on the road, and Montreal came out with
-   * none at all. The question this is asking has always been whether a prop has
-   * landed on some *other* piece of the circuit.
-   */
-  const onRoad = (x, z, spread, mine) => {
-    const cx = Math.floor((x - minX) / CELL);
-    const cz = Math.floor((z - minZ) / CELL);
-    // Two cells either way, because the widest thing here needs fifteen metres
-    // of clearance and a cell is twenty.
-    for (let dz = -2; dz <= 2; dz++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        const col = cx + dx;
-        const row = cz + dz;
-        if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
-        const cell = grid[col + row * cols];
-        if (!cell) continue;
-        for (const n of cell) {
-          // Its own node and the two either side, which is the road it was
-          // measured from. Anything wider than that lets a prop back onto the
-          // far side of a hairpin, which is eighty metres away along the lap and
-          // ten across.
-          if (mine !== undefined) {
-            const apart = Math.abs(n.i - mine);
-            if (Math.min(apart, count - apart) <= 2) continue;
-          }
-          const want = n.half + 1.5 + spread;
-          const ax = x - n.x;
-          const az = z - n.z;
-          if (ax * ax + az * az < want * want) return true;
-        }
-      }
-    }
-    return false;
-  };
+  const onRoad = roadGuard(nodes);
 
   /**
    * A prop, put where it was asked for if there is room and pulled in towards
@@ -1421,9 +1453,7 @@ function dress(nodes, real, rnd) {
       // hundred and three metres by a hundred and fifty-one - a whole block,
       // mapped as one building - and checked against the default three metres it
       // sailed through and laid itself across the road.
-      const spread = prop.w !== undefined
-        ? Math.hypot(prop.w, prop.d) / 2
-        : (SPREAD[prop.kind] ?? 3) * (prop.s || 1);
+      const spread = spreadOf(prop);
       let off = prop.off;
       let room = false;
       // Its own place first, then three quarters of the way in, then half - but
