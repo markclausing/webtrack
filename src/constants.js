@@ -72,6 +72,16 @@ export const SLOPE_PULL = 0.5;
  * your corner rather than widening it.
  */
 export const GRIP = 27;
+/**
+ * A kerb is not grass.
+ *
+ * It used to be: anything past the edge of the road counted as verge, so the
+ * strip of red and white the circuit puts there on purpose - a metre and a half
+ * of it - took thirty-eight per cent of the grip away. Riding a kerb is part of
+ * driving a corner, and it should cost a little rather than most of it.
+ */
+export const GRIP_KERB = 0.93;
+export const KERB_TOP = 0.97;
 export const GRIP_VERGE = 0.62;
 export const GRIP_ROUGH = 0.24;
 /** Speed scrubbed off per unit of grip you asked for and did not have. */
@@ -96,6 +106,26 @@ export const OFFROAD_TOP = 0.42;
  * a wheel on the kerb ends your race.
  */
 export const VERGE_TOP = 0.74;
+
+/**
+ * The grass on the tyres, and how long it stays there.
+ *
+ * Putting a wheel in the verge takes speed away while you are in it. What it
+ * does not do, in a game with no tyre model, is cost you anything once you are
+ * back on the tarmac - so the quick way through some corners was to run wide,
+ * lose a tenth in the grass, and rejoin with a car that behaved as though
+ * nothing had happened.
+ *
+ * `DIRT_GRAB` is how fast a wheel off picks it up, `DIRT_SHED` how fast it comes
+ * off again on the road - about three seconds from a full load - and `DIRT_BITE`
+ * how much grip and drive it takes away while it is there.
+ */
+export const DIRT_GRAB = 2.2;
+export const DIRT_SHED = 0.34;
+export const DIRT_BITE = 0.3;
+
+/** How hard the grass itself pulls, on top of the rolling drag. */
+export const VERGE_SCRUB = 5.5;
 
 /**
  * The tow.

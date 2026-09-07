@@ -17,7 +17,8 @@
  */
 
 import {
-  GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS, VERGE,
+  CAR_HALF, GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, ROAD_HALF, RUMBLE, SEG, START_TIME,
+  TICK_RATE, TIERS, VERGE,
 } from '../constants.js';
 import { buildRoute } from './route.js';
 import { tape } from './ghost.js';
@@ -299,8 +300,35 @@ function shortTurn(from, to) {
 export function surfaceOf(x, half = ROAD_HALF) {
   const off = Math.abs(x) - half;
   if (off <= 0) return 'road';
+  if (off <= RUMBLE) return 'kerb';
   if (off <= VERGE) return 'verge';
   return 'rough';
+}
+
+/**
+ * What the outside wheels are on, and how much of the car is out there.
+ *
+ * Measured from the outer wheel rather than from the centre line of the car,
+ * because that is the thing that is actually on the grass. Measured from the
+ * middle, you could hang a wheel and a half over the kerb and the simulation
+ * would say you were on the road - which is exactly what it used to say.
+ *
+ * `outside` is nought with everything on the tarmac and one with the whole car
+ * past the edge, so a wheel in the grass costs a quarter of what all four do
+ * rather than costing nothing until the middle of the car gets there.
+ */
+export function underneath(x, half = ROAD_HALF) {
+  const outer = Math.abs(x) + CAR_HALF;
+  const surf = surfaceOf(outer, half);
+  // Measured from the near edge of whatever it is standing on, not from the
+  // edge of the tarmac. Measured from the tarmac, a car with one wheel just into
+  // the grass came out as three quarters off, because the metre and a half of
+  // kerb in between counted as being off - and a kerb is a thing you drive on.
+  const edge = surf === 'verge' || surf === 'rough' ? half + RUMBLE : half;
+  return {
+    surf,
+    outside: Math.max(0, Math.min(1, (outer - edge) / (CAR_HALF * 2))),
+  };
 }
 
 // --- Putting numbers on the screen -------------------------------------------

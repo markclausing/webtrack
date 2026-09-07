@@ -11,7 +11,9 @@
 // game breaks by drifting rather than by throwing, so drift is what this looks
 // for.
 
-import { BTN, GRIP, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT } from '../src/constants.js';
+import {
+  BTN, CAR_HALF, GRIP, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
+} from '../src/constants.js';
 import { buildRoute, RINGS } from '../src/game/route.js';
 import { SURVEYED_KEYS } from '../src/game/circuits.js';
 
@@ -19,7 +21,7 @@ import { SURVEYED_KEYS } from '../src/game/circuits.js';
 const ALL_ROUTES = ['pass', 'coast', 'grand', ...SURVEYED_KEYS];
 import { driveLine, makeRace, step } from '../src/game/sim.js';
 import {
-  finalTicks, formatTime, nodeAt, nodeStep, ordinal, player,
+  finalTicks, formatTime, kmh, nodeAt, nodeStep, ordinal, player,
 } from '../src/game/state.js';
 import {
   cleanEntry, compare, Highscores, merge, qualifies, sortTable,
@@ -561,6 +563,63 @@ for (const tier of ['easy', 'normal', 'hard']) {
       && Math.abs(climb - w.climb) < 2
       && Math.abs(Math.min(...halves) - w.half[0]) < 0.2
       && Math.abs(Math.max(...halves) - w.half[1]) < 0.2);
+  }
+
+  /**
+   * What is under the wheels, and what it costs.
+   *
+   * Three things have to be true at once and they pull against each other: a
+   * kerb has to be nearly free, because riding one is part of driving a corner;
+   * the grass has to hurt at once rather than a second later; and it has to go
+   * on hurting for a few seconds after you rejoin, or running wide is a line
+   * rather than a mistake.
+   *
+   * Measured by holding the car at a fixed distance from the centre line on a
+   * straight for a second and reading the speed, against the same second driven
+   * on the road.
+   */
+  {
+    const held = (over, seconds = 1) => {
+      const state = makeRace({ route: 'monza', mode: 'qual', tier: 'normal', seed: 7 });
+      for (let t = 0; t < 1500; t++) {
+        step(state, driveLine(state, 0.95));
+        state.clock = 999;
+      }
+      const p = player(state);
+      const node = state.route.nodes[nodeAt(state.route, p.s).i];
+      for (let t = 0; t < 60 * seconds; t++) {
+        p.x = node.half + over;
+        step(state, driveLine(state, 0.95));
+        state.clock = 999;
+      }
+      const out = { surf: p.surf, speed: p.speed, dirt: p.dirt, shed: [] };
+      // And then back on the road, to see how long it takes to come off.
+      for (let t = 0; t < 60 * 5; t++) {
+        player(state).x = 0;
+        step(state, driveLine(state, 0.95));
+        state.clock = 999;
+        if (t % 60 === 59) out.shed.push(player(state).dirt);
+      }
+      return out;
+    };
+
+    const clean = held(-CAR_HALF);
+    const kerb = held(-0.5);
+    const verge = held(1.5);
+    const gone = held(3);
+
+    ok(`a kerb is a kerb and not grass (${kerb.surf}, `
+      + `${kmh(clean.speed) - kmh(kerb.speed)} km/h against the road)`,
+    kerb.surf === 'kerb' && kmh(clean.speed) - kmh(kerb.speed) < 4 && kerb.dirt === 0);
+    ok(`two wheels in the verge costs ${kmh(clean.speed) - kmh(verge.speed)} km/h in a second`,
+      verge.surf === 'verge' && kmh(clean.speed) - kmh(verge.speed) > 15);
+    ok(`and the whole car off costs ${kmh(clean.speed) - kmh(gone.speed)}`,
+      kmh(clean.speed) - kmh(gone.speed) > kmh(clean.speed) - kmh(verge.speed));
+    ok(`the grass stays on the tyres for about three seconds after you rejoin `
+      + `(${verge.shed.map((d) => d.toFixed(2)).join(', ')})`,
+    verge.dirt > 0.5 && verge.shed[0] > 0.2 && verge.shed[2] === 0);
+    ok('and none of it is picked up on the road at all',
+      clean.dirt === 0 && clean.shed.every((d) => d === 0));
   }
 
   // Suzuka is a figure of eight, so it has to have a viaduct on it and the

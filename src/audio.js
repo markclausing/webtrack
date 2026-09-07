@@ -38,6 +38,8 @@ export class Sound {
     this.speech = null;
     this.gear = 1;
     this.squeal = 0;
+    this.kerb = 0;
+    this.grass = 0;
   }
 
   /**
@@ -152,21 +154,71 @@ export class Sound {
     squeal.connect(squealBand).connect(squealGain).connect(this.master);
     squeal.start(now);
 
+    /**
+     * What is under the wheels, which is two sounds and not one.
+     *
+     * A kerb is a row of ridges: a low note switched on and off as they go past,
+     * so the rate follows the speed rather than the note doing it. Under about
+     * fifty km/h it is a knock and at three hundred it is a buzz, which is what
+     * a kerb does.
+     *
+     * Grass is not ridges, it is noise - a loop of it through a band, low and
+     * wide. Both are kept well under the engine: they are meant to tell you where
+     * the car is, not to be the loudest thing on the circuit.
+     */
+    const ridges = ctx.createOscillator();
+    ridges.type = 'triangle';
+    ridges.frequency.value = 62;
+    const kerbGain = ctx.createGain();
+    kerbGain.gain.value = 0;
+    const shake = ctx.createOscillator();
+    shake.type = 'square';
+    shake.frequency.value = 12;
+    const shakeDepth = ctx.createGain();
+    shakeDepth.gain.value = 0;
+    shake.connect(shakeDepth).connect(kerbGain.gain);
+    ridges.connect(kerbGain).connect(this.master);
+    ridges.start(now);
+    shake.start(now);
+
+    // A second of white noise, looped. Made once and left running, because
+    // starting a source costs more than turning one down.
+    const seconds = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const grains = seconds.getChannelData(0);
+    for (let i = 0; i < grains.length; i++) grains[i] = Math.random() * 2 - 1;
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = seconds;
+    hiss.loop = true;
+    const gravelBand = ctx.createBiquadFilter();
+    gravelBand.type = 'bandpass';
+    gravelBand.frequency.value = 1100;
+    gravelBand.Q.value = 0.7;
+    const grassGain = ctx.createGain();
+    grassGain.gain.value = 0;
+    hiss.connect(gravelBand).connect(grassGain).connect(this.master);
+    hiss.start(now);
+
     out.gain.linearRampToValueAtTime(0.26, now + 0.3);
-    this.nodes = { out, filter, body, oscs, top, topGain, squeal, squealGain };
+    this.nodes = {
+      out, filter, body, oscs, top, topGain, squeal, squealGain,
+      ridges, kerbGain, shake, shakeDepth, hiss, gravelBand, grassGain,
+    };
     this.running = true;
     this.gear = 1;
   }
 
   stop() {
     if (!this.nodes) return;
-    const { out, oscs, top, squeal, squealGain } = this.nodes;
+    const { out, oscs, top, squeal, squealGain, ridges, shake, hiss, kerbGain, grassGain }
+      = this.nodes;
     const now = this.ctx.currentTime;
     out.gain.cancelScheduledValues(now);
     out.gain.setValueAtTime(out.gain.value, now);
     out.gain.linearRampToValueAtTime(0, now + 0.25);
     squealGain.gain.setTargetAtTime(0, now, 0.05);
-    for (const node of [...oscs, top, squeal]) node.stop(now + 0.32);
+    kerbGain.gain.setTargetAtTime(0, now, 0.05);
+    grassGain.gain.setTargetAtTime(0, now, 0.05);
+    for (const node of [...oscs, top, squeal, ridges, shake, hiss]) node.stop(now + 0.32);
     this.nodes = null;
     this.running = false;
   }
@@ -209,12 +261,41 @@ export class Sound {
       out.linearRampToValueAtTime(0.26, now + 0.09);
     }
 
-    // Tyres. Sliding squeals; the grass roars.
-    const rough = Math.abs(p.x) > 8.5;
-    const want = p.spinT > 0 ? 0.3 : rough ? 0.16 : Math.min(0.26, p.slide * 0.03);
+    /**
+     * What is under the wheels.
+     *
+     * `surf` is worked out by the simulation from the outside wheel rather than
+     * from the middle of the car, so this is the same answer the grip is using -
+     * which it has to be, or the car slows down for something you cannot hear.
+     * It used to be `Math.abs(p.x) > 8.5`, a number that is the edge of the road
+     * at exactly none of the twenty-seven circuits.
+     */
+    const surf = p.surf || 'road';
+    const off = p.outside || 0;
+    const rough = surf === 'verge' || surf === 'rough';
+    // Nothing at a walking pace: a kerb you are creeping over does not rumble.
+    const rolling = Math.min(1, speed / 22);
+
+    // The kerb. The ridges go past faster the quicker you are going, which is
+    // the whole of what makes it a kerb and not a note.
+    const onKerb = surf === 'kerb' ? Math.max(0.4, off) * rolling : 0;
+    this.kerb += (onKerb - this.kerb) * 0.35;
+    set(this.nodes.kerbGain.gain, this.kerb * 0.05, 0.02);
+    set(this.nodes.shakeDepth.gain, this.kerb * 0.05, 0.02);
+    set(this.nodes.shake.frequency, 7 + speed * 0.42, 0.02);
+
+    // The grass, and gravel beyond it: wider and lower the further out you are.
+    const onGrass = rough ? Math.max(0.45, off) * rolling : 0;
+    this.grass += (onGrass - this.grass) * 0.25;
+    set(this.nodes.grassGain.gain, this.grass * 0.075, 0.03);
+    set(this.nodes.gravelBand.frequency, surf === 'rough' ? 620 : 1150, 0.05);
+
+    // Tyres. Sliding squeals; the grass has its own voice now, so this is only
+    // ever the tyres letting go.
+    const want = p.spinT > 0 ? 0.3 : Math.min(0.26, p.slide * 0.03);
     this.squeal += (want - this.squeal) * 0.2;
     set(this.nodes.squealGain.gain, this.squeal, 0.03);
-    set(this.nodes.squeal.frequency, rough ? 260 : 900 + Math.min(700, p.slide * 40), 0.05);
+    set(this.nodes.squeal.frequency, 900 + Math.min(700, p.slide * 40), 0.05);
 
     // Quieter with a nose full of somebody else's exhaust, which is not physics
     // but is the only cue the tow gets other than the speedometer.

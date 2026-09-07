@@ -27,14 +27,17 @@
 
 import {
   ACCEL, AI_DEFEND, AI_GRIP, AI_LOOK, AI_MIRROR, AI_SPREAD, AI_TOP, BODY_S, BODY_X, BRAKE,
-  BTN, CHECKPOINT_TIME, DRAG, DRIVE, DT, GRAVITY, GRIP, GRIP_ROUGH, GRIP_VERGE, NUDGE,
+  BTN, CHECKPOINT_TIME, DIRT_BITE, DIRT_GRAB, DIRT_SHED, DRAG, DRIVE, DT, GRAVITY, GRIP,
+  GRIP_KERB, GRIP_ROUGH, GRIP_VERGE, KERB_TOP, NUDGE, VERGE_SCRUB,
   NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL, VERGE_TOP,
   SPIN_AT, SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
   TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP, CAR_HALF,
 } from '../constants.js';
 import { at as ghostAt, note, tape, timeAt as ghostTimeAt, whole } from './ghost.js';
 import { nextRandom, randRange } from '../util.js';
-import { makeState, nodeAt, nodeStep, player, racing, surfaceOf } from './state.js';
+import {
+  makeState, nodeAt, nodeStep, player, racing, surfaceOf, underneath,
+} from './state.js';
 
 /**
  * How much of a corner arrives as a push at the outside of it.
@@ -198,13 +201,34 @@ function drive(state, car) {
   const { i, t: along } = nodeAt(state.route, car.s);
   const node = state.route.nodes[i];
   const after = state.route.nodes[(i + 1) % state.route.nodes.length];
-  const surf = surfaceOf(car.x, node.half);
+  // What is under the outside wheels, and how much of the car is out there.
+  const { surf, outside } = underneath(car.x, node.half);
+  car.surf = surf;
+  car.outside = outside;
+
+  /**
+   * Grass on the tyres, which does not come off the moment you rejoin.
+   *
+   * Picked up wherever a wheel is off the tarmac and shed over about three
+   * seconds on it. Without this the quick way through some corners was to run
+   * wide, lose a tenth in the grass and rejoin with a car that behaved as though
+   * nothing had happened; with it, the tenth in the grass is the cheap part.
+   */
+  const dirty = surf === 'verge' || surf === 'rough';
+  car.dirt = Math.max(0, Math.min(1, (car.dirt || 0)
+    + (dirty ? DIRT_GRAB * outside : -DIRT_SHED) * DT));
 
   // What is under the tyres. Off the tarmac you lose most of the grip and a
   // great deal of the speed, which is what makes running wide a mistake rather
-  // than a wider line.
-  const hold = surf === 'road' ? 1 : surf === 'verge' ? GRIP_VERGE : GRIP_ROUGH;
-  const grip = GRIP * state.cfg.grip * hold * (car.gripScale || 1) * dished(node);
+  // than a wider line. A kerb is not grass and costs a fraction of it.
+  const on = surf === 'road' ? 1
+    : surf === 'kerb' ? GRIP_KERB
+      : surf === 'verge' ? GRIP_VERGE : GRIP_ROUGH;
+  // Weighted by how much of the car is off, so one wheel on the grass is a
+  // quarter of the penalty rather than none of it or all of it.
+  const hold = (1 - outside) + on * outside;
+  const grip = GRIP * state.cfg.grip * hold * (car.gripScale || 1) * dished(node)
+    * (1 - DIRT_BITE * car.dirt);
   // And how much of the engine reaches the ground.
   //
   // The verge used to get all of it: thirty-eight per cent less grip, a little
@@ -212,8 +236,12 @@ function drive(state, car) {
   // put three metres of the car on the grass and it cost eight hundredths of a
   // second - so running wide was not a mistake, it was a slightly different
   // line. Grass does not give you full traction. It gives you wheelspin.
-  const pull = (car.power || DRIVE)
-    * (surf === 'rough' ? OFFROAD_TOP : surf === 'verge' ? VERGE_TOP : 1);
+  const top = surf === 'rough' ? OFFROAD_TOP
+    : surf === 'verge' ? VERGE_TOP
+      : surf === 'kerb' ? KERB_TOP : 1;
+  const pull = (car.power || DRIVE) * ((1 - outside) + top * outside)
+    // And whatever is still on the tyres from the last time off.
+    * (1 - DIRT_BITE * car.dirt);
 
   let acc = 0;
   if (ctl.throttle) acc += ACCEL * Math.max(0, 1 - car.speed / Math.max(8, pull));
@@ -223,7 +251,17 @@ function drive(state, car) {
   // Drag, and how much air there is to make it. A fifth less at Mexico City,
   // which is most of why the cars are quicker down the straight there.
   acc -= DRAG * (state.air ?? 1) * car.speed * car.speed * (1 - TOW_DRAG * car.tow);
-  acc -= ROLL_DRAG * (0.04 + (surf === 'road' ? 0 : OFFROAD_DRAG));
+  acc -= ROLL_DRAG * (0.04 + (surf === 'road' || surf === 'kerb' ? 0 : OFFROAD_DRAG * outside));
+  /**
+   * And the grass pulling, which is the bit you feel.
+   *
+   * Rolling drag alone is a square law: it takes almost nothing away at the
+   * speed you are usually doing when you put a wheel off, which is the middle of
+   * a corner. This is a flat retardation for as long as a wheel is out there,
+   * scaled by how much of the car it is, so running wide costs speed at once
+   * rather than costing it a second later.
+   */
+  if (dirty) acc -= VERGE_SCRUB * outside;
   acc -= GRAVITY * SLOPE_PULL * node.slope;
 
   // The corner. `need` is what it is asking for and `grip` is what there is.
