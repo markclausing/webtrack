@@ -632,8 +632,38 @@ export function buildRoute(key) {
     // them all the same ceiling was the first attempt and it was both too
     // strict near the road - the verge became a ditch - and not strict enough
     // far from it, which is where the trouble actually was.
+    /**
+     * Each band answers for its own reach, not for the next one out.
+     *
+     * These were the *next* ring up - the height at fifteen metres was capped by
+     * any road within thirty-two, the height at thirty-two by any road within
+     * ninety-five. That is one ring too generous, and on a circuit stacked as
+     * tightly as Monaco it is the difference between ground and a cliff: at the
+     * start line there is road nine metres below and sixty metres away, which
+     * pulled the band at thirty-two metres down to the harbour, which made it a
+     * cliff, which made the rule below drop it - so the ground stopped fifteen
+     * metres from the kerb and everything past that was a void with buildings
+     * standing in it.
+     *
+     * Capped by its own radius instead, the interpolation out to the next band
+     * still keeps the ground under anything further away.
+     */
     const near2 = RINGS[1] * RINGS[1];
-    const mid2 = RINGS[2] * RINGS[2];
+    // The middle band answers for its own reach and a fifth over: it is the
+    // height at thirty-two metres, so a road ninety-five metres away has no
+    // business pulling it down. It was ninety-five, and at Monaco's start line
+    // there is road nine metres below and sixty metres away - which pulled the
+    // pavement to the harbour, made it a cliff, and had the rule below drop the
+    // band entirely. The ground stopped fifteen metres from the kerb and beyond
+    // it was a void with buildings standing in it.
+    //
+    // Two hundred and twenty-six of Monaco's five hundred and fifty-three nodes
+    // were down to one band. Twenty-six now, and nothing anywhere is drawn over
+    // another part of any lap.
+    const mid2 = (RINGS[1] * 1.2) * (RINGS[1] * 1.2);
+    // The outermost stays generous. Tightened with the other two it let ground
+    // out over the lap itself: thirty-nine metres of it at Spa, where the
+    // circuit drops away and comes back under its own hillside.
     const far2 = RINGS[3] * RINGS[3];
     const AWAY = 40;
     // Flat arrays rather than the ring objects: this is the one loop in the file
