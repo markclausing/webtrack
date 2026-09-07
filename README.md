@@ -43,6 +43,17 @@ what it cost to get them right.
 
 *Monaco's tunnel. The roof is there because the map says a tunnel is.*
 
+And the landmarks are where the landmarks are. On the Strip you pass the Palazzo
+and the Venetian's campanile, Caesars, the Eiffel Tower of Paris Las Vegas and
+the fountains, each one at the point of the lap its own coordinates put it at —
+with the Strat two and a half kilometres north on the skyline and the south end
+of the Strip away in the other direction.
+
+![Down the Strip at night, past the Eiffel Tower](docs/screenshots/vegas.png)
+
+*Las Vegas. The buildings either side are measured; what is invented is which
+one of them is which.*
+
 ## Driving it
 
 **The road is not one surface.** Tarmac, then a metre and a half of kerb, then
@@ -67,8 +78,6 @@ and how hard, and no two of them ever contradict each other.
 straight up and blind over the top; Eau Rouge is twenty-nine metres below the
 start line and Les Combes sixty-seven above it.
 
-![The blind climb to turn one at Austin](docs/screenshots/climb.png)
-
 ## Two ways out
 
 **Qualifying** is one lap on an empty circuit, and there is a ghost on it with
@@ -86,15 +95,13 @@ earned it.
 Whichever you drive, the time goes on a board shared with everybody else who
 plays it.
 
-![A ghost lap on the road ahead, two tenths up](docs/screenshots/ghost.png)
-
-*The ghost, and the difference. It is nought at the line every lap.*
-
 **And the afternoon runs out** whichever you drive. You start in daylight and
-finish under the floodlights, and on the circuits that are run at night — Las
-Vegas, Jeddah, Singapore, Losail — it is dark from the flag.
+finish under the floodlights, and the four circuits that are run at night — Las
+Vegas, Jeddah, Singapore, Losail — are dark from the flag.
 
-![Las Vegas after dark](docs/screenshots/night.png)
+![A ghost lap at the bottom of Eau Rouge](docs/screenshots/ghost.png)
+
+*The ghost a tenth up the road at Spa, and the climb out of Eau Rouge ahead.*
 
 ## Controls
 

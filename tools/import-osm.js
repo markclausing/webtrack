@@ -173,6 +173,7 @@ async function fetchScenery(circuit) {
   const query = `[out:json][timeout:180];
 (
   way["building"](${bbox});
+  relation["building"](${bbox});
   way["natural"="water"](${bbox});
   way["landuse"="harbour"](${bbox});
   way["waterway"="dock"](${bbox});
@@ -184,12 +185,28 @@ out geom;`;
   const water = [];
   const piers = [];
   for (const e of data.elements) {
-    const g = e.geometry;
-    if (!g || g.length < 3) continue;
     const t = e.tags || {};
-    if (t.building) buildings.push({ g, tags: t });
-    else if (t.man_made === 'pier') piers.push({ g, tags: t });
-    else water.push({ g, tags: t });
+    /**
+     * A building is often a relation rather than a way.
+     *
+     * Anything with a courtyard, a light well or a wing round a corner is a
+     * multipolygon, and every large hotel is. Asking only for ways left the
+     * whole of the Las Vegas Strip without a building on it - two fifths of that
+     * lap ran past open desert - while the smaller places either side of the
+     * circuit came through fine, which is exactly the shape of answer that looks
+     * like working.
+     *
+     * The outer ring is the footprint; the holes in it are not worth the
+     * polygons at this distance.
+     */
+    const rings = e.geometry ? [e.geometry]
+      : (e.members || []).filter((m) => m.role !== 'inner' && m.geometry).map((m) => m.geometry);
+    for (const g of rings) {
+      if (!g || g.length < 3) continue;
+      if (t.building) buildings.push({ g, tags: t });
+      else if (t.man_made === 'pier') piers.push({ g, tags: t });
+      else water.push({ g, tags: t });
+    }
   }
   return { buildings, water, piers };
 }
@@ -1572,7 +1589,16 @@ async function build(key) {
     return { at: best.i, off: best.d, side, heading: Math.atan2(b.x - a.x, b.z - a.z) };
   };
 
-  const REACH = 190;
+  /**
+   * How far back a building can stand and still be worth drawing.
+   *
+   * It was a hundred and ninety metres, which is right for a street that has
+   * buildings on it and wrong for the Las Vegas Strip, where the landmarks are
+   * set back behind their own forecourts: the Bellagio is a quarter of a
+   * kilometre from the road, on the far side of its lake, and at a hundred and
+   * ninety the whole of that side of the circuit came through as open desert.
+   */
+  const REACH = 320;
   const buildings = [];
   for (const w of scene.buildings) {
     const b = boxOf(w, project);

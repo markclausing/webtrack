@@ -1188,7 +1188,9 @@ export class Renderer {
      * feelings and it should be obvious which one is on.
      */
     if (qual && state.ghost) {
-      rt.panel(W / 2 - 30, 27, 60, 20, HUD_BACK, HUD_EDGE);
+      // Fifty wide, not sixty: the corner arrow sits twenty-six either side of
+      // the middle, and a sixty wide panel runs into whichever one is showing.
+      rt.panel(W / 2 - 25, 27, 50, 20, HUD_BACK, HUD_EDGE);
       rt.textMid(state.ghost.name || 'GHOST', W / 2, 30, HUD_DIM);
       if (state.delta === null) {
         // The lap out of the grid, which is not the lap the ghost is on. Saying

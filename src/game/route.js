@@ -1421,7 +1421,8 @@ export const SPREAD = {
   dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
   palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
   pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
-  post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7, crane: 6,
+  post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7, crane: 6, fountain: 48,
+  strat: 18, eiffel: 28, campanile: 11, castle: 48, slab: 62, colonnade: 56, marquee: 8,
   // A corner board is six metres wide and a hand's breadth deep, and only the
   // depth is on the ground. Left to the default of three it needed four and a
   // half metres of clearance from the kerb, which is more run-off than
@@ -1697,13 +1698,15 @@ function dress(nodes, real, rnd) {
    * It is the reason a street circuit is worth importing this way at all. Monaco
    * with invented buildings is a road between boxes.
    */
-  for (const b of things(real.buildings, ['at', 'side', 'off', 'w', 'd', 'h', 'r'])) {
+  for (const b of things(real.buildings, ['at', 'side', 'off', 'w', 'd', 'h', 'r'],
+    nodes.length, real.metres)) {
     add(b.at, {
       kind: 'tower', side: b.side, off: b.off, s: 1, r: b.r,
       align: true, fixed: true, w: b.w, d: b.d, h: b.h,
     });
   }
-  for (const b of things(real.boats, ['at', 'side', 'off', 's', 'r'])) {
+  for (const b of things(real.boats, ['at', 'side', 'off', 's', 'r'],
+    nodes.length, real.metres)) {
     add(b.at, {
       kind: 'boat', side: b.side, off: b.off, s: b.s, r: b.r, align: true, fixed: true,
     });

@@ -312,6 +312,169 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       break;
     }
     /**
+     * The Strip, as silhouettes.
+     *
+     * Seven of them, and every one is a shape rather than a building: at three
+     * hundred and thirty km/h with fog on everything past a kilometre, what you
+     * recognise is an outline. A tower with a pod on it is the Strat and nothing
+     * else is; a lattice pyramid is the Eiffel; a square campanile is the
+     * Venetian; turrets are Excalibur.
+     *
+     * Placed where they are. The four that stand beside the circuit - Palazzo,
+     * Venetian, Caesars and the Eiffel - are within two hundred metres of the
+     * road, and the four that do not are on the skyline in the direction they
+     * are actually in: the Strat two and a half kilometres north, MGM, Excalibur
+     * and Mandalay Bay away down the Strip to the south.
+     */
+    case 'strat': {
+      const pale = shade(C.chrome, 1.05);
+      // The shaft, three sided and tapering, which is what makes it read from
+      // any angle without being a box.
+      box(rt, tint, pale, -9, 9, 0, 240, -9, 9);
+      box(rt, tint, shade(pale, 0.9), -6, 6, 240, 268, -6, 6);
+      // The pod.
+      box(rt, tint, shade(C.chrome, 1.15), -17, 17, 268, 292, -17, 17);
+      put.face(rt, tint(C.glass), [-16, 274, -17.5, 16, 274, -17.5, 16, 286, -17.5, -16, 286, -17.5]);
+      put.face(rt, tint(C.glass), [16, 274, 17.5, -16, 274, 17.5, -16, 286, 17.5, 16, 286, 17.5]);
+      // And the mast on top, which is most of the height.
+      put.face(rt, tint(pale), [-2, 292, 0, 2, 292, 0, 0.6, 350, 0, -0.6, 350, 0]);
+      put.face(rt, tint(shade(pale, 0.8)), [0, 292, -2, 0, 292, 2, 0, 350, 0.6, 0, 350, -0.6]);
+      break;
+    }
+    /** Paris: the tower, at half of the one in Paris, which is what it is. */
+    case 'eiffel': {
+      const iron = shade(theme.ridge, 0.7);
+      const dark = tint(shade(iron, 0.72));
+      const lit = tint(iron);
+      // Four legs meeting twice, drawn as two crossed silhouettes so it is a
+      // lattice from every side and eight faces in total.
+      for (const turn of [0, Math.PI / 2]) {
+        const c = Math.cos(turn);
+        const sn = Math.sin(turn);
+        const at = (x, y) => [x * c, y, -x * sn];
+        const shade2 = turn ? dark : lit;
+        // Legs to the first platform, then the shaft, then the spire.
+        put.face(rt, shade2, [...at(-26, 0), ...at(-16, 0), ...at(-6, 62), ...at(-9, 62)]);
+        put.face(rt, shade2, [...at(16, 0), ...at(26, 0), ...at(9, 62), ...at(6, 62)]);
+        put.face(rt, shade2, [...at(-9, 62), ...at(9, 62), ...at(4, 128), ...at(-4, 128)]);
+        put.face(rt, shade2, [...at(-3, 128), ...at(3, 128), ...at(0.8, 165), ...at(-0.8, 165)]);
+      }
+      // The two platforms, which are the thing that says Eiffel rather than
+      // pylon.
+      put.face(rt, lit, [-12, 62, -12, 12, 62, -12, 12, 62, 12, -12, 62, 12]);
+      put.face(rt, lit, [-6, 128, -6, 6, 128, -6, 6, 128, 6, -6, 128, 6]);
+      break;
+    }
+    /** The Venetian's campanile: a square tower with a pyramid on it. */
+    case 'campanile': {
+      const brick = shade(C.board, 0.62);
+      box(rt, tint, brick, -8, 8, 0, 76, -8, 8);
+      box(rt, tint, shade(brick, 1.1), -10, 10, 76, 88, -10, 10);
+      // The roof, four faces to a point.
+      for (const [ax, az] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        put.face(rt, tint(shade(C.chrome, ax || az ? 0.95 : 1)),
+          [ax * 10 - az * 10, 88, az * 10 + ax * 10, ax * 10 + az * 10, 88, az * 10 - ax * 10,
+            0, 112, 0]);
+      }
+      break;
+    }
+    /** Excalibur: white walls and turrets with coloured cones on them. */
+    case 'castle': {
+      const wall = shade(C.chrome, 1.12);
+      box(rt, tint, wall, -46, 46, 0, 34, -20, 20);
+      for (const [tx, high, cone] of [[-46, 52, 0xffd23b2e], [-16, 44, 0xff2f6fd0],
+        [16, 44, 0xff2f6fd0], [46, 52, 0xffd23b2e]]) {
+        box(rt, tint, wall, tx - 8, tx + 8, 0, high, -8, 8);
+        for (const [ax, az] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          put.face(rt, tint(shade(cone, ax > 0 || az > 0 ? 1 : 0.82)),
+            [tx + ax * 9 - az * 9, high, az * 9 + ax * 9, tx + ax * 9 + az * 9, high,
+              az * 9 - ax * 9, tx, high + 22, 0]);
+        }
+      }
+      break;
+    }
+    /** Mandalay and the MGM: one big coloured slab, which is what they are. */
+    case 'slab': {
+      const paint = prop.paint !== undefined
+        ? TEAM_COLOURS[prop.paint % TEAM_COLOURS.length].body
+        : shade(C.board, 0.9);
+      const high = 60 + (prop.s || 1) * 60;
+      box(rt, tint, paint, -60, 60, 0, high, -26, 26);
+      // Window bands, which is the only thing that gives a slab a size.
+      for (let y = 12; y < high - 8; y += 14) {
+        put.face(rt, tint(C.glass), [-56, y, -26.5, 56, y, -26.5, 56, y + 6, -26.5, -56, y + 6, -26.5]);
+      }
+      break;
+    }
+    /** Caesars: low, wide, and colonnaded. */
+    case 'colonnade': {
+      const stone = shade(C.chrome, 1.16);
+      box(rt, tint, stone, -54, 54, 0, 40, -22, 22);
+      box(rt, tint, shade(stone, 0.94), -30, 30, 40, 58, -18, 18);
+      for (let k = -5; k <= 5; k++) {
+        put.face(rt, tint(shade(stone, 0.86)),
+          [k * 9 - 2, 0, -23, k * 9 + 2, 0, -23, k * 9 + 2, 30, -23, k * 9 - 2, 30, -23]);
+      }
+      put.face(rt, tint(stone), [-56, 30, -24, 56, 30, -24, 56, 36, -24, -56, 36, -24]);
+      break;
+    }
+    /**
+     * The sign out front, which on this road is half the point of the place.
+     *
+     * A pylon and a lit board, in the hotel's own colour. They are the thing you
+     * actually read at speed - the buildings are behind their own forecourts and
+     * the signs are on the pavement.
+     */
+    case 'marquee': {
+      const paint = prop.paint !== undefined
+        ? TEAM_COLOURS[prop.paint % TEAM_COLOURS.length].body
+        : C.board;
+      const post = tint(shade(C.metal, 0.8));
+      put.face(rt, post, [-1.6, 0, 0, 1.6, 0, 0, 1.6, 15, 0, -1.6, 15, 0]);
+      box(rt, tint, paint, -7, 7, 15, 33, -1.2, 1.2);
+      // A bright panel on the face, so it reads as lit rather than as a wall.
+      put.face(rt, tint(shade(C.chrome, 1.25)),
+        [-5.6, 18, -1.4, 5.6, 18, -1.4, 5.6, 30, -1.4, -5.6, 30, -1.4]);
+      put.face(rt, tint(shade(paint, 1.2)),
+        [5.6, 18, 1.4, -5.6, 18, 1.4, -5.6, 30, 1.4, 5.6, 30, 1.4]);
+      break;
+    }
+    /**
+     * The fountains, which are the one thing on the Strip everybody knows.
+     *
+     * A dark pool and a fan of jets, and the jets are the whole of it: they
+     * climb and fall on their own timings, so no two of them are at the same
+     * height and the shape is never the same twice. Drawn with the stipple, so
+     * they are spray rather than columns and the hotel behind shows through
+     * them.
+     *
+     * The lake is measured - it is in the map, and the Bellagio's own footprint
+     * is one of the buildings standing beside this circuit. What is invented is
+     * the water going up.
+     */
+    case 'fountain': {
+      const pool = tint(shade(theme.water, 0.9));
+      const lit = tint(shade(theme.water, 1.2));
+      // The basin, long across the view because that is how it is seen.
+      put.face(rt, pool, [-46, 0.2, -22, 46, 0.2, -22, 46, 0.2, 22, -46, 0.2, 22]);
+      put.face(rt, lit, [-46, 0.25, -4, 46, 0.25, -4, 46, 0.25, 4, -46, 0.25, 4]);
+      const white = tint(shade(C.chrome, 1.3));
+      rt.stipple = 1;
+      for (let k = 0; k < 11; k++) {
+        const at = -40 + k * 8;
+        // Each jet on its own clock, so the fan breathes rather than pulses.
+        const beat = Math.sin(time * 0.021 + k * 1.7) * 0.5 + 0.5;
+        const high = 6 + beat * beat * 34 * (1 - Math.abs(k - 5) / 9);
+        const wide = 0.8 + beat * 1.4;
+        put.face(rt, white, [at - wide, 0.3, 0, at + wide, 0.3, 0,
+          at + wide * 0.35, high, 0, at - wide * 0.35, high, 0]);
+        put.face(rt, white, [at - wide, 0.3, -wide, at - wide, 0.3, wide,
+          at - wide * 0.35, high, wide * 0.35, at - wide * 0.35, high, -wide * 0.35]);
+      }
+      rt.stipple = 0;
+      break;
+    }
+    /**
      * A recovery crane, behind the barrier on the outside of a corner.
      *
      * There is one of these at every place an F1 car is likely to end up, and

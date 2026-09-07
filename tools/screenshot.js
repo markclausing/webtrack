@@ -146,14 +146,40 @@ if (route === 'docs') {
      * Austin's turn one, nine per cent up turning into a drop, arriving at a
      * corner you cannot see into.
      */
+    /**
+     * The Strip, past the fountains.
+     *
+     * At night, because Las Vegas is run at night, and looking at them rather
+     * than at the road: the one landmark on this circuit everybody recognises
+     * without being told what it is.
+     */
+    ['vegas', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.812 && at < s.route.metres * 0.826
+        && player(s).speed > 45;
+    }, 'vegas', 'gp', 0.95, true],
     ['climb', (s) => {
       const at = player(s).s % s.route.metres;
       return at > s.route.metres * 0.098 && at < s.route.metres * 0.116 && player(s).speed > 45;
     }, 'austin', 'gp'],
     ['night', (s) => s.light > 0.88 && player(s).speed > 55, 'vegas', 'gp', 0.95, true],
-    ['ghost', (s) => s.ghost && s.delta !== null && player(s).lap >= 1
-      && s.ghostAt && !s.ghostAt.done && s.ghostCar.s - player(s).s > 12
-      && s.ghostCar.s - player(s).s < 60, 'monza', 'qual'],
+    /**
+     * The ghost, at the bottom of Eau Rouge with the climb ahead.
+     *
+     * Two things had to be right about this one. The car has to be off the
+     * centre line - on a straight it sits on the white line and straddles it,
+     * which looks like a mistake rather than a racing line. And the road has to
+     * be doing something: this is the one place in the game where you can see a
+     * descent turn into a climb from inside it.
+     */
+    ['ghost', (s) => {
+      const at = player(s).s % s.route.metres;
+      return s.ghost && s.delta !== null && player(s).lap >= 1
+        && s.ghostAt && !s.ghostAt.done
+        && Math.abs(player(s).x) > 1.2
+        && at > s.route.metres * 0.100 && at < s.route.metres * 0.175
+        && s.ghostCar.s - player(s).s > 5 && s.ghostCar.s - player(s).s < 140;
+    }, 'spa', 'qual'],
     ['grid', (s) => s.lights > 20 && s.lights < 60, 'pass', 'gp'],
     ['pass', (s) => player(s).s > 1800 && player(s).speed > 78, 'pass', 'gp'],
     ['battle', (s) => s.cars.some((c) => c !== player(s) && Math.abs(c.s - player(s).s) < 14
