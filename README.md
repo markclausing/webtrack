@@ -11,7 +11,9 @@ No dependencies, no build step, no WebGL — HTML, CSS and JavaScript exactly as
 the browser receives them, and a polygon renderer written by hand into a
 `Uint32Array` at 640 × 448.
 
-![Three cars into a mountain corner](docs/screenshots/battle.png)
+![The last corner at Zandvoort, eighteen degrees of banking](docs/screenshots/banked.png)
+
+*Zandvoort's last corner: eighteen degrees of dish, and the car leaning into it.*
 
 ## The circuits
 

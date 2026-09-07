@@ -119,6 +119,20 @@ if (route === 'docs') {
      * of those things at once. `ghost` is a qualifying lap with the recording of
      * a quicker one on the road beside it.
      */
+    /**
+     * The middle of a banked corner, which is the one thing in this game you
+     * cannot photograph anywhere else.
+     *
+     * Zandvoort's last corner is eighteen degrees of dish, and the deepest of it
+     * is at ninety per cent of the lap. Caught mid-corner rather than on the way
+     * in: what makes it read is the road tilting under the car and the car
+     * leaning with it, and on the entry the road is still flat.
+     */
+    ['banked', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.897 && at < s.route.metres * 0.918
+        && player(s).speed > 50;
+    }, 'zandvoort', 'gp'],
     ['street', (s) => {
       const at = s.route.nodes[nodeAt(s.route, player(s).s).i];
       return at.tunnel > 0.4 && at.tunnel < 0.9 && player(s).speed > 55;
