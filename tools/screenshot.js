@@ -94,7 +94,7 @@ if (process.env.GHOST) {
 const renderer = new Renderer(fakeCanvas());
 
 /** The game's own reference driver, so a screenshot is of the game driving. */
-const hand = (world) => driveLine(world, 0.95);
+const hand = (world) => driveLine(world, Number(process.env.PUSH) || 0.95);
 
 mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
 

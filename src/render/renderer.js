@@ -1047,6 +1047,23 @@ export class Renderer {
       const [px, py] = place(at.x, at.z);
       rt.rect(x + px - 1, y + py - 1, 2, 2, TEAM_COLOURS[car.team % 8].body);
     }
+    /**
+     * And the lap being raced against, as a hollow square.
+     *
+     * Qualifying is otherwise an empty map with one blinking dot on it, and the
+     * ghost is the only other thing out there - whether it is round the next
+     * corner or half a lap behind is exactly what a map is for. Hollow rather
+     * than filled, and in its own pale colour, so it is never read as one of the
+     * seven cars that can be hit: it is drawn the same way in both places, solid
+     * nowhere.
+     */
+    if (state.ghost && state.ghostAt && !state.ghostAt.done) {
+      const g = worldOf(state.route, state.ghostCar.s, state.ghostCar.x);
+      const [gx, gy] = place(g.x, g.z);
+      rt.rect(x + gx - 1, y + gy - 1, 3, 3, HUD_TEXT);
+      rt.rect(x + gx, y + gy, 1, 1, HUD_BACK);
+    }
+
     const me = worldOf(state.route, p.s, p.x);
     const [px, py] = place(me.x, me.z);
     // Blinking, because on a map this size a stationary dot among seven others
