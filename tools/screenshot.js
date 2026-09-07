@@ -155,8 +155,13 @@ if (route === 'docs') {
      */
     ['vegas', (s) => {
       const at = player(s).s % s.route.metres;
-      return at > s.route.metres * 0.812 && at < s.route.metres * 0.826
-        && player(s).speed > 45;
+      // Off the centre line, like the Spa one: a car sitting on the road marking
+      // and straddling it reads as a mistake in a still, whatever it is doing at
+      // three hundred.
+      // And not in the two seconds after a lap, when the panel that reports it
+      // sits in the middle of the picture - which is over the tower.
+      return at > s.route.metres * 0.796 && at < s.route.metres * 0.836
+        && Math.abs(player(s).x) > 1.6 && player(s).speed > 45 && s.lapNote === 0;
     }, 'vegas', 'gp', 0.95, true],
     ['climb', (s) => {
       const at = player(s).s % s.route.metres;
@@ -177,9 +182,12 @@ if (route === 'docs') {
       return s.ghost && s.delta !== null && player(s).lap >= 1
         && s.ghostAt && !s.ghostAt.done
         && Math.abs(player(s).x) > 1.2
-        && at > s.route.metres * 0.100 && at < s.route.metres * 0.175
-        && s.ghostCar.s - player(s).s > 5 && s.ghostCar.s - player(s).s < 140;
-    }, 'spa', 'qual'],
+        && at > s.route.metres * 0.090 && at < s.route.metres * 0.190
+        // Up the road rather than on your gearbox - and not much further than
+        // this is available, because the ghost sets off level at the line and
+        // Eau Rouge is twenty seconds later.
+        && s.ghostCar.s - player(s).s > 16 && s.ghostCar.s - player(s).s < 30;
+    }, 'spa', 'qual', 0.90],
     ['grid', (s) => s.lights > 20 && s.lights < 60, 'pass', 'gp'],
     ['pass', (s) => player(s).s > 1800 && player(s).speed > 78, 'pass', 'gp'],
     ['battle', (s) => s.cars.some((c) => c !== player(s) && Math.abs(c.s - player(s).s) < 14

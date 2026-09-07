@@ -91,6 +91,17 @@ export function step(state, mask = 0) {
   }
 
   state.elapsed++;
+  /**
+   * The two panels that are meant to be up for two seconds.
+   *
+   * `lapNote` and `checkNote` were set to a hundred and thirty and never counted
+   * down by anybody: the renderer draws them while they are above nought, so the
+   * lap you had just done stayed in the middle of the screen for the rest of the
+   * race. Two seconds is what the comment beside them says and is what they now
+   * get.
+   */
+  if (state.lapNote > 0) state.lapNote--;
+  if (state.checkNote > 0) state.checkNote--;
   state.clock -= DT;
   // The afternoon going, if it is going at all. Measured on distance rather
   // than on the clock, so a race that has gone badly gets dark at the same place
