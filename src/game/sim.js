@@ -802,8 +802,25 @@ function haunt(state) {
   const ghost = state.ghost;
   if (!ghost) return;
   const p = player(state);
-  if (p.lap < 0) {
+  /**
+   * Nothing on the lap out of the grid.
+   *
+   * That lap starts from a standstill behind the line and the recording is a
+   * flying lap - two and a half seconds apart at Monza before anybody has done
+   * anything wrong. The ghost is over the horizon inside ten seconds and the
+   * difference counts up to a number that means nothing, which is what the first
+   * lap of every session looked like.
+   *
+   * From the second lap on you cross the line at speed and so did the recording,
+   * and the two set off level. That is the lap the ghost is for, and it is the
+   * lap the quick times are set on for the same reason.
+   */
+  if (p.lap < 1 || p.done) {
+    // And nothing after the flag either: the lap is over, there is nothing left
+    // to be up or down on, and a ghost left standing on the road at the last
+    // place it reached is a car that is not there.
     state.delta = null;
+    state.ghostAt = null;
     return;
   }
   const total = state.route.metres;

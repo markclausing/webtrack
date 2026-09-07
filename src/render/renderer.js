@@ -1189,13 +1189,20 @@ export class Renderer {
      * from yesterday and racing whoever is top of the board are different
      * feelings and it should be obvious which one is on.
      */
-    if (qual && state.ghost && state.delta !== null) {
-      const behind = state.delta > 0;
-      const gap = Math.abs(state.delta) / 60;
+    if (qual && state.ghost) {
       rt.panel(W / 2 - 30, 27, 60, 20, HUD_BACK, HUD_EDGE);
       rt.textMid(state.ghost.name || 'GHOST', W / 2, 30, HUD_DIM);
-      rt.textMid(`${behind ? '+' : '-'}${gap.toFixed(2)}`, W / 2, 38,
-        gap < 0.005 ? HUD_TEXT : behind ? BAD : GOOD);
+      if (state.delta === null) {
+        // The lap out of the grid, which is not the lap the ghost is on. Saying
+        // so is better than showing a difference that only means you started
+        // from a standstill and it did not.
+        rt.textMid('OUT LAP', W / 2, 38, HUD_DIM);
+      } else {
+        const behind = state.delta > 0;
+        const gap = Math.abs(state.delta) / 60;
+        rt.textMid(`${behind ? '+' : '-'}${gap.toFixed(2)}`, W / 2, 38,
+          gap < 0.005 ? HUD_TEXT : behind ? BAD : GOOD);
+      }
     }
 
     // Speed and gear, bottom right, because it is where a right hand is already
