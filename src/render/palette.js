@@ -440,11 +440,23 @@ export const THEMES = {
       [1.00, md(226, 220, 202)],
     ],
     fog: md(220, 214, 198),
-    near: md(120, 132, 78),
-    mid: md(106, 116, 68),
-    far: md(132, 128, 104),
+    /**
+     * Monaco has no grass.
+     *
+     * These were the greens every other circuit's verges are, and beside this
+     * road there is no verge: there is pavement, then a quay, then a wall. The
+     * lap passes within fifty metres of itself four times, and what you saw in
+     * the gap between the two roads was a lawn - on a circuit whose whole
+     * character is that there is nothing soft anywhere on it.
+     *
+     * Stone, warm, and paler close in than far out, which is what a pavement in
+     * that light does. The palms and the harbour keep their own colours.
+     */
+    near: md(178, 170, 154),
+    mid: md(158, 150, 136),
+    far: md(140, 134, 120),
     ridge: md(206, 196, 176),
-    verge: md(140, 138, 84),
+    verge: md(190, 182, 166),
     rock: md(176, 164, 138),
     tree: md(52, 90, 50),
     trunk: md(94, 74, 50),
