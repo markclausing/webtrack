@@ -922,10 +922,41 @@ export class Renderer {
     }
   }
 
+  /**
+   * A lap somebody already drove, drawn as a shape rather than as a car.
+   *
+   * There is no alpha in a renderer that writes whole pixels into a Uint32Array,
+   * so a translucent car is not on offer. A flat one is: every colour on it goes
+   * to the same pale blue, which reads as a silhouette rather than as a rival,
+   * and there is never a moment where you look at it and think it is somebody
+   * you can hit.
+   */
+  phantom(state, theme, p) {
+    if (!state.ghost || !state.ghostAt || state.ghostAt.done) return;
+    const car = state.ghostCar;
+    const away = car.s - p.s;
+    if (away < -60 || away > 780) return;
+    const at = this.at(state, car);
+    if (Math.hypot(at.x - this.cam.x, at.z - this.cam.z) < 5.4) return;
+    // No shadow: a recording does not stand between the sun and the road.
+    const pale = mix(C.chrome, theme.sky, 0.45);
+    const tint = (colour) => mix(pale, theme.fog, fog(Math.abs(away)));
+    // Every other pixel, and no depth written - the same trick the tyre smoke
+    // uses. A checkerboard at this resolution is what a sixteen-bit machine had
+    // instead of alpha, and it is still the right answer: the road shows through
+    // it, a real car in front of it covers it, and nobody ever mistakes it for
+    // something they can touch.
+    this.rt.stipple = 1;
+    const pitch = -Math.atan(at.slope);
+    drawRacer(this.rt, car, at.x, at.y, at.z, at.a, tint, this.lightAt, pitch);
+    this.rt.stipple = 0;
+  }
+
   /** The other seven, and you. */
   cars(state, theme, p) {
     const rt = this.rt;
     const route = state.route;
+    this.phantom(state, theme, p);
     for (const car of state.cars) {
       const away = car.s - p.s;
       if (away < -60 || away > 780) continue;
@@ -1113,6 +1144,24 @@ export class Renderer {
     } else {
       rt.text(ordinal(state.place), W - 80, 6, state.place <= 3 ? WARN : HUD_TEXT, 2);
       rt.text(`OF ${state.field}`, W - 40, 12, HUD_DIM);
+    }
+
+    /**
+     * How far up or down you are on the lap you are chasing, under the clock.
+     *
+     * Green for ahead and red for behind, because at two hundred and eighty
+     * nobody reads a sign - they read a colour, and then the number if there is
+     * time. Whose lap it is goes above it in small letters: racing your own best
+     * from yesterday and racing whoever is top of the board are different
+     * feelings and it should be obvious which one is on.
+     */
+    if (qual && state.ghost && state.delta !== null) {
+      const behind = state.delta > 0;
+      const gap = Math.abs(state.delta) / 60;
+      rt.panel(W / 2 - 30, 27, 60, 20, HUD_BACK, HUD_EDGE);
+      rt.textMid(state.ghost.name || 'GHOST', W / 2, 30, HUD_DIM);
+      rt.textMid(`${behind ? '+' : '-'}${gap.toFixed(2)}`, W / 2, 38,
+        gap < 0.005 ? HUD_TEXT : behind ? BAD : GOOD);
     }
 
     // Speed and gear, bottom right, because it is where a right hand is already

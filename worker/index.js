@@ -13,10 +13,14 @@
  * See README.md next door for the two commands that put it live.
  */
 
+import { cleanGhost } from '../src/game/ghost.js';
 import { merge, since, without } from '../src/highscores.js';
 import { announcement, newRows } from './announce.js';
 
 const MAX_BODY = 64 * 1024;
+/** A lap of Spa is five kilobytes; twice the longest is room enough. */
+const MAX_GHOST = 24 * 1024;
+
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -47,6 +51,7 @@ export class Board {
     if (url.pathname === '/highscores/reset') return this.reset(request);
     if (url.pathname === '/highscores/remove') return this.remove(request);
     if (url.pathname === '/highscores') return this.scores(request);
+    if (url.pathname === '/ghost') return this.ghost(request, url);
     return new Response('WebTrack score board. Point the game at this address.', {
       headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS },
     });
@@ -93,6 +98,54 @@ export class Board {
       this.shout(newRows(before, after));
     }
     return json({ board: after });
+  }
+
+  /**
+   * The quickest recorded lap on one list, to race against.
+   *
+   * Kept apart from the board and one per list, which is the whole design. A
+   * recorded lap is two to five kilobytes and a board is ten rows in sixty-four:
+   * put the laps in the rows and the board stops fitting. Kept separately, a lap
+   * is fetched only by somebody about to drive that circuit, and posting a score
+   * never has to carry one.
+   *
+   * A lap only replaces the one on file if it is quicker, and it is checked for
+   * being a lap at all rather than trusted - a recording is a string of base
+   * thirty-six deltas and the game will refuse to unpack a malformed one anyway,
+   * but there is no reason to store it.
+   */
+  async ghost(request, url) {
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+    const level = String(url.searchParams.get('level') || '');
+    if (!/^[a-z]+:[a-z]+:[a-z]+$/.test(level)) return json({ error: 'which list?' }, 400);
+    const key = `ghost:${level}`;
+
+    if (request.method === 'GET') {
+      const had = await this.state.storage.get(key);
+      return json(had || null);
+    }
+    if (request.method !== 'POST') {
+      return json({ error: 'GET to fetch a lap, POST to set one' }, 405);
+    }
+
+    const text = await request.text();
+    if (text.length > MAX_GHOST) return json({ error: 'that is not a lap' }, 413);
+    let sent;
+    try {
+      sent = JSON.parse(text);
+    } catch {
+      return json({ error: 'not JSON' }, 400);
+    }
+
+    const lap = cleanGhost(sent);
+    if (!lap) return json({ error: 'that is not a lap' }, 400);
+    const had = await this.state.storage.get(key);
+    // Only if it is quicker, and only if it was driven on the same circuit: a
+    // re-imported circuit is a different road and a lap from the old one would
+    // play back through the barriers.
+    if (had && had.nodes === lap.nodes && had.time <= lap.time) return json(had);
+    await this.state.storage.put(key, lap);
+    return json(lap);
   }
 
   /**

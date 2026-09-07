@@ -32,6 +32,7 @@ import {
   SPIN_AT, SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
   TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP, CAR_HALF,
 } from '../constants.js';
+import { at as ghostAt, note, tape, timeAt as ghostTimeAt, whole } from './ghost.js';
 import { nextRandom, randRange } from '../util.js';
 import { makeState, nodeAt, nodeStep, player, racing, surfaceOf } from './state.js';
 
@@ -106,6 +107,8 @@ export function step(state, mask = 0) {
 
   tow(state);
   contacts(state);
+  record(state);
+  haunt(state);
   laps(state);
   order(state);
   checkpoints(state);
@@ -339,6 +342,13 @@ function laps(state) {
         if (car === player(state)) {
           state.lapNote = 130;
           state.events.push({ t: 'best', time: car.last });
+          // The recording of the lap that was just the quickest one, kept. A
+          // part lap is not kept: a car that spun and rejoined has a hole in the
+          // middle of its tape and there is nothing to be done with that.
+          if (state.tape && whole(state.tape)) {
+            state.best = { times: state.tape.times.slice(), xs: state.tape.xs.slice(),
+              nodes: state.tape.nodes, time: car.last };
+          }
         }
       } else if (car === player(state)) {
         state.lapNote = 130;
@@ -346,6 +356,7 @@ function laps(state) {
       }
     }
     car.lapFrom = state.elapsed;
+    if (car === player(state) && state.tape) state.tape = tape(state.tape.nodes);
     if (now >= state.laps) {
       car.done = true;
       car.doneAt = state.elapsed;
@@ -778,6 +789,46 @@ function order(state) {
 }
 
 // --- The clock -------------------------------------------------------------------
+
+/**
+ * The lap being raced against, moved on to where it had got to by now.
+ *
+ * Two answers come out of one recording and they are different questions. The
+ * ghost car is where that lap was at this *moment* - a car to drive alongside.
+ * The difference is where it was at this *place* - the number that says you are
+ * three tenths down, which is the one people read.
+ */
+function haunt(state) {
+  const ghost = state.ghost;
+  if (!ghost) return;
+  const p = player(state);
+  if (p.lap < 0) {
+    state.delta = null;
+    return;
+  }
+  const total = state.route.metres;
+  const along = p.s - p.lap * total;
+  const lapTime = state.elapsed - p.lapFrom;
+
+  const spot = ghostAt(ghost, lapTime, state.ghostAt ? state.ghostAt.i : 0);
+  state.ghostAt = spot;
+  state.ghostCar.s = p.lap * total + spot.along;
+  state.ghostCar.x = spot.across;
+  state.delta = lapTime - ghostTimeAt(ghost, along, total);
+}
+
+/**
+ * This lap, written down as it happens.
+ *
+ * Before `laps` rather than after, because `laps` is what resets the lap clock:
+ * the last node of a lap has to be recorded against the lap it belongs to.
+ */
+function record(state) {
+  if (!state.tape) return;
+  const p = player(state);
+  if (p.lap < 0 || p.done) return;
+  note(state.tape, p.s - p.lap * state.route.metres, p.x, state.elapsed - p.lapFrom);
+}
 
 /**
  * The gantries, which give the clock its seconds back.

@@ -19,7 +19,9 @@
 import { Sound } from './audio.js';
 import { boardFor } from './config.js';
 import { MODES, TIERS } from './constants.js';
-import { Highscores, makeId, NAME_LENGTH, placeOf } from './highscores.js';
+import { Highscores, levelOf, makeId, NAME_LENGTH, placeOf } from './highscores.js';
+import { bestPosted, keepOwn, ownBest, postGhost } from './ghosts.js';
+import { pack } from './game/ghost.js';
 import {
   ACTIONS, InputDevices, keyLabel, loadBindings, PRESETS, saveBindings,
 } from './input.js';
@@ -220,6 +222,7 @@ function attract() {
 function startRun() {
   sound.wake();
   game.state = makeRace({ route, mode, tier, dusk, seed: (Date.now() & 0x7fffffff) });
+  haunt(game.state);
   game.playing = true;
   game.paused = false;
   game.acc = 0;
@@ -231,6 +234,32 @@ function startRun() {
   touch.show(isTouchDevice());
   sound.start();
   canvas.focus();
+}
+
+/**
+ * Give the run a lap to race against, if there is one to be had.
+ *
+ * Qualifying only. A grand prix already has seven cars to worry about and an
+ * eighth that cannot be hit would be a distraction rather than a rival.
+ *
+ * Your own best goes on first because it is already in hand and the run starts
+ * now; the board's is fetched alongside and takes over when it arrives, which is
+ * within a second and always before the lights go out. If there is no board, or
+ * nobody has posted a lap here, your own is what you race and that is the common
+ * case for the first hour with a new circuit.
+ */
+function haunt(state) {
+  if (state.mode !== 'qual') return;
+  const nodes = state.route.length;
+  state.ghost = ownBest(route, tier, nodes);
+  bestPosted(levelOf(mode, route, tier), nodes).then((posted) => {
+    // Only if the run is still the one that asked for it.
+    if (!posted || game.state !== state) return;
+    if (!state.ghost || posted.lap < state.ghost.lap) {
+      state.ghost = posted;
+      state.ghostAt = null;
+    }
+  });
 }
 
 function toMenu() {
@@ -462,6 +491,7 @@ function offerRecord(state) {
   const p = player(state);
   const qual = state.mode === 'qual';
   if (qual ? !p.best : !state.finished) return false;
+  keepLap(state);
 
   const entry = {
     id: makeId(),
@@ -489,6 +519,30 @@ function offerRecord(state) {
   touch.show(false);
   nameEntry.start(lastName());
   return true;
+}
+
+/**
+ * The recording of the best lap of this run, kept if it beats what is on file.
+ *
+ * Done whether or not the lap gets on the board, because the board is ten rows
+ * shared with everybody and your own best is yours: a driver who is nowhere near
+ * the top ten still wants something to chase, and the lap they did yesterday is
+ * exactly the right thing.
+ *
+ * It is posted as well, but only when it would be the quickest lap anybody has
+ * put up here - one recording per list is all the board keeps, and a lap that
+ * cannot be the fastest is two kilobytes nobody will ever fetch.
+ */
+function keepLap(state) {
+  if (state.mode !== 'qual' || !state.best) return;
+  const nodes = state.route.length;
+  const ticks = Math.round(state.best.time);
+  const packed = pack(state.best, ticks);
+  keepOwn(route, tier, nodes, packed, ticks, lastName());
+  const top = highscores.table(mode, route, tier)[0];
+  if (!top || ticks < top.time) {
+    postGhost(levelOf(mode, route, tier), nodes, packed, ticks, lastName());
+  }
 }
 
 function lastName() {

@@ -76,6 +76,21 @@ const { SEG } = await import('../src/constants.js');
 
 const [route = 'grand', until = '1500', count = '6', zoom = '3'] = process.argv.slice(2);
 const state = makeRace({ route, mode: process.env.MODE || 'gp', tier: 'normal', seed: 31337 });
+
+// A ghost to photograph, when one is asked for: a lap driven here and now, so
+// the picture shows the thing rather than a fixture.
+if (process.env.GHOST) {
+  const { pack, unpack } = await import('../src/game/ghost.js');
+  const warm = makeRace({ route, mode: 'qual', tier: 'normal', seed: 31337 });
+  for (let t = 0; t < 40000 && !warm.best; t++) {
+    step(warm, driveLine(warm, 0.97));
+    warm.clock = 999;
+  }
+  if (warm.best) {
+    const ticks = Math.round(warm.best.time);
+    state.ghost = { ...unpack(pack(warm.best, ticks), state.route.length), name: 'REC' };
+  }
+}
 const renderer = new Renderer(fakeCanvas());
 
 /** The game's own reference driver, so a screenshot is of the game driving. */

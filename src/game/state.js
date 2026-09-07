@@ -20,6 +20,7 @@ import {
   GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, ROAD_HALF, SEG, START_TIME, TICK_RATE, TIERS, VERGE,
 } from '../constants.js';
 import { buildRoute } from './route.js';
+import { tape } from './ghost.js';
 import { SURVEYED, SURVEYED_KEYS } from './circuits.js';
 
 /**
@@ -161,6 +162,21 @@ export function makeState({
     elapsed: 0,
     checkpoint: 0,
     checkNote: 0,
+    /** This lap being written down, and the best one written down so far. */
+    tape: tape(built.length),
+    best: null,
+    /**
+     * The lap being raced against, if there is one, and where it has got to.
+     *
+     * The ghost is a car in every way the renderer cares about and in none that
+     * the simulation does: it is not in `cars`, so nothing can hit it, it is not
+     * in the running order, and it does not qualify for anything. It is a
+     * recording being played back at you.
+     */
+    ghost: null,
+    ghostAt: null,
+    ghostCar: makeCar('ghost', 0, 0, 0),
+    delta: null,
     lapNote: 0,
     // The next checkpoint, as a distance rather than a node: the line itself,
     // which everybody crosses on the way out of the first corner of their lives.

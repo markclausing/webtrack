@@ -48,6 +48,26 @@ game. What it says is checked by `npm run test:board`, which runs the wording
 through every case without a network anywhere near it - which is what
 `announce.js` was held apart from the Worker for in the first place.
 
+## The lap you race against
+
+```
+GET  /ghost?level=qual:monaco:normal
+POST /ghost?level=qual:monaco:normal
+```
+
+One recorded lap per list, and only the quickest one. A recording is a time and
+a lateral offset at every node of the circuit - two to five kilobytes - and it
+is deliberately **not** on the score board: a board is ten rows in sixty-four
+kilobytes, and laps in the rows would fill it four times over. Kept apart, a lap
+is fetched only by somebody about to drive that circuit, and posting a score
+never has to carry one.
+
+A lap is refused unless it is a lap: the right number of nodes for that circuit,
+a time between ten seconds and an hour, base thirty-six and spaces and nothing
+else. `npm run test:ghost` runs every one of those cases without a network
+anywhere near it. The same `cleanGhost` runs in both servers, so a recording
+that is fine in development cannot be refused when it goes live.
+
 ## The broom
 
 A public list with no accounts on it collects something you would rather it did

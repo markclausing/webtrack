@@ -17,6 +17,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cleanGhost } from '../src/game/ghost.js';
 import { merge } from '../src/highscores.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -120,7 +121,77 @@ async function statics(req, res) {
   res.end(body);
 }
 
+/**
+ * The same two calls the Worker answers, so a browser cannot tell which of them
+ * it is talking to. Kept in a file next to the board, one recorded lap per list.
+ */
+const GHOSTS = path.join(ROOT, 'ghosts.json');
+let ghosts = null;
+
+async function loadGhosts() {
+  if (!ghosts) {
+    try {
+      ghosts = JSON.parse(await readFile(GHOSTS, 'utf8'));
+    } catch {
+      ghosts = {};
+    }
+  }
+  return ghosts;
+}
+
+async function ghost(req, res) {
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, { 'access-control-allow-origin': '*' });
+    res.end();
+    return;
+  }
+  const level = new URL(req.url, 'http://x').searchParams.get('level') || '';
+  if (!/^[a-z]+:[a-z]+:[a-z]+$/.test(level)) {
+    json(res, { error: 'which list?' }, 400);
+    return;
+  }
+  const all = await loadGhosts();
+  if (req.method === 'GET') {
+    json(res, all[level] || null);
+    return;
+  }
+  if (req.method !== 'POST') {
+    json(res, { error: 'GET to fetch a lap, POST to set one' }, 405);
+    return;
+  }
+  let text = '';
+  for await (const chunk of req) {
+    text += chunk;
+    if (text.length > 24 * 1024) {
+      json(res, { error: 'that is not a lap' }, 413);
+      return;
+    }
+  }
+  let sent;
+  try {
+    sent = JSON.parse(text);
+  } catch {
+    json(res, { error: 'not JSON' }, 400);
+    return;
+  }
+  const lap = cleanGhost(sent);
+  if (!lap) {
+    json(res, { error: 'that is not a lap' }, 400);
+    return;
+  }
+  const had = all[level];
+  if (!had || had.nodes !== lap.nodes || had.time > lap.time) {
+    all[level] = lap;
+    await writeFile(GHOSTS, JSON.stringify(all));
+  }
+  json(res, all[level]);
+}
+
 createServer((req, res) => {
+  if (req.url.startsWith('/ghost')) {
+    ghost(req, res).catch(() => json(res, { error: 'server' }, 500));
+    return;
+  }
   if (req.url.startsWith('/highscores')) {
     scores(req, res).catch(() => json(res, { error: 'server' }, 500));
     return;
