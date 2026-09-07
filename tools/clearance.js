@@ -20,7 +20,67 @@
 // against, inside your own footprint?
 
 import { buildRoute, spreadOf } from '../src/game/route.js';
+import { FLAT_DROP, groundY, levelWith, roadY } from '../src/render/renderer.js';
 import { ROUTES } from '../src/game/state.js';
+
+/**
+ * Everything that is standing on the ground, and how far off it is.
+ *
+ * A prop is drawn at one of two heights: `flat` puts it level with the road and
+ * anything else puts it on the ground where it stands. Level with the road is
+ * right for a grandstand looking at it and for a lamp post beside a boulevard
+ * where the ground at that distance is the sea - but the road's height is
+ * extrapolated out to wherever the prop is, and on a banked corner that plane
+ * climbs. Eighteen degrees of dish at Zandvoort and a lamp post sixteen metres
+ * out is five metres of air under it.
+ *
+ * `lift` is for the things that are meant to be up there, and they are excused.
+ */
+export function floating(route) {
+  const found = [];
+  for (let i = 0; i < route.nodes.length; i++) {
+    const props = route.props[i];
+    if (!props) continue;
+    const a = route.nodes[i];
+    for (const prop of props) {
+      if (prop.lift) continue;
+      const off = prop.side * prop.off;
+      const under = groundY(a, Math.sign(off) || 1, Math.abs(off));
+      const foot = prop.flat ? levelWith(a, off) : under;
+      /**
+       * A prop is standing on something if it is on the ground, or if it is
+       * level with the edge of the road.
+       *
+       * Both are right and which one is right depends on where it is. A marker
+       * post beside a road that runs along a cliff top belongs at road level -
+       * you cannot see the drop from the car and a post that followed the cliff
+       * down would be under the barrier. A grandstand on the slope below
+       * Interlagos belongs on the slope.
+       *
+       * What is wrong is neither: floating between the two, which is what a
+       * banked corner used to do to everything near it by extending the road's
+       * plane out to wherever the prop was standing.
+       */
+      /**
+       * On the ground, or level with the edge of the road, and nothing between.
+       *
+       * Both are right and there is no single answer. A marker post beside a
+       * road along a cliff top belongs at road level - you cannot see the drop
+       * from the car, and a post that followed the cliff down would be hanging
+       * under the barrier. A grandstand on the slope below Interlagos belongs on
+       * the slope. A tree on a bank stands above the road, which is why "never
+       * higher than the road" was the wrong rule as well.
+       *
+       * What is wrong is neither of them: floating somewhere in between, which
+       * is what a banked corner did to everything near it.
+       */
+      const edge = Math.sign(off) * Math.min(Math.abs(off), a.half);
+      const gap = Math.min(Math.abs(foot - under), Math.abs(foot - roadY(a, edge)));
+      if (gap > FLAT_DROP + 0.05) found.push({ at: i, kind: prop.kind, gap, off: Math.abs(off) });
+    }
+  }
+  return found;
+}
 
 /** Things that cross the road on purpose and are not trespassing when they do. */
 const SPANS = new Set(['flyover', 'gantry', 'arch', 'bridge', 'span', 'chopper', 'balloon']);
@@ -119,8 +179,18 @@ if (process.argv[1] && process.argv[1].endsWith('clearance.js')) {
     for (const b of bad) kinds[b.kind] = (kinds[b.kind] || 0) + 1;
     const how = Object.entries(kinds).sort((a, b) => b[1] - a[1])
       .map(([k, n]) => `${n} ${k}`).join(', ');
-    console.log(`${key.padEnd(12)} ${String(bad.length).padStart(4)} of ${String(count).padStart(5)} props on the road`
-      + (bad.length ? `, worst ${deep.toFixed(1)} m in  (${how})` : ''));
+    const air = floating(route);
+    const highest = air.reduce((m, f) => (Math.abs(f.gap) > Math.abs(m) ? f.gap : m), 0);
+    const airKinds = {};
+    for (const f of air) airKinds[f.kind] = (airKinds[f.kind] || 0) + 1;
+    total += air.length;
+    console.log(`${key.padEnd(12)} ${String(bad.length).padStart(4)} on the road, `
+      + `${String(air.length).padStart(4)} off the ground`
+      + (bad.length ? `, worst ${deep.toFixed(1)} m in` : '')
+      + (air.length ? `, worst ${highest.toFixed(1)} m up (`
+        + `${Object.entries(airKinds).sort((x, y) => y[1] - x[1])
+          .map(([k, n]) => `${n} ${k}`).join(', ')})` : '')
+      + `  [${count} props]`);
     if (asked) {
       for (const b of bad.sort((x, y) => y.into - x.into).slice(0, 25)) {
         console.log(`    ${b.kind.padEnd(9)} at node ${String(b.at).padStart(5)}`

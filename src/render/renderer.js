@@ -683,9 +683,7 @@ export class Renderer {
           // boulevard belongs level with the road; the ground at that distance
           // on the seaward side is the sea, and a lamp post standing in it is
           // a lamp post standing in the sea.
-          const foot = prop.flat
-            ? roadY(a, off)
-            : groundY(a, Math.sign(off) || 1, Math.abs(off));
+          const foot = prop.flat ? levelWith(a, off) : groundY(a, Math.sign(off) || 1, Math.abs(off));
           drawProp(rt, prop,
             a.x + a.nx * off, foot + (prop.lift || 0), a.z + a.nz * off,
             tint, local, prop.align ? a.a : 0, state.tick, night);
@@ -1376,7 +1374,49 @@ function fog(away) {
 }
 
 /** The tarmac's height at an offset, including the camber into the corner. */
-function roadY(n, off) {
+/**
+ * How far a prop standing level with the road may hang over the ground.
+ *
+ * `flat` exists for one reason: the ground beside a boulevard can be the sea,
+ * and a lamp post at the bottom of that is a lamp post in the water. Over water
+ * a flat prop may stay this far above what is under it. Over land there is
+ * nothing to be saved from and it stands on the ground.
+ */
+export const FLAT_DROP = 1.5;
+
+/** How far from the road's edge the quay reaches, past which the water is water. */
+const QUAY = 25;
+
+/**
+ * Level with the road, without the banking carrying it into the air.
+ *
+ * This used to be `roadY(n, off)`, which is the road's *plane* extended out to
+ * wherever the prop stands. On a flat road that is the same thing. On eighteen
+ * degrees of dish at Zandvoort, a marker post sixteen metres out is five metres
+ * up; at Austin, where the ground falls away as well, it was twelve. Seven
+ * thousand seven hundred props across the twenty-seven circuits were off the
+ * ground, and the marker posts - the cheapest thing in the game and the one that
+ * makes it feel fast - were most of them.
+ *
+ * The road's height is taken at its own edge instead, and then the prop stands
+ * on the ground unless the ground is more than a stride below that.
+ */
+export function levelWith(n, off) {
+  const under = groundY(n, Math.sign(off) || 1, Math.abs(off));
+  // Dry land is land: stand on it. Held at road level instead, a grandstand on
+  // the slope below Interlagos hung twenty-eight metres in the air, because the
+  // rule that keeps a lamp post out of the harbour does not know the difference
+  // between four metres of water and a hillside.
+  if (!(n.g && n.g.wet > 0.5)) return under;
+  // And only close in. The quay a lamp post stands on is a few metres from the
+  // road; a wind turbine three hundred metres out to sea is in the sea, and
+  // holding that at road level left it standing five metres above the water.
+  if (Math.abs(off) - n.half > QUAY) return under;
+  const edge = Math.sign(off) * Math.min(Math.abs(off), n.half);
+  return Math.max(under, roadY(n, edge) - FLAT_DROP);
+}
+
+export function roadY(n, off) {
   return n.y - n.bank * off * 0.12 - n.dish * off;
 }
 
@@ -1394,7 +1434,7 @@ function roadY(n, off) {
  */
 const GROUND_DROP = 0.15;
 
-function groundY(n, side, off) {
+export function groundY(n, side, off) {
   const g = side < 0 ? n.g.l : n.g.r;
   const far = side < 0 ? n.g.far[0] : n.g.far[1];
   const kerb = n.half + RUMBLE;
