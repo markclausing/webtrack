@@ -157,18 +157,24 @@ export class Sound {
     /**
      * What is under the wheels, which is two sounds and not one.
      *
-     * A kerb is a row of ridges: a low note switched on and off as they go past,
-     * so the rate follows the speed rather than the note doing it. Under about
-     * fifty km/h it is a knock and at three hundred it is a buzz, which is what
-     * a kerb does.
+     * Both are noise. A kerb was a triangle wave at sixty-two hertz to begin
+     * with, on the reasoning that a kerb is a low rumble - and sixty-two hertz
+     * is below what a laptop speaker reproduces at all, so on most machines the
+     * sound was there in the graph, at the right volume, and silent. A kerb is
+     * not a note anyway: it is a row of impacts, which is noise through a low
+     * filter, switched on and off as the ridges go past.
      *
-     * Grass is not ridges, it is noise - a loop of it through a band, low and
-     * wide. Both are kept well under the engine: they are meant to tell you where
-     * the car is, not to be the loudest thing on the circuit.
+     * The rate of that switching follows the speed, so it is a knock at fifty
+     * and a buzz at three hundred. Grass is the same noise through a wider band,
+     * higher up and not switched at all.
      */
-    const ridges = ctx.createOscillator();
-    ridges.type = 'triangle';
-    ridges.frequency.value = 62;
+    const ridges = ctx.createBufferSource();
+    ridges.buffer = this.noise;
+    ridges.loop = true;
+    const kerbBand = ctx.createBiquadFilter();
+    kerbBand.type = 'lowpass';
+    kerbBand.frequency.value = 340;
+    kerbBand.Q.value = 3.5;
     const kerbGain = ctx.createGain();
     kerbGain.gain.value = 0;
     const shake = ctx.createOscillator();
@@ -177,17 +183,12 @@ export class Sound {
     const shakeDepth = ctx.createGain();
     shakeDepth.gain.value = 0;
     shake.connect(shakeDepth).connect(kerbGain.gain);
-    ridges.connect(kerbGain).connect(this.master);
+    ridges.connect(kerbBand).connect(kerbGain).connect(this.master);
     ridges.start(now);
     shake.start(now);
 
-    // A second of white noise, looped. Made once and left running, because
-    // starting a source costs more than turning one down.
-    const seconds = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const grains = seconds.getChannelData(0);
-    for (let i = 0; i < grains.length; i++) grains[i] = Math.random() * 2 - 1;
     const hiss = ctx.createBufferSource();
-    hiss.buffer = seconds;
+    hiss.buffer = this.noise;
     hiss.loop = true;
     const gravelBand = ctx.createBiquadFilter();
     gravelBand.type = 'bandpass';
@@ -201,7 +202,7 @@ export class Sound {
     out.gain.linearRampToValueAtTime(0.26, now + 0.3);
     this.nodes = {
       out, filter, body, oscs, top, topGain, squeal, squealGain,
-      ridges, kerbGain, shake, shakeDepth, hiss, gravelBand, grassGain,
+      ridges, kerbBand, kerbGain, shake, shakeDepth, hiss, gravelBand, grassGain,
     };
     this.running = true;
     this.gear = 1;
@@ -280,14 +281,19 @@ export class Sound {
     // the whole of what makes it a kerb and not a note.
     const onKerb = surf === 'kerb' ? Math.max(0.4, off) * rolling : 0;
     this.kerb += (onKerb - this.kerb) * 0.35;
-    set(this.nodes.kerbGain.gain, this.kerb * 0.05, 0.02);
-    set(this.nodes.shakeDepth.gain, this.kerb * 0.05, 0.02);
+    // Half the level as the floor and half swung by the ridges, so it is always
+    // there while a wheel is on one and it pulses rather than stutters.
+    set(this.nodes.kerbGain.gain, this.kerb * 0.11, 0.02);
+    set(this.nodes.shakeDepth.gain, this.kerb * 0.11, 0.02);
     set(this.nodes.shake.frequency, 7 + speed * 0.42, 0.02);
+    // Sharper over a kerb taken fast, which is the difference between clipping
+    // one and climbing it.
+    set(this.nodes.kerbBand.frequency, 260 + speed * 2.4, 0.05);
 
     // The grass, and gravel beyond it: wider and lower the further out you are.
     const onGrass = rough ? Math.max(0.45, off) * rolling : 0;
     this.grass += (onGrass - this.grass) * 0.25;
-    set(this.nodes.grassGain.gain, this.grass * 0.075, 0.03);
+    set(this.nodes.grassGain.gain, this.grass * 0.13, 0.03);
     set(this.nodes.gravelBand.frequency, surf === 'rough' ? 620 : 1150, 0.05);
 
     // Tyres. Sliding squeals; the grass has its own voice now, so this is only
