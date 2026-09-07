@@ -965,7 +965,11 @@ export const SURVEYED = {
      * along Port Hercule's own piers, so the water goes where they are.
      */
     land: { rise: 0.5, roll: 0.3, plain: -1.2, runoff: 1.6, reach: 3,
-      sea: { at: 0.26, span: 0.30, level: -4 } },
+      // `at` is the middle of the water and `span` its half width, which is not
+      // what the name says and is what the code does. The boats are measured, so
+      // they say where the harbour is: from just before halfway round to just
+      // before the line.
+      sea: { at: 0.75, span: 0.29, level: -4 } },
     scatter: [
       // Almost nothing scattered: what is beside this road is the town, and the
       // town is measured. A few palms along the front is all that is invented.
