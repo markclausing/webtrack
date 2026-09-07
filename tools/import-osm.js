@@ -97,12 +97,15 @@ const CIRCUITS = {
     name: 'Miami International Autodrome',
   },
   vegas: { box: [36.09, -115.19, 36.13, -115.14], metres: 6201, relation: 16696508 },
-  singapore: { box: [1.285, 103.855, 1.300, 103.870], metres: 4940, route: true },
+  singapore: {
+    box: [1.285, 103.855, 1.300, 103.870], metres: 4940,
+    relation: 421263, route: true,
+  },
   madrid: { box: [40.40, -3.63, 40.48, -3.56], metres: 5474, relation: 18813472 },
-  baku: { box: [40.36, 49.82, 40.40, 49.87], metres: 6003, route: true },
+  baku: { box: [40.36, 49.82, 40.40, 49.87], metres: 6003, relation: 11266687, route: true },
   losail: {
     box: [25.46, 51.42, 25.52, 51.48], metres: 5419,
-    name: 'Lusail International Circuit',
+    name: 'Lusail International Circuit', relation: 21297662,
   },
 };
 
@@ -600,13 +603,6 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
    * six. Above eight the count runs away and it falls back to the angular order,
    * which is what it had.
    */
-  // If the fragments already make one closed loop there is nothing to drive:
-  // a permanent circuit is mapped end to end and routing it through the streets
-  // would only find a way to make it longer.
-  if (runs.length === 1 && runs[0].nodes[0] === runs[0].nodes[runs[0].nodes.length - 1]) {
-    return { lap: runs[0].nodes.slice(0, -1), driven: 0, stranded: 0 };
-  }
-
   // Every fragment end, and the road between each pair of them. Twelve searches
   // for six fragments, done once, and after that a lap costs nothing to price.
   const ends = [];
@@ -659,6 +655,35 @@ function assemble(runs, links, nodes, project, inTunnel, target = 0) {
     }
     return sum;
   };
+
+  /**
+   * One closed loop already, and nothing to drive.
+   *
+   * A permanent circuit is mapped end to end, and routing it through the streets
+   * would only find a way to make it longer. It used to return here without a
+   * score - which is worse than it sounds, because `build` compares the pools on
+   * that score, and `undefined < anything` is false: the pool that had assembled
+   * perfectly was the one guaranteed to lose. Baku's own circuit relation is
+   * exactly this case and was being thrown away for a lap with five and a half
+   * kilometres of guesswork in it.
+   */
+  if (runs.length === 1 && runs[0].nodes[0] === runs[0].nodes[runs[0].nodes.length - 1]) {
+    const lap = runs[0].nodes.slice(0, -1);
+    const metres = lengthOf(runs[0].nodes);
+    const round = Math.abs(turnOf([...lap, lap[0], lap[1]]));
+    return {
+      lap,
+      driven: 0,
+      stranded: 0,
+      forced: 0,
+      jumped: 0,
+      searched: true,
+      metres,
+      round,
+      score: (target ? Math.abs(metres - target) : 0)
+        + Math.abs(round - Math.PI * 2) * 300,
+    };
+  }
 
   /**
    * Every fragment is off limits to the connectors before any of them is drawn.
@@ -1360,15 +1385,30 @@ async function build(key) {
     pools.push({ ways: ways.filter((w) => isCircuit(w, circuit, null, true)), trim: true });
   }
 
+  /**
+   * The same ways again, each one left as its own fragment.
+   *
+   * Chaining is right almost everywhere and it takes the choice away: once ten
+   * ways are glued into one run of six kilometres, a search that can leave a
+   * fragment out has nothing to leave out. Miami's raceway is ten ways adding up
+   * to six thousand one hundred and eighty metres for a lap of five thousand
+   * four hundred, so seven hundred of it is pit entry, pit exit or a layout
+   * nobody has retagged - and unchained, the search can find the subset that
+   * comes to the right length and closes.
+   */
+  pools.push({ ways: ways.filter((w) => isCircuit(w, circuit, members)), trim: false, split: true });
+
   let made = null;
   let runs = [];
   const seen = new Set();
   for (const pool of pools) {
     // Several of them often come to the same thing; assemble it once.
-    const mark = `${pool.trim}:${pool.ways.map((w) => w.id).sort().join(',')}`;
+    const mark = `${pool.trim}${pool.split ? 'S' : ''}:${pool.ways.map((w) => w.id).sort().join(',')}`;
     if (!pool.ways.length || seen.has(mark)) continue;
     seen.add(mark);
-    const chained = chain(pool.trim ? dedupe(pool.ways, nodes, project) : pool.ways);
+    const chained = pool.split
+      ? pool.ways.map((w) => ({ nodes: [...w.nodes], tunnel: (w.tags || {}).tunnel === 'yes' }))
+      : chain(pool.trim ? dedupe(pool.ways, nodes, project) : pool.ways);
     const tried = assemble(chained, links, nodes, project, inTunnel, circuit.metres);
     if (process.env.POOLS) {
       process.stderr.write(`\n  pool of ${pool.ways.length} ways -> ${chained.length} fragments,`

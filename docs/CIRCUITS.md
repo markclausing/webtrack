@@ -333,7 +333,38 @@ alongside itself - which was the thing that lap was doing wrong. A relation that
 assembles into a lap of the right length, closing, with no long straight line in
 it, is now taken as the answer.
 
+### Four more relations, and one circuit that has none
+
+Singapore, Baku and Losail all have a `type=circuit` relation too, and none of
+them was being read. Wired up:
+
+```
+monaco 100%   baku 100%   singapore 100%   losail 100%   vegas 100%
+madrid  99%   miami 102%  jeddah    102%
+```
+
+Baku's comes out at 6,003 metres against a stated 6,003, from a single closed
+fragment with not one metre driven. Singapore went from 74 per cent to a
+hundred, and with the real lap its measured height came back at a third of what
+the guessed one reported.
+
+One more fault was hiding behind that. A pool of fragments that already forms a
+single closed loop - a permanent circuit, mapped end to end - returned early,
+before the scoring, without a score. `build` compares the pools on that score,
+and `undefined < anything` is false, so the pool that had assembled *perfectly*
+was the one guaranteed to lose. Baku's own relation was being thrown away for a
+lap with five and a half kilometres of guesswork in it.
+
+**Miami has no relation**, and its ten raceway ways come to 6,182 metres for a
+lap of 5,412 - seven hundred metres of pit entry, pit exit, or a layout nobody
+has retagged. Chaining them into one run took the choice away: a search that can
+leave a fragment out has nothing to leave out. Left unchained, each way its own
+fragment, the search finds the subset that comes to the right length and closes.
+122 per cent to 102.
+
 ### What is still not right
+
+
 
 
 
