@@ -295,6 +295,22 @@ function dedupe(ways, nodes, project) {
   return kept;
 }
 
+/**
+ * Where the start and finish line is, if the map says.
+ *
+ * A `type=circuit` relation may carry a node with the role `start-finish`. It is
+ * the one thing about a circuit that is stated outright rather than inferred,
+ * and it decides where lap nought begins - which decides where every authored
+ * thing on the circuit ends up.
+ */
+function startNode(relations, circuit, nodes, project) {
+  if (!circuit.relation) return null;
+  const rel = relations.find((r) => r.id === circuit.relation);
+  const member = rel && rel.members.find((m) => m.type === 'node' && m.role === 'start-finish');
+  const point = member && nodes.get(member.ref);
+  return point ? project(point.lat, point.lon) : null;
+}
+
 /** Is this way part of the circuit itself, rather than of the town around it? */
 function isCircuit(way, circuit, members, loose = false) {
   const t = way.tags || {};
@@ -1472,6 +1488,35 @@ async function build(key) {
     }
     if ((turn > 0) !== circuit.clockwise) out = out.reverse();
   }
+
+  /**
+   * And starting where the start line is.
+   *
+   * Node nought of the assembled lap is wherever the first fragment happened to
+   * begin, which is not the start and finish line and has no reason to be. That
+   * matters because everything authored about a circuit is placed at a fraction
+   * of a lap - the pit building, the grandstands, the sea at Monaco - so a lap
+   * that begins in the wrong place puts the harbour in the hills.
+   *
+   * A circuit relation says where the line is: Monaco's carries a node with the
+   * role `start-finish`, and it is the only thing in this whole importer that
+   * did not have to be worked out.
+   */
+  const startAt = startNode(relations, circuit, nodes, project);
+  if (startAt) {
+    let best = 0;
+    let near = Infinity;
+    for (let i = 0; i < out.length; i++) {
+      const d = dist(out[i], startAt);
+      if (d < near) {
+        near = d;
+        best = i;
+      }
+    }
+    if (near < 60 && best > 0) out = out.slice(best).concat(out.slice(0, best));
+    process.stderr.write(`start line ${Math.round(near)} m off node ${best}, `);
+  }
+
   // How much of the lap lies on top of the rest of it. A closed circuit does
   // not, except in a tunnel, and this is the number that says whether the
   // routing worked.
