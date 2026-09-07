@@ -1214,9 +1214,28 @@ function boxOf(way, project) {
     deep = Math.max(deep, Math.abs(z));
   }
   const t = way.tags;
-  const tall = Number.parseFloat(t.height)
-    || (Number.parseFloat(t['building:levels']) || 0) * 3.2
-    || 9;
+  /**
+   * How tall, and what to do when the map does not say.
+   *
+   * Most buildings in OpenStreetMap carry neither `height` nor
+   * `building:levels`, and the answer to that was nine metres. Nine metres is a
+   * bungalow. It made Monaco a town of sheds you can see straight over - the one
+   * circuit in the world where you can never see past the next corner because
+   * the buildings are against the kerb - and on the Las Vegas Strip, where a
+   * resort is mapped as one polygon three hundred and sixty metres across, it
+   * made a slab ten metres high and the width of the view: a grey plane lying
+   * over the road rather than a hotel standing beside it.
+   *
+   * So where the map is silent, the footprint answers. A building's plan and its
+   * height go together in a city - nobody builds a quarter of a hectare two
+   * storeys high - and the square root of the area is a good enough stand-in.
+   * A twenty by fifteen house comes out at eighteen metres, a city block at
+   * forty, and a resort the size of the Bellagio at seventy.
+   */
+  const said = Number.parseFloat(t.height)
+    || (Number.parseFloat(t['building:levels']) || 0) * 3.2;
+  const plan = Math.sqrt(Math.max(1, wide * 2) * Math.max(1, deep * 2));
+  const tall = said || Math.min(72, 9 + plan * 0.24);
   return { x: cx, z: cz, w: Math.max(3, wide), d: Math.max(3, deep), h: tall, r: facing };
 }
 
