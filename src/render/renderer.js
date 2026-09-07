@@ -103,6 +103,14 @@ const HUD_DIM = md(130, 136, 156);
 const GOOD = md(60, 200, 90);
 const WARN = md(240, 180, 40);
 const BAD = md(220, 50, 40);
+/**
+ * The recorded lap, on the map and on the road.
+ *
+ * Its own colour rather than one of the six above, because it has to be
+ * unmistakable at three pixels: a pale cyan is not a team colour, not the white
+ * of the start line, and not the amber that blinks for you.
+ */
+const PHANTOM = md(120, 220, 235);
 
 /** What a tunnel takes the daylight down to. Not black: black is a hole. */
 const TUNNEL_DARK = md(18, 20, 26);
@@ -939,14 +947,23 @@ export class Renderer {
     const at = this.at(state, car);
     if (Math.hypot(at.x - this.cam.x, at.z - this.cam.z) < 5.4) return;
     // No shadow: a recording does not stand between the sun and the road.
-    const pale = mix(C.chrome, theme.sky, 0.45);
-    const tint = (colour) => mix(pale, theme.fog, fog(Math.abs(away)));
-    // Every other pixel, and no depth written - the same trick the tyre smoke
-    // uses. A checkerboard at this resolution is what a sixteen-bit machine had
-    // instead of alpha, and it is still the right answer: the road shows through
-    // it, a real car in front of it covers it, and nobody ever mistakes it for
-    // something they can touch.
-    this.rt.stipple = 1;
+    const tint = (colour) => mix(PHANTOM, theme.fog, fog(Math.abs(away)));
+    /**
+     * Every other pixel, and no depth written - the same trick the tyre smoke
+     * uses. A checkerboard at this resolution is what a sixteen-bit machine had
+     * instead of alpha, and it is still the right answer up close: the road
+     * shows through it, a real car in front covers it, and nobody mistakes it
+     * for something they can touch.
+     *
+     * Only up close, though. Three seconds ahead is a hundred and sixty metres,
+     * where the car is a few dozen pixels; take half of those away and paint the
+     * rest in something near the colour of fogged tarmac and there is nothing
+     * left to see. It was being drawn the whole time - forty-eight faces of it -
+     * and it was invisible. Past seventy metres it goes solid, which costs
+     * nothing: there is nothing else on the circuit in qualifying to mistake it
+     * for, and the colour says what it is.
+     */
+    this.rt.stipple = Math.abs(away) < 70 ? 1 : 0;
     const pitch = -Math.atan(at.slope);
     drawRacer(this.rt, car, at.x, at.y, at.z, at.a, tint, this.lightAt, pitch);
     this.rt.stipple = 0;
@@ -1060,7 +1077,7 @@ export class Renderer {
     if (state.ghost && state.ghostAt && !state.ghostAt.done) {
       const g = worldOf(state.route, state.ghostCar.s, state.ghostCar.x);
       const [gx, gy] = place(g.x, g.z);
-      rt.rect(x + gx - 1, y + gy - 1, 3, 3, HUD_TEXT);
+      rt.rect(x + gx - 1, y + gy - 1, 3, 3, PHANTOM);
       rt.rect(x + gx, y + gy, 1, 1, HUD_BACK);
     }
 
