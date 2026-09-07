@@ -108,6 +108,38 @@ mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
  */
 if (route === 'docs') {
   const want = [
+    /**
+     * The four the README leads with, each one a thing the game does rather
+     * than a circuit it has.
+     *
+     * `street` is Monaco at the tunnel mouth: measured buildings on their own
+     * footprints, a roof over the road where the tags say there is one. `climb`
+     * is Spa going up out of Eau Rouge, which is the steepest ground in the
+     * game. `night` is Las Vegas, a street circuit run after dark, which is both
+     * of those things at once. `ghost` is a qualifying lap with the recording of
+     * a quicker one on the road beside it.
+     */
+    ['street', (s) => {
+      const at = s.route.nodes[nodeAt(s.route, player(s).s).i];
+      return at.tunnel > 0.4 && at.tunnel < 0.9 && player(s).speed > 55;
+    }, 'monaco', 'gp'],
+    /**
+     * The crest, not the climb.
+     *
+     * A steady gradient is invisible: the camera pitches to meet it, so a
+     * fourteen per cent hill at Spa photographs as a flat road. What reads is
+     * where the gradient *changes* - and the sharpest change in the game is
+     * Austin's turn one, nine per cent up turning into a drop, arriving at a
+     * corner you cannot see into.
+     */
+    ['climb', (s) => {
+      const at = player(s).s % s.route.metres;
+      return at > s.route.metres * 0.098 && at < s.route.metres * 0.116 && player(s).speed > 45;
+    }, 'austin', 'gp'],
+    ['night', (s) => s.light > 0.88 && player(s).speed > 55, 'vegas', 'gp', 0.95, true],
+    ['ghost', (s) => s.ghost && s.delta !== null && player(s).lap >= 1
+      && s.ghostAt && !s.ghostAt.done && s.ghostCar.s - player(s).s > 12
+      && s.ghostCar.s - player(s).s < 60, 'monza', 'qual'],
     ['grid', (s) => s.lights > 20 && s.lights < 60, 'pass', 'gp'],
     ['pass', (s) => player(s).s > 1800 && player(s).speed > 78, 'pass', 'gp'],
     ['battle', (s) => s.cars.some((c) => c !== player(s) && Math.abs(c.s - player(s).s) < 14
@@ -208,8 +240,24 @@ if (route === 'docs') {
     }, 'yasmarina', 'gp'],
   ];
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
+  // ONLY=climb to take one of them again without waiting for the other thirty.
+  const only = process.env.ONLY;
   for (const [name, when, on, mode, share = 0.95, dusk = false] of want) {
+    if (only && name !== only) continue;
     const world = makeRace({ route: on, mode, tier: 'normal', seed: 20260903, dusk });
+    // A lap to race against, for the one picture that is about racing one.
+    if (name === 'ghost') {
+      const { pack, unpack } = await import('../src/game/ghost.js');
+      const warm = makeRace({ route: on, mode: 'qual', tier: 'normal', seed: 20260903 });
+      for (let t = 0; t < 40000 && !warm.over; t++) {
+        step(warm, driveLine(warm, 0.97));
+        warm.clock = 999;
+      }
+      if (warm.best) {
+        const ticks = Math.round(warm.best.time);
+        world.ghost = { ...unpack(pack(warm.best, ticks), world.route.length), name: 'REC' };
+      }
+    }
     const view = new Renderer(fakeCanvas());
 
     let got = false;

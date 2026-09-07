@@ -113,6 +113,14 @@ export class TouchControls {
 
 /** Does this look like a device you drive with your fingers? */
 export function isTouchDevice() {
+  // `?touch=1` forces them on, which is how the phone controls get photographed
+  // and looked at on a desktop: they are drawn by the page rather than by the
+  // renderer, so there is no other way to see them without a phone in your hand.
+  try {
+    if (new URLSearchParams(globalThis.location?.search || '').get('touch') === '1') return true;
+  } catch {
+    // No location, which means no page, which means no touch either.
+  }
   if (typeof matchMedia !== 'function') return false;
   return matchMedia('(pointer: coarse)').matches;
 }

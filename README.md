@@ -37,7 +37,9 @@ road and a long fast circuit — and they are still the best three to learn on.
 [docs/CIRCUITS.md](docs/CIRCUITS.md) is where the measured ones came from and
 what it cost to get them right.
 
-![Monza](docs/screenshots/monza.png)
+![Inside the tunnel at Monaco, at 265 km/h](docs/screenshots/street.png)
+
+*Monaco's tunnel. The roof is there because the map says a tunnel is.*
 
 ## Driving it
 
@@ -59,6 +61,12 @@ stopped working is the noise going quiet.
 them. Chevron boards on the outside of every corner tell you which way it goes
 and how hard, and no two of them ever contradict each other.
 
+**And the ground is the ground.** Austin's turn one is thirty-three metres
+straight up and blind over the top; Eau Rouge is twenty-nine metres below the
+start line and Les Combes sixty-seven above it.
+
+![The blind climb to turn one at Austin](docs/screenshots/climb.png)
+
 ## Two ways out
 
 **Qualifying** is one lap on an empty circuit, and there is a ghost on it with
@@ -76,7 +84,15 @@ earned it.
 Whichever you drive, the time goes on a board shared with everybody else who
 plays it.
 
-![Qualifying: one number, and it has just gone green](docs/screenshots/qualifying.png)
+![A ghost lap on the road ahead, two tenths up](docs/screenshots/ghost.png)
+
+*The ghost, and the difference. It is nought at the line every lap.*
+
+**And the afternoon runs out** whichever you drive. You start in daylight and
+finish under the floodlights, and on the circuits that are run at night — Las
+Vegas, Jeddah, Singapore, Losail — it is dark from the flag.
+
+![Las Vegas after dark](docs/screenshots/night.png)
 
 ## Controls
 
@@ -88,9 +104,14 @@ plays it.
 | Pause      | `Esc`     |
 
 Every key can be changed in the menu and W A S D is a preset. Gamepads need no
-setting up: the stick steers and any face button is the throttle. On a phone,
-hold it sideways — the bottom-left corner is the wheel, `GAS` is the big button
-and `BRAKE` the small one beside it.
+setting up: the stick steers and any face button is the throttle.
+
+On a phone the controls come up on their own: the wheel bottom-left, `GAS` and
+`BRAKE` bottom-right, and the pause under the picture. Standing up they fall
+entirely clear of the road; sideways they sit in the letterbox bars either side
+of it, which is what `npm run test:touch` checks on seven handsets.
+
+<img src="docs/screenshots/mobile.jpg" alt="The touch controls on a phone" width="320">
 
 ## Running it yourself
 

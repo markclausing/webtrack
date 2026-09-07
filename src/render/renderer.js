@@ -1252,16 +1252,21 @@ export class Renderer {
     this.cornerSign(state, p);
 
     // The lap you have just done, in the middle, for two seconds.
+    //
+    // Below the difference rather than across it: this used to start at
+    // forty-four, which is three pixels inside the bottom of the panel that says
+    // how far up you are, so the two of them overlapped for exactly the two
+    // seconds after a lap - which is the moment you most want to read both.
     if (state.lapNote > 0) {
       const fresh = p.last && p.last === p.best;
-      rt.panel(W / 2 - 52, 44, 104, 24, HUD_BACK, fresh ? WARN : HUD_EDGE);
-      rt.textMid(fresh ? 'BEST LAP' : `LAP ${lapOf(p)}`, W / 2, 48, fresh ? WARN : HUD_DIM);
-      rt.textMid(formatTime(p.last), W / 2, 58, HUD_TEXT);
+      rt.panel(W / 2 - 52, 50, 104, 24, HUD_BACK, fresh ? WARN : HUD_EDGE);
+      rt.textMid(fresh ? 'BEST LAP' : `LAP ${lapOf(p)}`, W / 2, 54, fresh ? WARN : HUD_DIM);
+      rt.textMid(formatTime(p.last), W / 2, 64, HUD_TEXT);
     } else if (state.checkNote > 0) {
-      rt.panel(W / 2 - 62, 44, 124, 24, HUD_BACK, GOOD);
-      rt.textMid('CHECKPOINT', W / 2, 48, GOOD);
+      rt.panel(W / 2 - 62, 50, 124, 24, HUD_BACK, GOOD);
+      rt.textMid('CHECKPOINT', W / 2, 54, GOOD);
       rt.textMid(`+${Math.round(state.cfg.clock * state.rules.clock * CHECKPOINT_TIME)} SECONDS`,
-        W / 2, 58, HUD_TEXT);
+        W / 2, 64, HUD_TEXT);
     }
 
     if (!racing(state)) this.lights(state);
