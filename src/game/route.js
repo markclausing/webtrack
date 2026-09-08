@@ -1446,6 +1446,9 @@ function scatter(nodes, rnd) {
   return out;
 }
 
+/** The things that belong on water. Everything else is dropped if it lands there. */
+const FLOATS = new Set(['boat', 'buoy']);
+
 /** How far from a piece of road a prop of each kind needs for its own footprint. */
 export const SPREAD = {
   dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
@@ -1603,6 +1606,15 @@ function dress(nodes, real, rnd) {
       // mapped as one building - and checked against the default three metres it
       // sailed through and laid itself across the road.
       const spread = spreadOf(prop);
+      // Nothing grows in a harbour.
+      //
+      // The scatter rules place palms fourteen to thirty-four metres off the
+      // road, which on the seaward side of a boulevard is out over the water:
+      // fifty-five of the fifty-seven palms on Monaco's wet nodes were standing
+      // in Port Hercule. Boats and buoys belong there; a tree does not, and
+      // neither does anything else a scatter rule puts down.
+      if (!FLOATS.has(prop.kind) && a.g && a.g.wet > 0.5 && prop.off > RINGS[0]) return;
+
       let off = prop.off;
       let room = false;
       // Its own place first, then three quarters of the way in, then half - but
