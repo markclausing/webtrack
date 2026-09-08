@@ -624,7 +624,24 @@ export class Renderer {
        * colour they are invisible in themselves; what gives them away is the
        * hard edge where they meet the sky.
        */
-      for (let band = 0; band < BANDS.length && band < a.reach
+      /**
+       * The last band is always drawn, however close the circuit's ground stops.
+       *
+       * `reach` says how much ground a circuit lays down beside the road, and on
+       * a street it is little: there are buildings against the barrier and no
+       * hillside to model. What it must not do is leave a hole, and it did -
+       * beyond the last band nothing is drawn at all, so you see the bottom of
+       * the sky gradient, which is a pale warm grey and reads as a solid mass
+       * hanging where the ground should be. On Monaco's eleven per cent drop
+       * from Mirabeau, with the camera pitched down to follow it, that filled
+       * half the screen and looked like a polygon lying over the circuit.
+       *
+       * So the far plane goes down whatever else does. It is one quad a node at
+       * a quarter of the resolution, clamped by the same ceiling as the rest, and
+       * it is the difference between a horizon and a hole.
+       */
+      for (let band = 0; band < BANDS.length
+        && (band < a.reach || band === BANDS.length - 1)
         && !a.deck && roof < 0.05; band++) {
         const [inner0, outer, kind, every] = BANDS[band];
         // The first band starts at the kerb, wherever the kerb happens to be.
@@ -668,7 +685,7 @@ export class Renderer {
       // wedge lying across the floor.
       // And the tunnel takes over from exactly there, at full height, so the
       // mouth is a portal rather than a gap. It is a portal in life too.
-      if (roof > 0.05) this.tunnel(a, b, tint, i);
+      if (roof > 0.05) this.tunnel(a, b, tint, i, roof);
 
       const props = route.props[a.i];
       if (props && away < 900) {
@@ -705,7 +722,7 @@ export class Renderer {
    * the position was decided here: OpenStreetMap tags the road as a tunnel and
    * the importer carried the tag through.
    */
-  tunnel(a, b, tint, i) {
+  tunnel(a, b, tint, i, roof = 1) {
     const rt = this.rt;
     const wide = a.wall + 0.4;
     const high = 5.5;
@@ -723,7 +740,20 @@ export class Renderer {
       const by = roadY(b, at);
       rt.quad(ax, ay, az, bx, by, bz, bx, by + high, bz, ax, ay + high, az, wall);
     }
-    // The roof, and a lit strip down the middle of it.
+    /**
+     * The roof, where there is one.
+     *
+     * The mask is softened over three nodes either side of the tags, so a node
+     * at the mouth is a fraction under cover rather than all or nothing - and
+     * the walls go up over that fraction, which is what makes the mouth a portal
+     * rather than a hole cut in the air. The roof does not: it went on at full
+     * height from the first node above five per cent, thirty metres before the
+     * road actually goes under anything, and arrived as a slab sliding across a
+     * street you could still see the sky over.
+     *
+     * Above half, then. That is where the tags say you are under something.
+     */
+    if (roof < 0.5) return;
     const ay = roadY(a, 0) + high;
     const by = roadY(b, 0) + high;
     rt.quad(

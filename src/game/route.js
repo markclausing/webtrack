@@ -721,6 +721,7 @@ export function buildRoute(key) {
     for (let k = 0; k < 3; k++) {
       if (ceiling[k][i] < height[i] - CLIFF) { n = Math.min(n, k); break; }
     }
+
     return n;
   };
 
