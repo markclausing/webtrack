@@ -233,6 +233,25 @@ float sunlight(vec3 sc, float slope) {
   return lit * 0.25;
 }
 
+/**
+ * Value noise, from a hash, with nothing behind it.
+ *
+ * Four corners of a grid cell, smoothed between. It is the cheapest noise there
+ * is and it is the right one here: what it is standing in for is a surface being
+ * slightly uneven, which has no structure to get wrong.
+ */
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float grain(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
 void main() {
   // Two-sided, and it has to be: a tree in this game is two flat quads crossed
   // at right angles, and the winding of a polygon written out by hand fifteen
@@ -272,6 +291,26 @@ void main() {
    * that moves across it as it turns, which is the one thing on the screen that
    * says the light is coming from somewhere.
    */
+  /**
+   * Ground, which is the one thing here big enough to need a texture.
+   *
+   * There are no textures in this game and there is no room for UV coordinates:
+   * the models are fifteen hundred lines of hand-written polygons and none of
+   * them says where it is on a picture. What every surface does know is where it
+   * is in the world, and for the two things that actually need breaking up -
+   * tarmac and whatever is beside it - that is enough. Both are flat, both are
+   * horizontal, and both are seen from above, so a value noise in x and z is a
+   * texture in every way that matters here and needs nothing carried through the
+   * pipeline to get it.
+   *
+   * Two octaves and four per cent either way. It has to be almost nothing: this
+   * is a flat-shaded game and what it is standing in for is the unevenness of a
+   * surface, not a pattern on it. At ten per cent the road looks like carpet.
+   */
+  if (vColour.a > 0.930 && vColour.a < 0.950) {
+    colour *= 0.96 + 0.08 * (grain(vWorld.xz * 0.22) * 0.65 + grain(vWorld.xz * 1.7) * 0.35);
+  }
+
   /**
    * A light, rather than a thing a light falls on.
    *
@@ -608,6 +647,15 @@ export class Batch {
      * is exactly white is a white rectangle; one at twice white is a headlight.
      */
     this.emissive = 0;
+    /**
+     * Tarmac, grass, sand: the surfaces big enough to need breaking up.
+     *
+     * The third of these material flags and the last. What it buys is a little
+     * unevenness worked out from where the surface is in the world, which is the
+     * only kind of texture available to a renderer whose models have no UV
+     * coordinates and are not going to get any.
+     */
+    this.ground = 0;
   }
 
   /** The size of the picture. Set by the renderer when the window changes. */
@@ -758,7 +806,8 @@ export class Batch {
   push(ax, ay, az, bx, by, bz, cx, cy, cz, colour) {
     const sink = this.stipple ? this.clear : this.solid;
     if ((sink.count + 3) * STRIDE > sink.data.byteLength) grow(sink);
-    const alpha = this.stipple ? 150 : this.emissive ? 245 : this.shine ? 250 : 255;
+    const alpha = this.stipple ? 150
+      : this.emissive ? 245 : this.ground ? 240 : this.shine ? 250 : 255;
     // The chequered second colour is now simply the colour in between.
     const c = this.dither ? blend(colour, this.dither) : colour;
     const ux = bx - ax; const uy = by - ay; const uz = bz - az;

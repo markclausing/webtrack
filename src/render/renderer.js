@@ -667,6 +667,10 @@ export class Renderer {
       const ha = a.half;
       const hb = b.half;
       rt.dither = (i % 6) < 3 ? 0 : road(C.roadAlt);
+      // Tarmac is the largest single surface in the picture and the flattest.
+      // The grain is worked out from where it is in the world - see gl.js - and
+      // it is the only texture in this game.
+      rt.ground = 1;
       rt.quad(
         a.x - a.nx * ha, roadY(a, -ha), a.z - a.nz * ha,
         a.x + a.nx * ha, roadY(a, ha), a.z + a.nz * ha,
@@ -674,6 +678,7 @@ export class Renderer {
         b.x - b.nx * hb, roadY(b, -hb), b.z - b.nz * hb,
         road(C.road),
       );
+      rt.ground = 0;
       rt.dither = 0;
       // Kerbs. Red and white, one node each, which at three hundred and fifty is
       // sixteen stripes a second going past at the edge of the screen.
@@ -848,6 +853,11 @@ export class Renderer {
         const inner = band === 0 ? Math.max(ha + RUMBLE, inner0 - (ROAD_HALF - ha)) : inner0;
         if (((i % every) + every) % every !== 0) continue;
         const far = nodeStep(route, i, every);
+        // The near bands are grass, sand and gravel, and they are the other
+        // thing in this picture large enough and flat enough to need breaking
+        // up. Not the far ones: at three hundred metres out a band is a wedge of
+        // colour under the haze and the grain in it would be noise.
+        rt.ground = band < 2 ? 1 : 0;
         for (const side of [-1, 1]) {
           const colour = bandColour(local, a, side, kind, i, this.surf);
           rt.quad(
@@ -858,6 +868,7 @@ export class Renderer {
             tint(colour),
           );
         }
+        rt.ground = 0;
       }
 
       // Surf. A white line that shuffles along the waterline, and the single
