@@ -1176,25 +1176,54 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
        * metres of the picture at every corner on sixteen of these circuits, and a
        * stripe is what it looked like.
        *
-       * So it is terraced now: eight rows, each with a tread and a riser, and the
-       * risers carry the people. The people are blocks - six to a row, each a
-       * different shade off the same hash, so no two rows repeat - and at forty
-       * metres that is a crowd, at two hundred it is a texture, and up close it is
-       * still not people but it is seating with something in it.
+       * So it is terraced: rows with a tread and a riser, and the risers carry
+       * the people. The people are blocks - six to a row, each a different shade
+       * off the same hash, so no two rows repeat - and at forty metres that is a
+       * crowd, at two hundred it is a texture, and up close it is still not
+       * people but it is seating with something in it.
        *
-       * A hundred and thirty triangles against twenty. Everything still meets
-       * something else: back wall to roof, roof to posts, posts to fascia, treads
-       * to risers. Nothing is left over on its own, which was the thing that made
-       * the old one read as flat plates hanging in the air.
+       * And no two of them are the same building. A row of identical stands
+       * along a corner is one stand drawn three times, which is what it was: a
+       * stand now carries its own length, its own number of rows and its own
+       * curve, so a corner gets one long bent one where it used to get three
+       * short straight ones set end to end.
        */
-      const wall = tint(shade(theme.ridge, 0.72));
-      const side = tint(shade(theme.ridge, 0.6));
-      const deck = tint(shade(theme.ridge, 0.94));
-      const ROWS = 8;
+      const long = prop.len || 9;
+      const ROWS = prop.rows || 8;
+      /**
+       * How much the ends sweep round.
+       *
+       * A grandstand on the outside of a corner is built on the arc of that
+       * corner - it has to be, or the ends of it are in the run-off - and three
+       * straight ones in a row is the cheap way of saying so. One bent one says
+       * it properly: each slice along the length is pushed towards the track by
+       * the square of how far along it is, which is a parabola and is near
+       * enough an arc over thirty metres to be the same thing.
+       */
+      const bend = prop.bend || 0;
+      const seg = bend ? 6 : 1;
+      const sweep = (u) => bend * (u * u - 1 / 3);
+
+      const tone = 0.86 + variant(prop, 5) * 0.3;
+      const wall = tint(shade(theme.ridge, 0.72 * tone));
+      const side = tint(shade(theme.ridge, 0.6 * tone));
+      const deck = tint(shade(theme.ridge, 0.94 * tone));
       const back = -4.6;
       const front = -0.6;
       const low = 1.1;
-      const high = 6.4;
+      const high = 1.6 + ROWS * 0.6;
+
+      const p = new Float64Array(12);
+      /** One panel of something, between two points along the length. */
+      const panel = (x0, x1, za, ya, zb, yb, colour) => {
+        const u0 = x0 / long;
+        const u1 = x1 / long;
+        p.set([
+          x0, ya, za + sweep(u0), x1, ya, za + sweep(u1),
+          x1, yb, zb + sweep(u1), x0, yb, zb + sweep(u0),
+        ]);
+        put.face(rt, colour, p);
+      };
 
       // The terracing, from the front row back and up.
       for (let r = 0; r < ROWS; r++) {
@@ -1204,165 +1233,49 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
         const z1 = front + (back - front) * t1;
         const y0 = low + (high - low) * t0;
         const y1 = low + (high - low) * t1;
-        // The tread you sit on, and the riser behind it.
-        put.face(rt, deck, [-9, y0, z0, 9, y0, z0, 9, y0, z1, -9, y0, z1]);
-        put.face(rt, side, [-9, y0, z1, 9, y0, z1, 9, y1, z1, -9, y1, z1]);
+        for (let k = 0; k < seg; k++) {
+          const x0 = -long + (2 * long * k) / seg;
+          const x1 = -long + (2 * long * (k + 1)) / seg;
+          panel(x0, x1, z0, y0, z1, y0, deck);
+          panel(x0, x1, z1, y0, z1, y1, side);
+        }
         /**
          * And the people on it.
          *
-         * Six blocks to a row rather than one strip, each picked out of the
-         * crowd colour by a hash of where it is. A single colour across the whole
-         * stand reads as a painted band; six that differ by a tenth read as a
-         * crowd, and the difference costs twelve triangles a row.
+         * Blocks rather than one strip, each picked out of the crowd palette by
+         * a hash of where it is. A single colour across the whole stand reads as
+         * a painted band; a scatter reads as a crowd.
          */
-        for (let c = 0; c < 6; c++) {
-          const x0 = -8.6 + c * (17.2 / 6) + 0.1;
-          const x1 = x0 + (17.2 / 6) - 0.2;
-          // A cheap deterministic scatter: the same stand looks the same every
-          // lap, and two stands next to each other do not look like each other.
-          // Two numbers that share no factor with the palette length, so the
-          // pattern does not line up into stripes down the stand.
+        const blocks = Math.max(4, Math.round(long * 0.7));
+        for (let c = 0; c < blocks; c++) {
+          const x0 = -long + 0.2 + c * ((long * 2 - 0.4) / blocks);
+          const x1 = x0 + (long * 2 - 0.4) / blocks - 0.2;
           const h = (r * 5 + c * 3) % CROWD.length;
           const who = shade(CROWD[h], 0.88 + ((r * 3 + c * 7) % 5) * 0.06);
-          // In front of the riser, not behind it. The stand is built going away
-          // from the track, so the row behind is at a smaller z - and a crowd
-          // placed a a few centimetres further back is a crowd inside the
-          // concrete, which is exactly where the first pass put it.
           const face = z1 + 0.06;
-          put.face(rt, tint(who), [x0, y0 + 0.12, face, x1, y0 + 0.12, face,
-            x1, y1 - 0.12, face, x0, y1 - 0.12, face]);
+          panel(x0, x1, face, y0 + 0.12, face, y1 - 0.12, tint(who));
         }
       }
 
       // The shell round it: back wall, front fascia, two ends and a roof on posts.
-      put.face(rt, wall, [-9, 0, back - 0.4, 9, 0, back - 0.4,
-        9, 8.4, back - 0.4, -9, 8.4, back - 0.4]);
-      put.face(rt, wall, [-9, 0, front, 9, 0, front, 9, low, front, -9, low, front]);
-      put.face(rt, side, [-9, 0, front, -9, 0, back - 0.4, -9, 7.4, back - 0.4, -9, low, front]);
-      put.face(rt, side, [9, 0, back - 0.4, 9, 0, front, 9, low, front, 9, 7.4, back - 0.4]);
-      put.face(rt, tint(C.metal), [-9.4, 8.4, back - 0.6, 9.4, 8.4, back - 0.6,
-        9.4, 7.6, 0.8, -9.4, 7.6, 0.8]);
-      // Four posts rather than two: a roof this wide on two legs is a canopy.
-      for (const at of [-8.6, -3, 3, 8.6]) {
-        put.face(rt, side, [at - 0.22, 1, 0.4, at + 0.22, 1, 0.4,
-          at + 0.22, 7.7, 0.6, at - 0.22, 7.7, 0.6]);
+      for (let k = 0; k < seg; k++) {
+        const x0 = -long + (2 * long * k) / seg;
+        const x1 = -long + (2 * long * (k + 1)) / seg;
+        panel(x0, x1, back - 0.4, 0, back - 0.4, high + 2, wall);
+        panel(x0, x1, front, 0, front, low, wall);
+        panel(x0 - 0.4, x1 + 0.4, back - 0.6, high + 2, 0.8, high + 1.2, tint(C.metal));
       }
-      break;
-    }
-    /**
-     * A bank of spectators: a grass slope with people standing up it.
-     *
-     * What most of the crowd at a circuit actually is. A grandstand is a
-     * building and costs a hundred and fifty triangles; this is a wedge of
-     * ground with six rows of people on it, it costs sixty, and there is room
-     * for a dozen of them round a lap where there is room for four stands.
-     *
-     * The people are the same trick the grandstand uses - blocks off a palette
-     * of seven, scattered by a hash of where they are - and they lean back with
-     * the slope, because a crowd on a hill is looking down at you.
-     */
-    case 'bank': {
-      const long = 11;
-      const deep = 7;
-      const high = 3.2;
-      const grass = tint(shade(theme.near, 1.06));
-      const face = tint(shade(theme.near, 0.9));
-      // The slope itself: up and away from the track, with two ends.
-      put.face(rt, grass, [-long, 0, 0, long, 0, 0, long, high, -deep, -long, high, -deep]);
-      put.face(rt, face, [-long, 0, 0, -long, high, -deep, -long, 0, -deep]);
-      put.face(rt, face, [long, 0, -deep, long, high, -deep, long, 0, 0]);
-      put.face(rt, face, [-long, 0, -deep, long, 0, -deep, long, high, -deep, -long, high, -deep]);
-      const ROWS = 6;
-      for (let r = 0; r < ROWS; r++) {
-        const t0 = 0.12 + (r / ROWS) * 0.82;
-        const y = high * t0;
-        const z = -deep * t0;
-        for (let c = 0; c < 7; c++) {
-          const x0 = -long + 0.4 + c * ((long * 2 - 0.8) / 7);
-          const x1 = x0 + (long * 2 - 0.8) / 7 - 0.25;
-          const who = shade(CROWD[(r * 5 + c * 3) % CROWD.length],
-            0.88 + ((r * 3 + c * 7) % 5) * 0.06);
-          // Leaning back with the slope, because a crowd on a hill is looking
-          // down at you rather than standing to attention.
-          put.face(rt, tint(who), [x0, y, z, x1, y, z,
-            x1, y + 0.62, z - 0.28, x0, y + 0.62, z - 0.28]);
-        }
-      }
-      break;
-    }
-    /**
-     * A run of hoarding: advertising boards, posts and the fence above them.
-     *
-     * What is actually behind the barrier at a street circuit, and what was not
-     * here at all. Between the armco and the buildings there was bare ground -
-     * sand at Baku, concrete at Monaco - which is the one thing a street circuit
-     * never has, because the space between the rail and the wall is exactly
-     * where a promoter puts everything he can sell.
-     *
-     * It does more than fill it in. A driver at Monaco cannot see the corner
-     * after next, and the reason is that there is a fence, a hoarding and a
-     * building in the way. Eighteen hundred metres of draw distance with nothing
-     * standing in it is why the track looked like it was floating out there.
-     *
-     * Eighteen triangles: two faces of board, a post at each end, and two rails
-     * of fencing above. The fence is rails rather than mesh because there is no
-     * transparency in the solid pass and because two rails at four and six
-     * metres is what you see of a catch fence from a car anyway.
-     */
-    case 'hoarding': {
-      const board = TEAM_COLOURS[Math.floor(variant(prop) * TEAM_COLOURS.length)
-        % TEAM_COLOURS.length];
-      const post = tint(shade(C.metal, 0.7));
-      /**
-       * Built long along z, which is along the track.
-       *
-       * A model in this game is placed with the track's heading, and at that
-       * heading local x runs across the road and local z runs along it - which
-       * is why the grandstand, built long in x, is handed a quarter turn when it
-       * is placed. This was built long in x as well and not turned, so six
-       * thousand runs of advertising hoarding stood at right angles to the
-       * circuit like a row of gates. Built along z it needs no turn at all.
-       */
-      /**
-       * Six metres and a bit either way, against the six metres a node is.
-       *
-       * They are placed every second node, which is twelve metres, and they were
-       * eleven and a fifth long - so between every pair of boards there was
-       * eighty centimetres of daylight, all the way round eight circuits. They
-       * overlap now.
-       */
-      const long = 6.4;
-      /**
-       * And solid to four metres rather than to two and three quarters.
-       *
-       * A real catch fence is mesh and you can see through it, which is true and
-       * is not what this renderer can draw: there is no transparency in the
-       * solid pass, so a fence is either a few rails with the whole world
-       * visible between them or it is a wall. With rails you could see straight
-       * over the boarding at everything beyond, which was the thing the boarding
-       * was put there to stand in front of.
-       *
-       * Four metres is about what a hoarding with a debris fence behind it
-       * blocks from inside a car, and it leaves the last two metres as rails, so
-       * the tops of the buildings still show over it.
-       */
-      put.face(rt, tint(board.body),
-        [0, 0.9, -long, 0, 0.9, long, 0, 4.0, long, 0, 4.0, -long]);
-      put.face(rt, tint(shade(board.wing, 0.9)),
-        [0.14, 0.9, long, 0.14, 0.9, -long, 0.14, 4.0, -long, 0.14, 4.0, long]);
-      put.face(rt, tint(shade(board.body, 0.8)),
-        [0, 4.0, -long, 0, 4.0, long, 0.14, 4.0, long, 0.14, 4.0, -long]);
-      // A post at each end, and the fence standing on them.
-      for (const at of [-long, long]) {
-        put.face(rt, post, [-0.07, 0, at - 0.09, -0.07, 0, at + 0.09,
-          -0.07, 6.2, at + 0.09, -0.07, 6.2, at - 0.09]);
-        put.face(rt, post, [0.07, 0, at + 0.09, 0.07, 0, at - 0.09,
-          0.07, 6.2, at - 0.09, 0.07, 6.2, at + 0.09]);
-      }
-      const wire = tint(shade(C.metal, 0.85));
-      for (const y of [5.0, 6.0]) {
-        put.face(rt, wire, [-0.04, y, -long, -0.04, y, long,
-          -0.04, y + 0.09, long, -0.04, y + 0.09, -long]);
+      put.face(rt, side, [-long, 0, front, -long, 0, back - 0.4,
+        -long, high + 1, back - 0.4, -long, low, front]);
+      put.face(rt, side, [long, 0, back - 0.4, long, 0, front,
+        long, low, front, long, high + 1, back - 0.4]);
+      // Posts under the front of the roof, one every eight metres or so.
+      const posts = Math.max(2, Math.round(long / 4));
+      for (let k = 0; k <= posts; k++) {
+        const x = -long + (2 * long * k) / posts;
+        const u = x / long;
+        put.face(rt, side, [x - 0.22, low, 0.4 + sweep(u), x + 0.22, low, 0.4 + sweep(u),
+          x + 0.22, high + 1.2, 0.6 + sweep(u), x - 0.22, high + 1.2, 0.6 + sweep(u)]);
       }
       break;
     }

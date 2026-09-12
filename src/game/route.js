@@ -1327,14 +1327,33 @@ function crowds(nodes, add) {
      * the other nine get grass.
      */
     const big = taken.length <= 3;
-    // Three of them in a row along the corner rather than one, because a crowd
-    // is long.
-    for (let k = -1; k <= 1; k++) {
-      const at = node + k * (big ? 5 : 4);
-      if (big) {
-        add(at, { kind: 'stand', side, off: 30, s: 1, r: turn, align: true, flat: true });
-      } else {
-        add(at, { kind: 'bank', side, off: 24, s: 1, r: turn, align: true, flat: true });
+    if (big) {
+      /**
+       * One long bent stand rather than three short straight ones.
+       *
+       * Three identical stands set end to end along a corner is one stand drawn
+       * three times, and it reads as exactly that. A grandstand on the outside
+       * of a corner is built on the arc of that corner - it has to be, or the
+       * ends of it are in the run-off - so this one is thirty metres long, has
+       * eleven rows, and bends.
+       *
+       * The curve follows the corner it is standing on, so a hairpin gets a
+       * tighter one than a fast sweeper does.
+       */
+      const arc = Math.min(6, Math.abs(corner.peak) * 90) * -side;
+      add(node, {
+        kind: 'stand', side, off: 32, s: 1, r: turn, align: true, flat: true,
+        len: 15, rows: 11, bend: arc,
+      });
+      // And a bank at each end of it, so the corner is full rather than having
+      // one building in the middle of it with nothing either side.
+      for (const k of [-7, 7]) {
+        add(node + k, { kind: 'bank', side, off: 24, s: 1, r: turn, align: true, flat: true });
+      }
+    } else {
+      // And banks in a row, which is what a crowd on a slope looks like.
+      for (let k = -1; k <= 1; k++) {
+        add(node + k * 4, { kind: 'bank', side, off: 24, s: 1, r: turn, align: true, flat: true });
       }
     }
     // And the car park behind them, which is what the other side of a stand is.
@@ -1746,13 +1765,17 @@ function scatter(nodes, rnd) {
   // across it - the other way round it is a wall standing in the road with its
   // seats pointing up the straight at nobody. And stood on the track's own
   // height, or a circuit that climbs leaves them hanging in the air beside it.
+  // The main straight: two long ones and the rest ordinary, rather than seven of
+  // the same building end to end.
   for (let i = -22; i < 18; i += 6) {
-    add(i, {
-      kind: 'stand', side: -1, off: 26, s: 1, r: Math.PI / 2, align: true, flat: true,
-    });
-    add(i, {
-      kind: 'stand', side: 1, off: 26, s: 1, r: -Math.PI / 2, align: true, flat: true,
-    });
+    const grand = i === -10 || i === 2;
+    for (const side of [-1, 1]) {
+      add(i, {
+        kind: 'stand', side, off: 26, s: 1, r: side * -Math.PI / 2,
+        align: true, flat: true,
+        len: grand ? 14 : 8 + ((i + 24) % 3), rows: grand ? 12 : 7 + ((i + 22) % 3),
+      });
+    }
   }
 
   // Flair: the things you look at rather than drive past.
@@ -1803,7 +1826,7 @@ const FLOATS = new Set(['boat', 'buoy']);
 /** How far from a piece of road a prop of each kind needs for its own footprint. */
 export const SPREAD = {
   dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
-  palm: 2.5, stand: 10, bank: 12, hoarding: 6, pit: 15, screen: 5, tyres: 3.5, camper: 3,
+  palm: 2.5, stand: 16, bank: 12, hoarding: 6, pit: 15, screen: 5, tyres: 3.5, camper: 3,
   pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
   post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7, crane: 6, fountain: 48,
   strat: 18, eiffel: 28, campanile: 11, castle: 48, slab: 62, colonnade: 56, marquee: 8,
