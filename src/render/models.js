@@ -333,11 +333,15 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
     case 'screen': {
       const leg = tint(shade(C.metal, 0.8));
       const face = tint(C.shadow);
-      const glow = tint(night > 0.3 ? C.lamp : shade(C.glass, 1.1));
+      const glow = night > 0.3 ? C.lamp : tint(shade(C.glass, 1.1));
       box(rt, tint, C.metal, -0.4, 0.4, 0, 5.4, -0.4, 0.4);
       void leg;
       put.face(rt, face, [-4.2, 5.2, 0, 4.2, 5.2, 0, 4.2, 10.4, 0, -4.2, 10.4, 0]);
+      // The picture on it, which after dark is the only thing on this circuit
+      // brighter than the screen it is being drawn on.
+      rt.emissive = night > 0.3 ? 1 : 0;
       put.face(rt, glow, [-3.7, 5.7, -0.12, 3.7, 5.7, -0.12, 3.7, 9.9, -0.12, -3.7, 9.9, -0.12]);
+      rt.emissive = 0;
       break;
     }
     /** A campervan. There is a small town of these at Spa for one weekend a year. */
@@ -849,10 +853,15 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       put.face(rt, steel, [-0.16, 10.5, 0, -0.16, 11, 0, -3.4, 11.6, 0, -3.4, 11.2, 0]);
       const lit = night > 0.03;
       const lamp = lit ? C.lamp : tint(shade(C.chrome, 0.9));
+      // Lit, the head is a light rather than a thing the light falls on: it is
+      // drawn above white and it bleeds, which is what a floodlight against a
+      // dark sky does and what a pale rectangle never did.
+      rt.emissive = lit ? 1 : 0;
       put.face(rt, lamp, [-4.1, 10.9, -0.5, -2.9, 10.9, -0.5, -2.9, 11.5, -0.5, -4.1, 11.5, -0.5]);
       put.face(rt, lamp, [-2.9, 10.9, 0.5, -4.1, 10.9, 0.5, -4.1, 11.5, 0.5, -2.9, 11.5, 0.5]);
       put.face(rt, lit ? C.lamp : tint(C.chrome),
         [-4.1, 10.85, -0.5, -2.9, 10.85, -0.5, -2.9, 10.85, 0.5, -4.1, 10.85, 0.5]);
+      rt.emissive = 0;
       break;
     }
     case 'post':
@@ -1452,10 +1461,12 @@ export function drawRacer(rt, car, x, y, z, yaw, tint, night = 0, pitch = 0) {
   // from behind and what a tow looks like here. After dark it is not tinted at
   // all: a light is a light, and the one thing that should not get darker when
   // the sun goes down is the thing you are following.
+  rt.shine = 0;
   const lamp = night > 0.35 ? C.tail : tint(C.kerbA);
+  rt.emissive = night > 0.35 ? 1 : 0;
   put.face(rt, lamp, [-0.10, 0.60, -2.38, 0.10, 0.60, -2.38,
     0.10, 0.76, -2.38, -0.10, 0.76, -2.38]);
-  rt.shine = 0;
+  rt.emissive = 0;
 }
 
 /**

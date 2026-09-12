@@ -78,6 +78,14 @@ export function compile(gl, vertexSource, fragmentSource) {
   return { program, uniforms, attribs };
 }
 
+/** A buffer with something already in it. Used for the one full-screen triangle. */
+export function buffer(gl, target, data, usage) {
+  const buf = gl.createBuffer();
+  gl.bindBuffer(target, buf);
+  gl.bufferData(target, data, usage || gl.STATIC_DRAW);
+  return buf;
+}
+
 // --- The matrix --------------------------------------------------------------
 
 /**
@@ -264,7 +272,18 @@ void main() {
    * that moves across it as it turns, which is the one thing on the screen that
    * says the light is coming from somewhere.
    */
-  float gloss = step(0.96, vColour.a) * step(vColour.a, 0.995);
+  /**
+   * A light, rather than a thing a light falls on.
+   *
+   * Straight out at more than white, with none of the shading applied: the sun
+   * does not light a lamp, and a floodlight on the shadow side of its own post
+   * is still on.
+   */
+  if (vColour.a > 0.950 && vColour.a < 0.970) {
+    gl_FragColor = vec4(vColour.rgb * 2.1, 1.0);
+    return;
+  }
+  float gloss = step(0.970, vColour.a) * step(vColour.a, 0.995);
   if (gloss > 0.0) {
     vec3 eye = normalize(uCamera - vWorld);
     float spec = pow(max(dot(reflect(-uSun, n), eye), 0.0), 22.0);
@@ -273,13 +292,6 @@ void main() {
   float away = length(vWorld - uCamera);
   float fog = clamp((away - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
   gl_FragColor = vec4(mix(colour, uFogColour, pow(fog, 0.75)), vColour.a);
-}`;
-
-const SCREEN_FS = `
-precision highp float;
-varying vec4 vColour;
-void main() {
-  gl_FragColor = vColour;
 }`;
 
 /** Flat things in screen space: the sky and the sun. Coordinates are already NDC. */
@@ -291,6 +303,22 @@ varying vec4 vColour;
 void main() {
   vColour = aColour;
   gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+/**
+ * The sky and the sun, and the one place in this game with a colour over one.
+ *
+ * `uBoost` is how much brighter than the screen a thing is. It is one for the
+ * sky and two and a half for the sun, and the difference is what the bloom pass
+ * later finds: a disc at exactly white bleeds nothing, because there is nothing
+ * over the edge to bleed.
+ */
+const SCREEN_FS = `
+precision highp float;
+varying vec4 vColour;
+uniform float uBoost;
+void main() {
+  gl_FragColor = vec4(vColour.rgb * uBoost, vColour.a);
 }`;
 
 /**
@@ -373,6 +401,94 @@ export function lightProjection(out, sun, cam, ahead) {
   return out;
 }
 
+/**
+ * The three passes that happen after the world is drawn.
+ *
+ * A full screen triangle each time - one triangle rather than two, because a
+ * quad has a seam down its diagonal where the hardware runs the fragments twice
+ * and there is nothing on the other side of it worth having.
+ */
+const POST_VS = `
+precision highp float;
+attribute vec2 aPos;
+varying vec2 vUV;
+void main() {
+  vUV = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+/** What is brighter than the screen can show. Everything else is thrown away. */
+const BRIGHT_FS = `
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D uScene;
+uniform float uThreshold;
+void main() {
+  vec3 c = texture2D(uScene, vUV).rgb;
+  // Luminance rather than any one channel: a saturated red at 1.4 is as bright
+  // as a white at 1.4 and should bleed the same amount.
+  float lum = dot(c, vec3(0.299, 0.587, 0.114));
+  float over = max(0.0, lum - uThreshold);
+  gl_FragColor = vec4(c * (over / max(lum, 0.0001)), 1.0);
+}`;
+
+/**
+ * A blur, one axis at a time.
+ *
+ * Nine taps as five, using the hardware's own bilinear filtering to read two
+ * texels at once - the oldest trick in this particular book and still worth
+ * nearly half the work.
+ */
+const BLUR_FS = `
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D uScene;
+uniform vec2 uStep;
+void main() {
+  vec3 c = texture2D(uScene, vUV).rgb * 0.2270270270;
+  c += texture2D(uScene, vUV + uStep * 1.3846153846).rgb * 0.3162162162;
+  c += texture2D(uScene, vUV - uStep * 1.3846153846).rgb * 0.3162162162;
+  c += texture2D(uScene, vUV + uStep * 3.2307692308).rgb * 0.0702702703;
+  c += texture2D(uScene, vUV - uStep * 3.2307692308).rgb * 0.0702702703;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+
+/**
+ * The world and its glow, onto the screen, with the range brought back in.
+ *
+ * A soft knee rather than a tone curve: below four fifths of white nothing is
+ * touched at all, and above it the rest of the range is folded into what is
+ * left. That matters more here than in a game whose picture was authored in high
+ * range to begin with. Every colour in this one was chosen against a screen that
+ * stops at white - the greens, the tarmac, the eight team colours - and a curve
+ * that pulls the whole picture down to make room for a sun that is brighter than
+ * white is a curve that makes every one of those choices wrong. Reinhard across
+ * the whole range, which is what this had first, took a fifth of the brightness
+ * out of the entire circuit to accommodate one disc.
+ *
+ * On the luminance rather than per channel. Per channel, anything over one goes
+ * towards white, which turns a low sun from orange into a white disc with an
+ * orange ring; on the luminance the hue survives being too bright, which is the
+ * whole point of drawing a sunset.
+ */
+const COMPOSE_FS = `
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D uScene;
+uniform sampler2D uGlow;
+uniform float uBloom;
+const float KNEE = 0.8;
+void main() {
+  vec3 c = texture2D(uScene, vUV).rgb + texture2D(uGlow, vUV).rgb * uBloom;
+  float lum = dot(c, vec3(0.299, 0.587, 0.114));
+  if (lum > KNEE) {
+    float over = (lum - KNEE) / (1.0 - KNEE);
+    float mapped = KNEE + (1.0 - KNEE) * (1.0 - exp(-over));
+    c *= mapped / max(lum, 0.0001);
+  }
+  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
 // --- The batch ---------------------------------------------------------------
 
 /** How many triangles a buffer starts out able to hold. It grows if it must. */
@@ -411,6 +527,29 @@ export class Batch {
     this.lightProj = new Float32Array(16);
     this.shadow = makeShadowMap(gl);
     if (this.shadow) this.depth = compile(gl, DEPTH_VS, DEPTH_FS);
+    /**
+     * Where the world is drawn before it reaches the screen.
+     *
+     * A floating point one, so a colour may be brighter than white: the sun, a
+     * highlight on a wing, a floodlight. Everything that follows - the glow, the
+     * range being brought back in at the end - only means anything because there
+     * is something over the edge to find.
+     *
+     * Nothing if the card will not give us one, and then the world is drawn
+     * straight to the screen exactly as it was before any of this. A missing
+     * glow is a missing glow.
+     */
+    this.hdr = makeSceneBuffer(gl);
+    if (this.hdr) {
+      this.post = {
+        bright: compile(gl, POST_VS, BRIGHT_FS),
+        blur: compile(gl, POST_VS, BLUR_FS),
+        compose: compile(gl, POST_VS, COMPOSE_FS),
+        // One triangle, big enough to cover the screen.
+        quad: buffer(gl, gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3])),
+      };
+    }
+    this.bloom = 1;
 
     this.solid = makeSink(START_TRIS);
     this.clear = makeSink(2048);
@@ -458,12 +597,25 @@ export class Batch {
      * tyres.
      */
     this.shine = 0;
+    /**
+     * A thing that is a light rather than a thing a light falls on.
+     *
+     * Same trick as the gloss and the same byte: two hundred and forty-five. A
+     * lamp, a floodlight, the strip down the roof of the tunnel, the rain light
+     * on the back of a car. It is drawn above white, so it survives the fold at
+     * the end and it bleeds into what is around it - which is the whole reason
+     * the picture goes through a floating point buffer at all. A headlight that
+     * is exactly white is a white rectangle; one at twice white is a headlight.
+     */
+    this.emissive = 0;
   }
 
   /** The size of the picture. Set by the renderer when the window changes. */
   resize(width, height) {
+    if (this.w === width && this.h === height) return;
     this.w = width;
     this.h = height;
+    if (this.hdr) this.hdr = makeSceneBuffer(this.gl, width, height, this.hdr);
   }
 
   setCamera(x, y, z, yaw, pitch, roll) {
@@ -489,6 +641,7 @@ export class Batch {
     this.ui.count = 0;
     this.tris = 0;
 
+    if (this.hdr) gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdr.frame);
     gl.viewport(0, 0, this.w, this.h);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST);
@@ -514,6 +667,9 @@ export class Batch {
     // some: the stops are written for a screen a particular shape and the
     // horizon moves up and down with the camera besides.
     this.skyBand(top, from, -1, from);
+    // Everything after this point in the screen buffer is the sun, which is
+    // drawn brighter than the screen can show.
+    this.skyCount = this.ui.count;
   }
 
   /** One stripe of sky, from `y0` at the top in `c0` to `y1` at the bottom in `c1`. */
@@ -602,7 +758,7 @@ export class Batch {
   push(ax, ay, az, bx, by, bz, cx, cy, cz, colour) {
     const sink = this.stipple ? this.clear : this.solid;
     if ((sink.count + 3) * STRIDE > sink.data.byteLength) grow(sink);
-    const alpha = this.stipple ? 150 : (this.shine ? 250 : 255);
+    const alpha = this.stipple ? 150 : this.emissive ? 245 : this.shine ? 250 : 255;
     // The chequered second colour is now simply the colour in between.
     const c = this.dither ? blend(colour, this.dither) : colour;
     const ux = bx - ax; const uy = by - ay; const uz = bz - az;
@@ -675,7 +831,16 @@ export class Batch {
       gl.enableVertexAttribArray(a.aColour);
       gl.vertexAttribPointer(a.aColour, 4, gl.UNSIGNED_BYTE, true, 12, 8);
       gl.disable(gl.DEPTH_TEST);
-      gl.drawArrays(gl.TRIANGLES, 0, this.ui.count);
+      const sky = Math.min(this.skyCount || this.ui.count, this.ui.count);
+      gl.uniform1f(this.screen.uniforms.uBoost, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, sky);
+      if (this.ui.count > sky) {
+        // The sun, at two and a half times white. On a card with no floating
+        // point buffer this clamps back to white and simply looks like the sun
+        // did last week.
+        gl.uniform1f(this.screen.uniforms.uBoost, SUN_BRIGHT);
+        gl.drawArrays(gl.TRIANGLES, sky, this.ui.count - sky);
+      }
       gl.enable(gl.DEPTH_TEST);
     }
 
@@ -697,7 +862,11 @@ export class Batch {
       gl.enableVertexAttribArray(d.aPos);
       gl.vertexAttribPointer(d.aPos, 3, gl.FLOAT, false, STRIDE, 0);
       gl.drawArrays(gl.TRIANGLES, 0, this.solid.count);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      // Back to whatever the world is being drawn into, which is the floating
+      // point picture when there is one and the screen when there is not. Bound
+      // to null here, the sky went into the picture and everything after it went
+      // to the screen - where the glow pass then painted the picture over it.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdr ? this.hdr.frame : null);
       gl.viewport(0, 0, this.w, this.h);
     }
 
@@ -757,6 +926,68 @@ export class Batch {
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     }
+
+    this.glow();
+  }
+
+  /**
+   * The glow, and the way back to a screen that only goes to white.
+   *
+   * Three passes over a quarter-size picture and one over the full one. What
+   * comes out of the world is a floating point image where the sun is at two and
+   * a half and a highlight on a wing may be at one and a bit; the screen has one.
+   * Something has to decide what to do with the rest, and the choice of what -
+   * clip it, or let it bleed into what is next to it - is most of the difference
+   * between a sunset that is a bright disc and a sunset.
+   *
+   * The blur is separable and runs at a quarter of the width, which is sixteen
+   * times fewer pixels and is invisible: a glow is the one thing in a picture
+   * that is allowed to be low resolution, because it is already the shape of
+   * something being out of focus.
+   */
+  glow() {
+    const gl = this.gl;
+    if (!this.hdr) return;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.post.quad);
+
+    const pass = (program, target, source, set) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.frame : null);
+      gl.viewport(0, 0, target ? target.w : this.w, target ? target.h : this.h);
+      gl.useProgram(program.program);
+      gl.enableVertexAttribArray(program.attribs.aPos);
+      gl.vertexAttribPointer(program.attribs.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, source);
+      gl.uniform1i(program.uniforms.uScene, 0);
+      if (set) set(program.uniforms);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+
+    const half = this.hdr.half;
+    const spare = this.hdr.spare;
+    pass(this.post.bright, half, this.hdr.texture, (u) => gl.uniform1f(u.uThreshold, 1.0));
+    pass(this.post.blur, spare, half.texture, (u) => gl.uniform2f(u.uStep, 1 / half.w, 0));
+    pass(this.post.blur, half, spare.texture, (u) => gl.uniform2f(u.uStep, 0, 1 / half.h));
+
+    // And back to the screen, with the glow added and the range brought in.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.w, this.h);
+    gl.useProgram(this.post.compose.program);
+    gl.enableVertexAttribArray(this.post.compose.attribs.aPos);
+    gl.vertexAttribPointer(this.post.compose.attribs.aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.hdr.texture);
+    gl.uniform1i(this.post.compose.uniforms.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, half.texture);
+    gl.uniform1i(this.post.compose.uniforms.uGlow, 1);
+    gl.uniform1f(this.post.compose.uniforms.uBloom, this.bloom);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.enable(gl.DEPTH_TEST);
   }
 }
 
@@ -797,6 +1028,73 @@ function makeShadowMap(gl) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.bindTexture(gl.TEXTURE_2D, null);
   return ok ? { texture, frame } : null;
+}
+
+/** How much brighter than the screen the sun is drawn. */
+const SUN_BRIGHT = 2.5;
+
+/**
+ * A picture that may be brighter than white, and a quarter-size pair to blur in.
+ *
+ * Half float rather than full: it is a picture, not a simulation, and eleven bits
+ * of mantissa is more than a screen with eight will ever ask for. WebGL 2 has it
+ * as standard; WebGL 1 needs two extensions and most cards that far back have
+ * them. Where it is not there this returns nothing and the world goes straight
+ * to the screen, which is what it did before there was a glow at all.
+ */
+function makeSceneBuffer(gl, width = gl.drawingBufferWidth, height = gl.drawingBufferHeight, old = null) {
+  if (old) {
+    for (const part of [old, old.half, old.spare]) {
+      if (!part) continue;
+      gl.deleteFramebuffer(part.frame);
+      gl.deleteTexture(part.texture);
+      if (part.depth) gl.deleteRenderbuffer(part.depth);
+    }
+  }
+  const float = gl.webgl2
+    ? gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')
+    : gl.getExtension('OES_texture_half_float');
+  if (!float) return null;
+  const HALF_FLOAT = gl.webgl2 ? 0x140B : (gl.getExtension('OES_texture_half_float') || {}).HALF_FLOAT_OES;
+  if (!gl.webgl2 && !gl.getExtension('OES_texture_half_float_linear')) return null;
+
+  const target = (w, h, withDepth) => {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    if (gl.webgl2) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, 0x881A /* RGBA16F */, w, h, 0, gl.RGBA, HALF_FLOAT, null);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, HALF_FLOAT, null);
+    }
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const frame = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frame);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    let depth = null;
+    if (withDepth) {
+      depth = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+    }
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    return ok ? { texture, frame, depth, w, h } : null;
+  };
+
+  const scene = target(width, height, true);
+  // A quarter of the width, which is a sixteenth of the pixels. A glow is the
+  // one thing in a picture allowed to be low resolution.
+  const hw = Math.max(1, Math.floor(width / 4));
+  const hh = Math.max(1, Math.floor(height / 4));
+  const half = target(hw, hh, false);
+  const spare = target(hw, hh, false);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  if (!scene || !half || !spare) return null;
+  return { ...scene, half, spare };
 }
 
 /** A growable heap of vertices, with the two views everything is written through. */

@@ -75,6 +75,13 @@ building has a bright side and a dark side and they change over as the afternoon
 goes — and the cars, the trees, the barriers and the grandstands all cast into a
 shadow map that follows the car up the road.
 
+**And some things are brighter than the screen.** The picture is drawn into a
+floating point buffer, so the sun, a floodlight, the rain light on the back of
+the car you are chasing and the highlight running along a wing can all be
+brighter than white — which is what lets them bleed into what is around them.
+Only the last fifth of the range is folded back in at the end: everything below
+it is left exactly as it was chosen.
+
 **The wing is yours to choose.** Low, medium or high, in the menu, and it is a
 trade rather than an upgrade: the small wing is about 373 km/h flat out, the big
 one 333, and the big one is the quicker car in every corner in between. Monza
