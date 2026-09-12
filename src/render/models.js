@@ -1290,6 +1290,51 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       }
       break;
     }
+    /**
+     * A run of hoarding: advertising boards, posts and the fence above them.
+     *
+     * What is actually behind the barrier at a street circuit, and what was not
+     * here at all. Between the armco and the buildings there was bare ground -
+     * sand at Baku, concrete at Monaco - which is the one thing a street circuit
+     * never has, because the space between the rail and the wall is exactly
+     * where a promoter puts everything he can sell.
+     *
+     * It does more than fill it in. A driver at Monaco cannot see the corner
+     * after next, and the reason is that there is a fence, a hoarding and a
+     * building in the way. Eighteen hundred metres of draw distance with nothing
+     * standing in it is why the track looked like it was floating out there.
+     *
+     * Eighteen triangles: two faces of board, a post at each end, and two rails
+     * of fencing above. The fence is rails rather than mesh because there is no
+     * transparency in the solid pass and because two rails at four and six
+     * metres is what you see of a catch fence from a car anyway.
+     */
+    case 'hoarding': {
+      const board = TEAM_COLOURS[Math.floor(variant(prop) * TEAM_COLOURS.length)
+        % TEAM_COLOURS.length];
+      const post = tint(shade(C.metal, 0.7));
+      const long = 5.6;
+      // The boards, front and back, above the height of the barrier.
+      put.face(rt, tint(board.body),
+        [-long, 1.15, 0, long, 1.15, 0, long, 2.75, 0, -long, 2.75, 0]);
+      put.face(rt, tint(shade(board.wing, 0.9)),
+        [long, 1.15, 0.14, -long, 1.15, 0.14, -long, 2.75, 0.14, long, 2.75, 0.14]);
+      put.face(rt, tint(shade(board.body, 0.8)),
+        [-long, 2.75, 0, long, 2.75, 0, long, 2.75, 0.14, -long, 2.75, 0.14]);
+      // A post at each end, and the fence standing on them.
+      for (const at of [-long, long]) {
+        put.face(rt, post, [at - 0.09, 0, -0.07, at + 0.09, 0, -0.07,
+          at + 0.09, 6.2, -0.07, at - 0.09, 6.2, -0.07]);
+        put.face(rt, post, [at + 0.09, 0, 0.07, at - 0.09, 0, 0.07,
+          at - 0.09, 6.2, 0.07, at + 0.09, 6.2, 0.07]);
+      }
+      const wire = tint(shade(C.metal, 0.85));
+      for (const y of [4.1, 6.0]) {
+        put.face(rt, wire, [-long, y, -0.04, long, y, -0.04,
+          long, y + 0.09, -0.04, -long, y + 0.09, -0.04]);
+      }
+      break;
+    }
     case 'block': {
       // The low one, and the same building as the tall one at a different size -
       // which is now not always the same size. They were every one of them six

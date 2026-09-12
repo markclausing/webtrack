@@ -89,6 +89,15 @@ game already did to say *fast*: the lens opening from fifty degrees to seventy,
 the camera dropping two feet and coming in, and the whole thing starting to
 shiver.
 
+**The eight street circuits are walled in.** Between the barrier and the
+buildings there used to be bare ground — sand at Baku, concrete at Monaco —
+which is the one thing a street circuit never has: the space between the rail and
+the wall is where a promoter puts everything he can sell. There is hoarding and
+catch fencing down both sides of all eight now, except over the harbour, on the
+bridges, and on the inside of a hairpin, where a real circuit puts a low barrier
+and nothing above it because that is the one place where what is behind the rail
+is between you and the apex.
+
 **A circuit does not move, so it is built once.** Eighteen hundred metres of
 road, kerbs, barriers, ground and several thousand trees used to be walked,
 transformed and written out sixty times a second, because the colours had to be

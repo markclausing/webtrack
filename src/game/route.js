@@ -1163,6 +1163,56 @@ function cornersOf(nodes) {
  * because a bank is ninety triangles against a hundred and fifty and because
  * most of the people at a circuit are standing on grass.
  */
+/**
+ * The eight circuits that are streets get walled in.
+ *
+ * Between the barrier and the buildings there was bare ground - sand at Baku,
+ * concrete at Monaco - which is the one thing a street circuit never has. The
+ * space between the rail and the wall is exactly where a promoter puts
+ * everything he can sell, and what is actually there is hoarding, catch fencing
+ * and then somebody's front door.
+ *
+ * It does more than fill it in. A driver at Monaco cannot see the corner after
+ * next and the reason is that there is a fence, a hoarding and a building in the
+ * way. Eighteen hundred metres of draw distance with an empty pavement in it is
+ * why the road out there looked like it was floating.
+ *
+ * Every second node, so the runs of board meet end to end, and both sides. Not
+ * over water, where the barrier has a harbour behind it rather than a pavement;
+ * not on a bridge, where the railing is the barrier; and not where the barrier
+ * itself has been dropped because the lap is running over its own tarmac.
+ */
+function streetFurniture(nodes, add) {
+  const count = nodes.length;
+  for (let i = 0; i < count; i += 2) {
+    const a = nodes[i];
+    if (a.open || a.bridge !== undefined || a.deck) continue;
+    if ((a.tunnel || 0) > 0.05) continue;
+    for (const side of [-1, 1]) {
+      // Over the water there is no pavement to stand it on. Monaco's barrier has
+      // the harbour on the other side of it for a quarter of the lap, and a row
+      // of advertising hoarding standing in it is worse than the gap.
+      const g = side < 0 ? a.g.l : a.g.r;
+      if (a.g.wet > 0.4 && g[1] < a.y - 2) continue;
+      /**
+       * And nothing on the inside of a tight corner.
+       *
+       * A real circuit puts a low barrier there and nothing above it, because
+       * the inside of a hairpin is the one place where what is behind the rail
+       * is between the driver and the apex. Monaco's own hairpin with a run of
+       * board on the inside is a corner you cannot see round, which is a
+       * different game rather than a better picture.
+       */
+      const inside = a.curve > 0 ? 1 : -1;
+      if (side === inside && Math.abs(a.curve) > 0.08) continue;
+      add(i, {
+        kind: 'hoarding', side, off: a.wall + 1.4, s: 1,
+        r: side < 0 ? 0 : Math.PI, align: true, flat: true,
+      });
+    }
+  }
+}
+
 function crowds(nodes, add) {
   const count = nodes.length;
   const corners = cornersOf(nodes)
@@ -1703,7 +1753,7 @@ const FLOATS = new Set(['boat', 'buoy']);
 /** How far from a piece of road a prop of each kind needs for its own footprint. */
 export const SPREAD = {
   dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
-  palm: 2.5, stand: 10, bank: 12, pit: 15, screen: 5, tyres: 3.5, camper: 3,
+  palm: 2.5, stand: 10, bank: 12, hoarding: 6, pit: 15, screen: 5, tyres: 3.5, camper: 3,
   pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
   post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7, crane: 6, fountain: 48,
   strat: 18, eiffel: 28, campanile: 11, castle: 48, slab: 62, colonnade: 56, marquee: 8,
@@ -2008,6 +2058,7 @@ function dress(nodes, real, rnd) {
   cornerBoards(nodes, add);
   cranes(nodes, add);
   crowds(nodes, add);
+  if (real.osm) streetFurniture(nodes, add);
 
   // The gantry is the checkpoint, on the node the clock actually reads.
   for (const at of checkpointsFor(count)) {
