@@ -874,7 +874,9 @@ export class Renderer {
       // definition; taken off the terrain it slid down the beach on the sea
       // front and left the edge of the track dropping into nothing. On the
       // bridge there is none, because there the railing is the barrier.
-      if (a.bridge === undefined && !a.deck) {
+      // No rail where the lap runs over its own tarmac: see route.js. It is the
+      // one place a barrier would be drawn across a road rather than beside one.
+      if (a.bridge === undefined && !a.deck && !a.open) {
         /**
          * Armco has a shape, and the shape is the whole of why it reads.
          *

@@ -927,22 +927,84 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       // an arm and a head - and after dark the head is not tinted at all,
       // because a lamp is a lamp and the whole reason it is there is that the
       // rest of the world has gone dark around it.
+      /**
+       * The column, as a column.
+       *
+       * Two flat faces crossed at right angles, which is a lamp post from
+       * directly in front and two pieces of card from anywhere else. There are
+       * two thousand of them in this game and you pass one every seventy metres.
+       *
+       * Six sides, tapering from the base to the top, with a collar where the
+       * arm leaves it and the arm itself in three segments so it curves. Forty
+       * triangles against three, which is nothing in a world that is built once
+       * - and under one sun a six-sided column has a bright side, a dark side
+       * and a highlight running up the middle, which is the whole of why it now
+       * reads as round.
+       */
       const steel = tint(C.metal);
-      const dark = tint(shade(C.metal, 0.7));
-      put.face(rt, steel, [-0.24, 0, 0, 0.24, 0, 0, 0.18, 11, 0, -0.18, 11, 0]);
-      put.face(rt, dark, [0, 0, -0.24, 0, 0, 0.24, 0, 11, 0.18, 0, 11, -0.18]);
-      put.face(rt, steel, [-0.16, 10.5, 0, -0.16, 11, 0, -3.4, 11.6, 0, -3.4, 11.2, 0]);
+      const dark = tint(shade(C.metal, 0.78));
+      const SIDES = 6;
+      const column = (y0, y1, r0, r1, colour) => {
+        const q = new Float64Array(12);
+        for (let k = 0; k < SIDES; k++) {
+          const a0 = (k / SIDES) * Math.PI * 2;
+          const a1 = ((k + 1) / SIDES) * Math.PI * 2;
+          q.set([
+            Math.cos(a0) * r0, y0, Math.sin(a0) * r0,
+            Math.cos(a1) * r0, y0, Math.sin(a1) * r0,
+            Math.cos(a1) * r1, y1, Math.sin(a1) * r1,
+            Math.cos(a0) * r1, y1, Math.sin(a0) * r1,
+          ]);
+          put.face(rt, colour, q);
+        }
+      };
+      column(0, 0.5, 0.34, 0.26, dark);
+      column(0.5, 10.4, 0.22, 0.15, steel);
+      column(10.4, 10.8, 0.24, 0.24, dark);
+      /**
+       * And the arm, in three segments so it bends.
+       *
+       * A street lamp's arm is a quarter of a circle, not a plank. Three
+       * segments is enough to say so at the distance one is ever seen from, and
+       * it costs twelve triangles.
+       */
+      const ARM = 3;
+      const q = new Float64Array(12);
+      for (let k = 0; k < ARM; k++) {
+        const t0 = k / ARM;
+        const t1 = (k + 1) / ARM;
+        const x0 = -3.4 * t0;
+        const x1 = -3.4 * t1;
+        const y0 = 10.8 + Math.sin(t0 * Math.PI * 0.5) * 0.85;
+        const y1 = 10.8 + Math.sin(t1 * Math.PI * 0.5) * 0.85;
+        q.set([x0, y0, -0.11, x1, y1, -0.11, x1, y1, 0.11, x0, y0, 0.11]);
+        put.face(rt, steel, q);
+        q.set([x0, y0 - 0.14, -0.11, x0, y0 - 0.14, 0.11,
+          x1, y1 - 0.14, 0.11, x1, y1 - 0.14, -0.11]);
+        put.face(rt, dark, q);
+        q.set([x0, y0, -0.11, x0, y0 - 0.14, -0.11, x1, y1 - 0.14, -0.11, x1, y1, -0.11]);
+        put.face(rt, dark, q);
+        q.set([x0, y0 - 0.14, 0.11, x0, y0, 0.11, x1, y1, 0.11, x1, y1 - 0.14, 0.11]);
+        put.face(rt, steel, q);
+      }
       const lit = night > 0.03;
       const lamp = lit ? C.lamp : tint(shade(C.chrome, 0.9));
       // Lit, the head is a light rather than a thing the light falls on: it is
       // drawn above white and it bleeds, which is what a floodlight against a
       // dark sky does and what a pale rectangle never did.
       void lit;
+      // The lantern: a shallow tray under the end of the arm, with the lens on
+      // the underside of it where a lens goes.
+      const hood = tint(shade(C.metal, 0.9));
+      put.face(rt, hood, [-4.2, 11.72, -0.46, -2.8, 11.72, -0.46,
+        -2.8, 11.72, 0.46, -4.2, 11.72, 0.46]);
+      put.face(rt, hood, [-4.2, 11.72, -0.46, -4.2, 11.42, -0.34,
+        -2.8, 11.42, -0.34, -2.8, 11.72, -0.46]);
+      put.face(rt, hood, [-2.8, 11.72, 0.46, -2.8, 11.42, 0.34,
+        -4.2, 11.42, 0.34, -4.2, 11.72, 0.46]);
       rt.nightlight = 1;
-      put.face(rt, C.lamp, [-4.1, 10.9, -0.5, -2.9, 10.9, -0.5, -2.9, 11.5, -0.5, -4.1, 11.5, -0.5]);
-      put.face(rt, C.lamp, [-2.9, 10.9, 0.5, -4.1, 10.9, 0.5, -4.1, 11.5, 0.5, -2.9, 11.5, 0.5]);
-      put.face(rt, C.lamp, [-4.1, 10.85, -0.5, -2.9, 10.85, -0.5,
-        -2.9, 10.85, 0.5, -4.1, 10.85, 0.5]);
+      put.face(rt, C.lamp, [-4.2, 11.42, -0.34, -4.2, 11.42, 0.34,
+        -2.8, 11.42, 0.34, -2.8, 11.42, -0.34]);
       rt.nightlight = 0;
       void lamp;
       break;
@@ -1035,6 +1097,47 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       for (const at of [-8.6, -3, 3, 8.6]) {
         put.face(rt, side, [at - 0.22, 1, 0.4, at + 0.22, 1, 0.4,
           at + 0.22, 7.7, 0.6, at - 0.22, 7.7, 0.6]);
+      }
+      break;
+    }
+    /**
+     * A bank of spectators: a grass slope with people standing up it.
+     *
+     * What most of the crowd at a circuit actually is. A grandstand is a
+     * building and costs a hundred and fifty triangles; this is a wedge of
+     * ground with six rows of people on it, it costs sixty, and there is room
+     * for a dozen of them round a lap where there is room for four stands.
+     *
+     * The people are the same trick the grandstand uses - blocks off a palette
+     * of seven, scattered by a hash of where they are - and they lean back with
+     * the slope, because a crowd on a hill is looking down at you.
+     */
+    case 'bank': {
+      const long = 11;
+      const deep = 7;
+      const high = 3.2;
+      const grass = tint(shade(theme.near, 1.06));
+      const face = tint(shade(theme.near, 0.9));
+      // The slope itself: up and away from the track, with two ends.
+      put.face(rt, grass, [-long, 0, 0, long, 0, 0, long, high, -deep, -long, high, -deep]);
+      put.face(rt, face, [-long, 0, 0, -long, high, -deep, -long, 0, -deep]);
+      put.face(rt, face, [long, 0, -deep, long, high, -deep, long, 0, 0]);
+      put.face(rt, face, [-long, 0, -deep, long, 0, -deep, long, high, -deep, -long, high, -deep]);
+      const ROWS = 6;
+      for (let r = 0; r < ROWS; r++) {
+        const t0 = 0.12 + (r / ROWS) * 0.82;
+        const y = high * t0;
+        const z = -deep * t0;
+        for (let c = 0; c < 7; c++) {
+          const x0 = -long + 0.4 + c * ((long * 2 - 0.8) / 7);
+          const x1 = x0 + (long * 2 - 0.8) / 7 - 0.25;
+          const who = shade(CROWD[(r * 5 + c * 3) % CROWD.length],
+            0.88 + ((r * 3 + c * 7) % 5) * 0.06);
+          // Leaning back with the slope, because a crowd on a hill is looking
+          // down at you rather than standing to attention.
+          put.face(rt, tint(who), [x0, y, z, x1, y, z,
+            x1, y + 0.62, z - 0.28, x0, y + 0.62, z - 0.28]);
+        }
       }
       break;
     }

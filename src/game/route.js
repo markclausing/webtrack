@@ -1025,6 +1025,8 @@ export function buildRoute(key) {
     };
   }
 
+  narrowWhereItFoldsBack(nodes);
+
   return {
     key,
     nodes,
@@ -1142,6 +1144,195 @@ function cornersOf(nodes) {
  * on all twenty-seven circuits: the outside of a corner, beyond the barrier,
  * and not two of them in sight of each other.
  */
+/**
+ * Where the people are: banks and stands on the outside of the big corners.
+ *
+ * There were fourteen grandstands on a circuit and all fourteen were at the
+ * start line, because that was the only rule there was for them. Everywhere else
+ * was trees. A circuit is not trees - it is a road with people standing round
+ * the corners of it, and the corners are where they stand because that is where
+ * something happens.
+ *
+ * It also answers a complaint about the picture rather than about the scenery.
+ * At eighteen hundred metres of draw distance the road three corners away is
+ * visible across an empty infield, which is not what a driver sees: what a
+ * driver sees is a grandstand. Putting the crowd where the crowd goes fills the
+ * middle distance with the things that are actually in the way.
+ *
+ * Banks rather than stands wherever the corner is not one of the big ones,
+ * because a bank is ninety triangles against a hundred and fifty and because
+ * most of the people at a circuit are standing on grass.
+ */
+function crowds(nodes, add) {
+  const count = nodes.length;
+  const corners = cornersOf(nodes)
+    .filter((c) => Math.abs(c.peak) > 0.028)
+    .sort((a, b) => Math.abs(b.peak) - Math.abs(a.peak));
+
+  // Four hundred metres between one crowd and the next, which on a five
+  // kilometre circuit is a dozen of them.
+  const GAP = Math.max(16, Math.round(400 / SEG));
+  const taken = [];
+  for (const corner of corners) {
+    let node = Math.round(corner.from + (corner.to - corner.from) / 2);
+    node = ((node % count) + count) % count;
+    if (taken.some((t) => {
+      const apart = Math.abs(t - node);
+      return Math.min(apart, count - apart) < GAP;
+    })) continue;
+    const n = nodes[node];
+    // Only where the circuit has ground to put them on. On a street the outside
+    // of a corner is a building and the crowd is on a balcony.
+    if (n.reach < 2) continue;
+    taken.push(node);
+
+    // Outside of the bend, which is where you can see them from and where they
+    // can see the corner from.
+    const side = corner.peak > 0 ? -1 : 1;
+    const turn = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+    /**
+     * A stand for the first three, a bank for the rest.
+     *
+     * By how tight the corner is, it came out at fourteen grandstands a circuit,
+     * which is not a circuit, it is a stadium with a road through it. Real ones
+     * have four or five and everywhere else the crowd is standing on a slope. By
+     * rank instead: the three biggest corners on this lap get the building and
+     * the other nine get grass.
+     */
+    const big = taken.length <= 3;
+    // Three of them in a row along the corner rather than one, because a crowd
+    // is long.
+    for (let k = -1; k <= 1; k++) {
+      const at = node + k * (big ? 5 : 4);
+      if (big) {
+        add(at, { kind: 'stand', side, off: 30, s: 1, r: turn, align: true, flat: true });
+      } else {
+        add(at, { kind: 'bank', side, off: 24, s: 1, r: turn, align: true, flat: true });
+      }
+    }
+    // And the car park behind them, which is what the other side of a stand is.
+    if (big) {
+      for (let k = 0; k < 3; k++) {
+        add(node + k * 3 - 3, {
+          kind: 'camper', side, off: 52 + (k % 2) * 7, s: 1, r: turn,
+          align: true, flat: true, i: k,
+        });
+      }
+    }
+  }
+  return taken.length;
+}
+
+/**
+ * Pulls the barrier in where the lap runs alongside itself.
+ *
+ * A circuit that folds back within the width of its own run-off has a barrier
+ * standing on the other carriageway. Measured across the twenty-seven: thirty-one
+ * posts up to five and three quarter metres into the road at Miami, ninety-five
+ * up to two and a third at Baku. It is drawn there and, because the simulation
+ * stops the car at the same line it is drawn at, you hit it - a wall across the
+ * track with the road visible through it and past it.
+ *
+ * The barrier is not wrong to be there. Two carriageways nine metres apart have
+ * a barrier between them in life as well, and it is closer to each of them than
+ * a barrier with a field behind it would be. What was wrong is the distance: the
+ * run-off was taken from the width of the road and nothing else, as though there
+ * were always somewhere to put it.
+ *
+ * So the post itself is asked where it is standing, rather than the road being
+ * asked how far away the other road is. The first attempt did the second and
+ * fixed half of Baku and none of Miami, because it measured across this node's
+ * own normal - which is the right direction only where the two carriageways are
+ * parallel, and at Miami they cross at an angle.
+ *
+ * It comes in a quarter of a metre at a time until both its posts are clear, and
+ * never inside its own kerb: a barrier on your own kerb is a worse answer than a
+ * barrier on somebody else's.
+ */
+function narrowWhereItFoldsBack(nodes) {
+  const count = nodes.length;
+  // Only nodes at the same height are in each other's way. A flyover passes over
+  // its own lap by design and its barrier belongs where it is.
+  const SAME_LEVEL = 3;
+  // How far along the lap a node has to be before it counts as another part of
+  // the circuit rather than as the piece this barrier belongs to.
+  const ELSEWHERE = 12;
+  const CELL = 24;
+
+  let minX = Infinity;
+  let minZ = Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x);
+    minZ = Math.min(minZ, n.z);
+  }
+  const grid = new Map();
+  const cellOf = (x, z) => `${Math.floor((x - minX) / CELL)},${Math.floor((z - minZ) / CELL)}`;
+  for (const n of nodes) {
+    const key = cellOf(n.x, n.z);
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(n);
+  }
+
+  /** Is a post at this point standing on a piece of road it does not belong to? */
+  const onSomebodyElse = (i, a, px, pz) => {
+    const cx = Math.floor((px - minX) / CELL);
+    const cz = Math.floor((pz - minZ) / CELL);
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oz = -1; oz <= 1; oz++) {
+        const near = grid.get(`${cx + ox},${cz + oz}`);
+        if (!near) continue;
+        for (const b of near) {
+          const apart = Math.min(Math.abs(i - b.i), count - Math.abs(i - b.i));
+          if (apart < ELSEWHERE) continue;
+          if (Math.abs(b.y - a.y) > SAME_LEVEL) continue;
+          const dx = px - b.x;
+          const dz = pz - b.z;
+          // Within half a node of that node along its own road, and inside the
+          // tarmac across it.
+          if (Math.abs(dx * b.dx + dz * b.dz) > SEG * 0.6) continue;
+          if (Math.abs(dx * b.nx + dz * b.nz) < b.half + 0.4) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  for (let i = 0; i < count; i++) {
+    const a = nodes[i];
+    const floor = a.half + 0.75;
+    const was = a.wall;
+    let w = a.wall;
+    let clear = false;
+    while (w > floor) {
+      clear = [-1, 1].every((side) => !onSomebodyElse(
+        i, a, a.x + a.nx * side * w, a.z + a.nz * side * w,
+      ));
+      if (clear) break;
+      w -= 0.25;
+    }
+    if (clear) {
+      a.wall = w;
+      continue;
+    }
+    /**
+     * And where no distance works, there is no barrier to draw.
+     *
+     * At Miami two parts of the lap are two and four fifths of a metre apart
+     * with six metres of road each: they are not two carriageways with a gap,
+     * they are the same tarmac, which is what a circuit that crosses itself
+     * looks like to an importer reading ways off a map. No barrier position
+     * clears, because the other road covers this one.
+     *
+     * So the rail is not drawn at these - about fifteen nodes at Miami and
+     * twenty at Baku - and the simulation keeps the line it always had. An
+     * invisible wall where a wall has always been is a thing nobody notices; a
+     * visible one across the road is what was reported.
+     */
+    a.wall = was;
+    a.open = 1;
+  }
+}
+
 function cranes(nodes, add) {
   const count = nodes.length;
   const corners = cornersOf(nodes)
@@ -1434,9 +1625,16 @@ function scatter(nodes, rnd) {
   add(third + 40, { kind: 'balloon', side: 1, off: 80, s: 1, r: 0.7, lift: 42 });
   add(third * 2 + 90, { kind: 'balloon', side: 1, off: 120, s: 0.8, r: 2.1, lift: 58 });
   add(Math.floor(third * 1.5), { kind: 'chopper', side: 1, off: 30, s: 1, r: 0, lift: 32, align: true });
+  // Two more, because one was one and a sky with one thing in it is a sky with
+  // one thing in it.
+  add(Math.floor(third * 2.4),
+    { kind: 'chopper', side: -1, off: 46, s: 1, r: 2.2, lift: 26, align: true });
+  add(Math.floor(third * 0.4),
+    { kind: 'chopper', side: 1, off: 62, s: 0.9, r: 4.1, lift: 38, align: true });
 
   cornerBoards(nodes, add);
   cranes(nodes, add);
+  crowds(nodes, add);
 
   // The gantry is the checkpoint. It is placed on the node the clock is actually
   // reading, not near it, because a gate you go under half a second before the
@@ -1453,7 +1651,7 @@ const FLOATS = new Set(['boat', 'buoy']);
 /** How far from a piece of road a prop of each kind needs for its own footprint. */
 export const SPREAD = {
   dune: 6, spruce: 2.5, oak: 3, pine: 2.5, marram: 1, rock: 2, crag: 4,
-  palm: 2.5, stand: 10, pit: 15, screen: 5, tyres: 3.5, camper: 3,
+  palm: 2.5, stand: 10, bank: 12, pit: 15, screen: 5, tyres: 3.5, camper: 3,
   pavilion: 7, turbine: 10, banking: 15, block: 4, boat: 4, buoy: 1,
   post: 0.5, mast: 1, flag: 2.5, train: 30, lorry: 7, crane: 6, fountain: 48,
   strat: 18, eiffel: 28, campanile: 11, castle: 48, slab: 62, colonnade: 56, marquee: 8,
@@ -1757,6 +1955,7 @@ function dress(nodes, real, rnd) {
 
   cornerBoards(nodes, add);
   cranes(nodes, add);
+  crowds(nodes, add);
 
   // The gantry is the checkpoint, on the node the clock actually reads.
   for (const at of checkpointsFor(count)) {
