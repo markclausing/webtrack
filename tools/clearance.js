@@ -209,8 +209,11 @@ function ringGaps(route) {
     spans.sort((x, y) => x[0] - y[0]);
 
     // Tiled from the kerb outwards, with nothing left between them.
-    let edge = spans.length ? spans[0][0] : 0;
-    for (const [from, outer] of spans) {
+    const kerb = bandInner(a, BANDS[0][0]);
+    let edge = spans.length ? Math.max(spans[0][0], kerb) : 0;
+    for (const [nominal, outer] of spans) {
+      const from = Math.max(nominal, kerb);
+      if (from >= outer) continue;
       if (from > edge + 0.01) out.push({ at: i, kind: 'ring', from: edge, to: from });
       edge = Math.max(edge, outer);
     }
@@ -228,6 +231,53 @@ function ringGaps(route) {
      * first ring's nominal edge drifting away from the kerb, which is the other
      * half of the same invariant.
      */
+    /**
+     * And the ground that is drawn is the ground things are stood on.
+     *
+     * A band is a flat quad between two offsets, so it draws a straight line
+     * across itself; `groundY`, which is where every tree, lorry and grandstand
+     * beside the road is placed, is a piecewise curve through the height of each
+     * ring. While a band is one ring wide the two agree. The last band is not:
+     * it is always drawn and where a circuit's ground stops short it stands in
+     * for the rings that were skipped, two hundred and forty metres of it in one
+     * quad - and everything standing on that stretch was in the air, by up to
+     * twenty-three metres at Monaco.
+     *
+     * It is cut at every ring edge it crosses now, and this is the check that it
+     * stays cut: sample across each piece and ask whether the flat quad and the
+     * curve still agree.
+     */
+    for (const [nominal, outer, band] of spans) {
+      // The same rule the renderer uses: a band starts at the later of its own
+      // edge and the kerb, and one that has been swallowed is not drawn.
+      const from = Math.max(nominal, bandInner(a, BANDS[0][0]));
+      if (from >= outer) continue;
+      const edges = [from];
+      for (let k = 0; k < BANDS.length; k++) {
+        if (BANDS[k][0] > from && BANDS[k][0] < outer) edges.push(BANDS[k][0]);
+      }
+      edges.push(outer);
+      edges.sort((x, y) => x - y);
+      for (const side of [-1, 1]) {
+        for (let k = 0; k < edges.length - 1; k++) {
+          const y0 = groundY(a, side, edges[k]);
+          const y1 = groundY(a, side, edges[k + 1]);
+          for (let t = 0.2; t < 1; t += 0.2) {
+            const off = edges[k] + (edges[k + 1] - edges[k]) * t;
+            const drawn = y0 + (y1 - y0) * t;
+            // A metre of slack: the first ring leaves the road at the kerb and
+            // is genuinely curved inside itself, by about two thirds of one at
+            // Spa, and that has always been so.
+            const step = Math.abs(drawn - groundY(a, side, off));
+            if (step > 1) {
+              out.push({ at: i, kind: 'step', from: off, to: step, band });
+              break;
+            }
+          }
+        }
+      }
+    }
+
     const edgeHere = a.half + RUMBLE;
     const startsHere = bandInner(a, BANDS[0][0]);
     if (Math.abs(startsHere - edgeHere) > 0.01) {
@@ -280,6 +330,11 @@ if (process.argv[1] && process.argv[1].endsWith('clearance.js')) {
       + `  [${count} props]`);
     if (asked && gaps.length) {
       for (const g of gaps.slice(0, 10)) {
+        if (g.kind === 'step') {
+          console.log(`    the ground drawn at ${g.from.toFixed(0)} m is ${g.to.toFixed(1)} m `
+            + `from where a prop there would stand, at node ${g.at}`);
+          continue;
+        }
         console.log(g.kind === 'ring'
           ? `    ground missing from ${g.from.toFixed(0)} to ${g.to.toFixed(0)} m at node ${g.at}`
           : g.kind === 'sliver'

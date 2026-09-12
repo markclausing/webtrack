@@ -1023,24 +1023,80 @@ export class Renderer {
          * have a hole in it and the same mistake as the other two - a shared edge
          * worked out twice and not from the same numbers.
          */
-        const startsAtKerb = from === BANDS[0][0];
-        const innerA = startsAtKerb ? bandInner(a, from) : from;
-        const innerB = startsAtKerb ? bandInner(b, from) : from;
+        /**
+         * Where this band starts, which is never inside the kerb.
+         *
+         * It used to be the first band alone that was pushed out to the kerb,
+         * on the reasoning that it is the only one that could be inside it. At
+         * Austin the road is fifteen and a half metres from the middle at its
+         * widest and the first ring ends at fifteen point six, so there the
+         * first band is not merely inside the kerb, it is entirely behind it -
+         * an inverted quad - and the second band is the one that has to start
+         * at the road. Fifteen nodes of it.
+         *
+         * So every band starts at the later of its own edge and the kerb, and
+         * one that has been swallowed whole is not drawn at all.
+         */
+        const innerA = Math.max(from, bandInner(a, BANDS[0][0]));
+        const innerB = Math.max(from, bandInner(b, BANDS[0][0]));
+        if (innerA >= outer && innerB >= outer) continue;
         if (((i % every) + every) % every !== 0) continue;
         const far = nodeStep(route, i, every);
         // The near bands are grass, sand and gravel, and they take the ground
         // surface. Not the far ones: at three hundred metres out a band is a
         // wedge of colour under the haze and a texture on it is noise.
         rt.ground = band < 2 ? 2 : 0;
+        /**
+         * Cut at every ring edge it spans, and not just at its own two.
+         *
+         * A band is a flat quad between two offsets, so the surface it draws is
+         * a straight line across it - and `groundY`, which is where every tree,
+         * lorry and grandstand beside the road is stood, is a piecewise curve
+         * through the height of each ring. While a band is one ring wide the two
+         * agree at both ends and everywhere between.
+         *
+         * The last one is not one ring wide. It is always drawn, and where a
+         * circuit's ground stops short it stands in for the rings that were
+         * skipped - two hundred and forty metres of it in one quad, cutting the
+         * corner off a curve that was meant to go through two more heights. The
+         * things standing on it were therefore in the air, by up to twenty-three
+         * metres at Monaco, sixteen at Baku and nine at Las Vegas, which is what
+         * a floating grandstand is.
+         *
+         * So it is cut at the edges it crosses and each piece takes its own
+         * heights. It costs two quads a node on eight of the twenty-seven
+         * circuits and nothing anywhere else.
+         */
+        const cuts = [innerA];
+        const cutsB = [innerB];
+        // Every ring edge, not the ones after this band: the rings the last band
+        // stands in for are the ones before it, which is where the first attempt
+        // at this started counting and found nothing to cut.
+        for (let k = 0; k < BANDS.length; k++) {
+          if (BANDS[k][0] > innerA && BANDS[k][0] < outer) {
+            cuts.push(BANDS[k][0]);
+            cutsB.push(BANDS[k][0]);
+          }
+        }
+        cuts.sort((x, y) => x - y);
+        cutsB.sort((x, y) => x - y);
+        cuts.push(outer);
+        cutsB.push(outer);
         for (const side of [-1, 1]) {
           const colour = bandColour(local, a, side, kind, i, this.surf);
-          rt.quad(
-            a.x + a.nx * side * innerA, groundY(a, side, innerA), a.z + a.nz * side * innerA,
-            a.x + a.nx * side * outer, groundY(a, side, outer), a.z + a.nz * side * outer,
-            far.x + far.nx * side * outer, groundY(far, side, outer), far.z + far.nz * side * outer,
-            far.x + far.nx * side * innerB, groundY(far, side, innerB), far.z + far.nz * side * innerB,
-            tint(colour),
-          );
+          for (let k = 0; k < cuts.length - 1; k++) {
+            const i0 = cuts[k];
+            const i1 = cuts[k + 1];
+            const j0 = cutsB[k];
+            const j1 = cutsB[k + 1];
+            rt.quad(
+              a.x + a.nx * side * i0, groundY(a, side, i0), a.z + a.nz * side * i0,
+              a.x + a.nx * side * i1, groundY(a, side, i1), a.z + a.nz * side * i1,
+              far.x + far.nx * side * j1, groundY(far, side, j1), far.z + far.nz * side * j1,
+              far.x + far.nx * side * j0, groundY(far, side, j0), far.z + far.nz * side * j0,
+              tint(colour),
+            );
+          }
         }
         rt.ground = 0;
       }
@@ -1972,12 +2028,26 @@ export function groundY(n, side, off) {
   // height and coplanar, and the ground of the far one was winning: at Monaco a
   // slab of it lay across the track for two hundred metres, with the barriers of
   // the other carriageway drawn over the road as well.
-  if (off <= RINGS[0]) {
-    return lerp(roadY(n, side * kerb) - GROUND_DROP, g[0], (off - kerb) / (RINGS[0] - kerb));
-  }
-  if (off <= RINGS[1]) return lerp(g[0], g[1], (off - RINGS[0]) / (RINGS[1] - RINGS[0]));
-  if (off <= RINGS[2]) return lerp(g[1], g[2], (off - RINGS[1]) / (RINGS[2] - RINGS[1]));
-  if (off <= RINGS[3]) return lerp(g[2], far, (off - RINGS[2]) / (RINGS[3] - RINGS[2]));
+  /**
+   * Out from the kerb through each ring's height in turn.
+   *
+   * Every segment starts at the later of its own inner edge and the kerb, and
+   * the reason is Austin. The road there is sixteen and five sixths of a metre
+   * from the middle at its widest and the first ring ends at fifteen point six -
+   * so the kerb is past the end of the first ring, the span it was being
+   * interpolated over was negative, and the height came out two metres below the
+   * road a metre past the white line. A cliff at the edge of the track, and
+   * everything standing on that stretch hanging over it.
+   */
+  const lip = roadY(n, side * kerb) - GROUND_DROP;
+  const span = (lo, hi, y0, y1) => {
+    const from = Math.max(lo, kerb);
+    return lerp(from === lo ? y0 : lip, y1, (off - from) / (hi - from));
+  };
+  if (off <= RINGS[0]) return span(kerb, RINGS[0], lip, g[0]);
+  if (off <= RINGS[1]) return span(RINGS[0], RINGS[1], g[0], g[1]);
+  if (off <= RINGS[2]) return span(RINGS[1], RINGS[2], g[1], g[2]);
+  if (off <= RINGS[3]) return span(RINGS[2], RINGS[3], g[2], far);
   return far;
 }
 
