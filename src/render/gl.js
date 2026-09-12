@@ -382,6 +382,11 @@ uniform sampler2D uTarmac;
 uniform sampler2D uGround;
 uniform sampler2D uStone;
 uniform float uTextured;
+uniform float uLampOn;
+uniform float uDim;
+uniform vec3 uWash;
+uniform float uPull;
+uniform float uNight;
 
 /**
  * A surface, sampled from where it is in the world.
@@ -429,6 +434,22 @@ float sunlight(vec3 sc, float slope) {
 }
 
 void main() {
+  /**
+   * The time of day, which used to be done a colour at a time on the processor.
+   *
+   * Darken by uDim, then pull uPull of the way towards uWash. That is the
+   * whole of it and it was three lines of JavaScript run against every colour of
+   * every face of every frame - which is also the single thing that stopped the
+   * world being built once and kept, because a buffer you cannot recolour is a
+   * buffer that cannot get dark.
+   *
+   * uLampOn is nought for the things still drawn a frame at a time - the cars,
+   * the smoke, the flags - because those have already been through it on the way
+   * in and doing it twice is dusk twice.
+   */
+  vec4 base = vColour;
+  if (uLampOn > 0.5) base.rgb = mix(base.rgb * uDim, uWash, uPull);
+
   // Two-sided, and it has to be: a tree in this game is two flat quads crossed
   // at right angles, and the winding of a polygon written out by hand fifteen
   // hundred lines ago is whatever it happened to be. Turning the normal to face
@@ -453,7 +474,8 @@ void main() {
    */
   float sun = face > 0.02 ? sunlight(vShadow, 1.0 - face) : 1.0;
   float light = (uAmbient + (1.0 - uAmbient) * wrap * sun) * uExposure;
-  vec3 colour = vColour.rgb * light;
+  vec3 colour = base.rgb * light;
+  float away = length(vWorld - uCamera);
   /**
    * And a highlight on anything painted.
    *
@@ -495,6 +517,43 @@ void main() {
    * is a surface being uneven, not a pattern on it; at full strength the road
    * looks like gravel and the grass looks like a carpet sample.
    */
+  /**
+   * The headlights, and the floodlights along the road.
+   *
+   * Only on the tarmac, which is the only thing either of them is pointed at,
+   * and only after dark. Two terms and the brighter wins: your own lights, which
+   * are brightest under the nose and gone by ninety metres, and the circuit's,
+   * which are dimmer and go all the way to the horizon. That is what a night lap
+   * looks like from inside the car - a pool that belongs to you, on a road that
+   * is lit anyway.
+   *
+   * Both were worked out per node per frame on the processor and folded into the
+   * colour, and the first was the reason: it depends on how far the node is from
+   * the camera, which changes every frame by definition. Here it is the distance
+   * this pixel already knows.
+   *
+   * The floodlights do not depend on the camera - they are a pattern that runs
+   * along the road, every twelve nodes - so they are baked. They ride in the
+   * length of the normal, which is a channel nothing else was using: the shader
+   * normalises it anyway, so what it was scaled by on the way in survives the
+   * trip and costs no extra bytes a vertex.
+   */
+  if (uNight > 0.0 && vColour.a > 0.930 && vColour.a < 0.950) {
+    float pool = clamp(length(vNormal) - 1.0, 0.0, 1.0);
+    float lamps = pow(max(0.0, 1.0 - away / 85.0), 1.4);
+    /**
+     * Half what it was, and the reason is that the distance changed meaning.
+     *
+     * On the processor this was worked out per node from how far that node was
+     * along the drawn range, which starts six nodes behind the camera - so the
+     * road under the car came out at about forty metres and got roughly half the
+     * beam. Here it is the real distance from the camera, which under the nose is
+     * eight metres and nearly all of it. Same formula, twice the light, and a
+     * night lap that had been moody went to a white floor with a car on it.
+     */
+    colour *= 1.0 + uNight * max(lamps, pool) * 0.85;
+  }
+
   if (uTextured > 0.5 && vColour.a > 0.905 && vColour.a < 0.950) {
     vec3 tex = vec3(1.0);
     if (vColour.a > 0.930) tex = surface(uTarmac, vWorld, n, 0.25);
@@ -511,6 +570,7 @@ void main() {
    * is still on.
    */
   if (vColour.a > 0.950 && vColour.a < 0.970) {
+    // A light is not dimmed by the evening. That is what makes it a light.
     gl_FragColor = vec4(vColour.rgb * 2.1, 1.0);
     return;
   }
@@ -520,9 +580,8 @@ void main() {
     float spec = pow(max(dot(reflect(-uSun, n), eye), 0.0), 22.0);
     colour += vec3(0.55, 0.55, 0.52) * spec * sun * gloss;
   }
-  float away = length(vWorld - uCamera);
   float fog = clamp((away - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
-  gl_FragColor = vec4(mix(colour, uFogColour, pow(fog, 0.75)), vColour.a);
+  gl_FragColor = vec4(mix(colour, uFogColour, pow(fog, 0.75)), base.a);
 }`;
 
 /** Flat things in screen space: the sky and the sun. Coordinates are already NDC. */
@@ -1055,6 +1114,16 @@ export class Batch {
      * coordinates and are not going to get any.
      */
     this.ground = 0;
+    /**
+     * How much of the circuit's own lighting falls here, from nought to one.
+     *
+     * Only the tarmac sets it, only while a world is being recorded, and it
+     * rides in the length of the face normal rather than in a channel of its own.
+     */
+    this.pool = 0;
+    this.recording = false;
+    this.normalise = false;
+    this.kept = null;
   }
 
   /** The size of the picture. Set by the renderer when the window changes. */
@@ -1195,6 +1264,87 @@ export class Batch {
   }
 
   /**
+   * Start writing into a buffer that will be kept, rather than into this frame's.
+   *
+   * A circuit does not move. The road, the kerbs, the barriers, the ground and
+   * fifty thousand trees are the same eighteen hundred metres of geometry on the
+   * first lap as on the last, and they were being walked, transformed and written
+   * out sixty times a second because the colours had to be recomputed for the
+   * time of day. They do not any more - that moved into the shader - so the whole
+   * circuit is built once and a frame is a range of it.
+   *
+   * `mark` is called at each node, so the renderer knows where that node's
+   * geometry starts and what the frame draws is a slice.
+   */
+  record() {
+    this.kept = makeSink(65536);
+    this.kept.marks = [];
+    this.recording = true;
+    this.normalise = true;
+  }
+
+  /** Where the buffer has got to. The renderer notes one of these a node. */
+  mark() {
+    this.kept.marks.push(this.kept.count);
+  }
+
+  /** Hands the recording to the card and stops recording. */
+  keep() {
+    const gl = this.gl;
+    const sink = this.kept;
+    this.recording = false;
+    this.normalise = false;
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER,
+      new Float32Array(sink.f32.buffer, 0, sink.count * 7), gl.STATIC_DRAW);
+    const out = {
+      buffer, count: sink.count, marks: sink.marks, tris: sink.count / 3,
+      bytes: sink.count * STRIDE,
+    };
+    this.kept = null;
+    return out;
+  }
+
+  /** Throws a kept world away. Called when the circuit changes. */
+  forget(world) {
+    if (world) this.gl.deleteBuffer(world.buffer);
+  }
+
+  /**
+   * Which kept world to draw this frame, and which slices of it.
+   *
+   * Said here rather than drawn here: nothing in this class draws until `blit`,
+   * because the program, the matrix and every uniform are set up there. The
+   * renderer walks the nodes it can see, works out the ranges, and leaves them.
+   */
+  show(world, ranges) {
+    this.world = world;
+    this.ranges = ranges;
+  }
+
+  /** The slices, with whichever program is already bound. */
+  drawKept(attribs) {
+    const gl = this.gl;
+    if (!this.world || !this.ranges) return;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.world.buffer);
+    gl.vertexAttribPointer(attribs.aPos, 3, gl.FLOAT, false, STRIDE, 0);
+    if (attribs.aNormal !== undefined) {
+      gl.vertexAttribPointer(attribs.aNormal, 3, gl.FLOAT, false, STRIDE, 12);
+    }
+    if (attribs.aColour !== undefined) {
+      gl.vertexAttribPointer(attribs.aColour, 4, gl.UNSIGNED_BYTE, true, STRIDE, 24);
+    }
+    for (let i = 0; i < this.ranges.length; i++) {
+      const first = this.ranges[i][0];
+      const count = this.ranges[i][1];
+      if (count <= 0) continue;
+      gl.drawArrays(gl.TRIANGLES, first, count);
+      this.tris += count / 3;
+    }
+  }
+
+  /**
    * One triangle into whichever buffer it belongs in, with its normal.
    *
    * The normal is the cross product of two edges and is deliberately not
@@ -1203,7 +1353,7 @@ export class Batch {
    * normalise anyway.
    */
   push(ax, ay, az, bx, by, bz, cx, cy, cz, colour) {
-    const sink = this.stipple ? this.clear : this.solid;
+    const sink = this.recording ? this.kept : this.stipple ? this.clear : this.solid;
     if ((sink.count + 3) * STRIDE > sink.data.byteLength) grow(sink);
     const alpha = this.stipple ? 150
       : this.emissive ? 245
@@ -1215,9 +1365,23 @@ export class Batch {
     const c = this.dither ? blend(colour, this.dither) : colour;
     const ux = bx - ax; const uy = by - ay; const uz = bz - az;
     const vx = cx - ax; const vy = cy - ay; const vz = cz - az;
-    const nx = uy * vz - uz * vy;
-    const ny = uz * vx - ux * vz;
-    const nz = ux * vy - uy * vx;
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    /**
+     * A kept world's normals are unit length and a frame's are not.
+     *
+     * The cross product's length is twice the triangle's area, which the shader
+     * does not care about because it normalises - except that the length is also
+     * where the floodlight pattern rides, and a channel cannot carry two things.
+     * So the world that is built once pays for a square root a triangle, and the
+     * frame, which is built sixty times a second, does not.
+     */
+    if (this.normalise) {
+      const len = Math.hypot(nx, ny, nz) || 1;
+      const k = (1 + this.pool) / len;
+      nx *= k; ny *= k; nz *= k;
+    }
     const f = sink.f32;
     const u = sink.u8;
     let at = sink.count * 7;
@@ -1335,7 +1499,7 @@ export class Batch {
     // The sun's own view of the world, into a depth texture, before anything is
     // drawn for the screen. It is the same buffer that is about to be drawn
     // again, so the only cost is the card filling two thousand square texels.
-    if (this.shadow && this.solid.count) {
+    if (this.shadow && (this.solid.count || this.world)) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.flatBuf);
       gl.bufferData(gl.ARRAY_BUFFER,
         new Float32Array(this.solid.f32.buffer, 0, this.solid.count * 7), gl.STREAM_DRAW);
@@ -1350,6 +1514,13 @@ export class Batch {
       gl.enableVertexAttribArray(d.aPos);
       gl.vertexAttribPointer(d.aPos, 3, gl.FLOAT, false, STRIDE, 0);
       gl.drawArrays(gl.TRIANGLES, 0, this.solid.count);
+      // And the circuit, which is most of what there is to cast: without this a
+      // world that had been built once stopped throwing any shadow at all, and
+      // the cars were the only things in the game with one.
+      const before = this.tris;
+      this.drawKept(d);
+      this.tris = before;
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.flatBuf);
       // Back to whatever the world is being drawn into, which is the floating
       // point picture when there is one and the screen when there is not. Bound
       // to null here, the sky went into the picture and everything after it went
@@ -1382,6 +1553,10 @@ export class Batch {
       gl.activeTexture(gl.TEXTURE0);
     }
     gl.uniform1f(this.flat.uniforms.uTextured, this.surfaces ? 1 : 0);
+    gl.uniform1f(this.flat.uniforms.uDim, this.dim ?? 1);
+    gl.uniform3fv(this.flat.uniforms.uWash, this.wash || [1, 1, 1]);
+    gl.uniform1f(this.flat.uniforms.uPull, this.pull ?? 0);
+    gl.uniform1f(this.flat.uniforms.uNight, this.night ?? 0);
     const u = this.flat.uniforms;
     gl.uniform3fv(u.uSun, this.sun || [0, 1, 0]);
     gl.uniform3fv(u.uCamera, [this.cam.x, this.cam.y, this.cam.z]);
@@ -1395,6 +1570,17 @@ export class Batch {
     gl.enableVertexAttribArray(a.aPos);
     gl.enableVertexAttribArray(a.aNormal);
     gl.enableVertexAttribArray(a.aColour);
+
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    // The circuit first, with the time of day applied here; then whatever this
+    // frame built, which has been through it already on the way in.
+    if (this.world) {
+      gl.uniform1f(this.flat.uniforms.uLampOn, 1);
+      this.drawKept(a);
+    }
+    gl.uniform1f(this.flat.uniforms.uLampOn, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.flatBuf);
 
     if (this.solid.count) {
       // Already sent, if the shadow pass has been through it.

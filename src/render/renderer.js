@@ -46,16 +46,17 @@ import { Batch } from './gl.js';
 import { Hud, HUD_BASE_H } from './hud.js';
 
 /**
- * How far the barrier is drawn.
+ * The props that are not part of a world built once.
  *
- * Further than it was, and not as far as the road. Six hundred and forty metres
- * was the whole world once; the world goes to eighteen hundred now, and a rail
- * at that distance is a line one pixel high that costs seven faces a node.
+ * Five of them move - a flag flaps, a wheel and a turbine and a chopper turn, a
+ * fountain plays - and three change with the light: a floodlight comes on at
+ * dusk, a screen lights up with it, and the glass on a tower stops reflecting
+ * the sky and starts reflecting the town. Eight kinds out of forty, about a
+ * hundred of them in view at a time, and they are drawn every frame like the
+ * cars.
  */
-const RAIL_FAR = 900;
-
-/** How far out a kerb is drawn with a shape on it rather than flat. */
-const KERB_FLAT = 250;
+const LIVE_PROPS = new Set(['flag', 'fountain', 'turbine', 'chopper', 'wheel',
+  'screen', 'tower', 'mast']);
 
 /** How far up the road the shadow box is pushed, in metres. */
 const SHADOW_AHEAD = 60;
@@ -200,6 +201,13 @@ export class Renderer {
   /** A new race: the camera must not glide in from where the last one ended. */
   reset() {
     this.cam = null;
+  }
+
+  /** Lets go of the circuit that was built, so the next race builds its own. */
+  drop() {
+    this.rt.forget(this.world);
+    this.world = null;
+    this.worldOf = null;
   }
 
   /**
@@ -548,6 +556,17 @@ export class Renderer {
     const roof = state.route.nodes[nodeAt(state.route, p.s).i].tunnel || 0;
     const far = FOG_FAR + roof * 2600;
     this.rt.rush = this.rush || 0;
+    /**
+     * The time of day, as three numbers for the shader.
+     *
+     * Exactly what `lamp` did a colour at a time on the processor: darken by
+     * `dim`, then pull `pull` of the way towards `wash`. Doing it there is what
+     * made the world have to be rebuilt every frame.
+     */
+    this.rt.dim = now.dim;
+    this.rt.wash = rgb(now.wash);
+    this.rt.pull = now.pull;
+    this.rt.night = Math.max(0, (this.lightAt - 0.4) / 0.6);
     this.rt.light({
       sun: [Math.sin(SUN_BEARING) * flat, Math.sin(high), Math.cos(SUN_BEARING) * flat],
       /**
@@ -657,33 +676,48 @@ export class Renderer {
    * far pixels before they are written - the near track covers a third of the
    * screen and everything behind it is rejected in one compare.
    */
-  ground(state, theme, p) {
+  /**
+   * The circuit, built once, into a buffer that is kept.
+   *
+   * This was the frame. Every node between the camera and the horizon was walked
+   * sixty times a second, and each one transformed, coloured, fogged and written
+   * out - about four milliseconds of a sixteen millisecond budget on this
+   * machine, and four times that on a telephone.
+   *
+   * None of it moves. The road is where it was, the trees are where they were,
+   * and the only reason it was rebuilt was that the colours had to be worked out
+   * again for the time of day. That went into the shader, so this happens once:
+   * eighteen hundred metres of circuit is a range of a buffer now, and a frame
+   * is two draw calls and a handful of things that actually change.
+   *
+   * What still changes is drawn by `live` below. There are three kinds: the cars
+   * and their smoke, the props that move or light up, and the surf.
+   */
+  keepWorld(state, theme) {
     const rt = this.rt;
     const route = state.route;
-    const first = nodeAt(route, p.s).i - DRAW_BEHIND;
+    /**
+     * Keyed on the circuit's name rather than on the object.
+     *
+     * A route is built fresh for every race - the same arithmetic from the same
+     * seed, so the same road - and keying on the object would rebuild the world
+     * every time one started. It would also rebuild it on every click in the
+     * menu, because the car driving round behind the menu is a race too.
+     */
+    if (this.world && this.worldOf === route.key) return;
+    rt.forget(this.world);
+    this.worldOf = route.key;
+    const started = performance.now();
+    rt.record();
 
-    // Nought until the sun is on the horizon, one when it has gone. It starts
-    // early enough that the floodlights come on at dusk, which is when a real
-    // circuit switches them on - a good half hour before anybody needs them.
-    const night = Math.max(0, (this.lightAt - 0.4) / 0.6);
-    for (let step = 0; step < DRAW_AHEAD; step++) {
-      const i = first + step;
+    // The world is built in daylight and the shader dims it. `night` here is
+    // therefore always nought: the two props that care about it are drawn live.
+    const night = 0;
+    for (let i = 0; i < route.nodes.length; i++) {
+      // Where this node's geometry begins, so a frame can find it again.
+      rt.mark();
       const a = nodeStep(route, i, 0);
       const b = nodeStep(route, i, 1);
-      const away = step * SEG;
-      // The headlights: at night the near tarmac is a good deal brighter than
-      // the rest of the world, which is what a car's own lights look like from
-      // inside it and is most of what makes a night lap readable.
-      // Two things light the tarmac after dark: your own headlights, which are
-      // brightest under the nose and gone by ninety metres, and the floodlights,
-      // which are dimmer and go all the way to the horizon. The brighter of the
-      // two wins, so the pool in front of you still reads as yours.
-      const beam = night > 0
-        ? night * Math.max(
-          Math.max(0, 1 - away / 85) ** 1.4,
-          0.34 + 0.2 * Math.cos((((i % 12) + 12) % 12) / 12 * Math.PI * 2),
-        )
-        : 0;
       /**
        * Under a roof, and dark under it.
        *
@@ -704,10 +738,19 @@ export class Renderer {
       // shader, which is both cheaper and right. It used to be worked out once
       // for a whole section of road and applied to the near end and the far end
       // alike, so a straight at dusk had a visible join every forty metres.
-      const tint = (colour) => dark(this.lamp(colour));
-      const road = beam > 0
-        ? (colour) => dark(shade(this.lamp(colour), 1 + beam * 2.4))
-        : tint;
+      /**
+       * No `lamp` in here any more either, and no headlights.
+       *
+       * The time of day is applied per pixel by the shader, from three uniforms,
+       * which is what lets this be built once. The headlights and the
+       * floodlights went the same way: the first depends on how far a node is
+       * from the camera and could never have been baked, and the second is a
+       * pattern along the road that now rides in the length of the face normal.
+       */
+      const tint = (colour) => dark(colour);
+      const road = tint;
+      /** How much of the circuit's own lighting falls on this stretch of road. */
+      const pool = 0.34 + 0.2 * Math.cos((((i % 12) + 12) % 12) / 12 * Math.PI * 2);
       // The ground beside this node takes its colours from this node, which is
       // how a circuit can leave the hills and arrive at the sea inside a lap.
       const local = !route.theme && a.warm > 0.02 && a.warm < 0.98
@@ -730,6 +773,7 @@ export class Renderer {
       // The grain is worked out from where it is in the world - see gl.js - and
       // it is the only texture in this game.
       rt.ground = 1;
+      rt.pool = pool;
       rt.quad(
         a.x - a.nx * ha, roadY(a, -ha), a.z - a.nz * ha,
         a.x + a.nx * ha, roadY(a, ha), a.z + a.nz * ha,
@@ -738,6 +782,7 @@ export class Renderer {
         road(C.road),
       );
       rt.ground = 0;
+      rt.pool = 0;
       rt.dither = 0;
       /**
        * Kerbs. Red and white, one node each, which at three hundred and fifty is
@@ -765,16 +810,12 @@ export class Renderer {
       for (const side of [-1, 1]) {
         const ea = side * (ha + RUMBLE);
         const eb = side * (hb + RUMBLE);
-        if (away > KERB_FLAT) {
-          rt.quad(
-            a.x + a.nx * side * ha, roadY(a, side * ha), a.z + a.nz * side * ha,
-            a.x + a.nx * ea, roadY(a, ea), a.z + a.nz * ea,
-            b.x + b.nx * eb, roadY(b, eb), b.z + b.nz * eb,
-            b.x + b.nx * side * hb, roadY(b, side * hb), b.z + b.nz * side * hb,
-            kerb,
-          );
-          continue;
-        }
+        // Always the shape, never the flat one. There used to be a cheaper kerb
+        // past two hundred and fifty metres, because past there it is two pixels
+        // and it was being rebuilt every frame. A kept world has no distance in
+        // it - what bounds the picture is which slice of it is drawn - so the
+        // far kerbs cost nothing to have properly.
+        //
         // Three stations across it: the road edge, the top of the ramp, and the
         // outer edge. The lip hangs from that last one down to the verge.
         const ra = side * (ha + RAMP);
@@ -795,7 +836,7 @@ export class Renderer {
       // nothing, which at three hundred and fifty is eight dashes a second
       // arriving at the centre of the screen. The edge lines tell you where the
       // track is; this one tells you how fast you are crossing it.
-      if ((((i % 6) + 6) % 6) < 3 && away < 520) {
+      if ((((i % 6) + 6) % 6) < 3) {
         rt.quad(
           a.x - a.nx * 0.28, roadY(a, 0) + 0.04, a.z - a.nz * 0.28,
           a.x + a.nx * 0.28, roadY(a, 0) + 0.04, a.z + a.nz * 0.28,
@@ -830,7 +871,7 @@ export class Renderer {
       // definition; taken off the terrain it slid down the beach on the sea
       // front and left the edge of the track dropping into nothing. On the
       // bridge there is none, because there the railing is the barrier.
-      if (away < RAIL_FAR && a.bridge === undefined && !a.deck) {
+      if (a.bridge === undefined && !a.deck) {
         /**
          * Armco has a shape, and the shape is the whole of why it reads.
          *
@@ -987,21 +1028,6 @@ export class Renderer {
         rt.ground = 0;
       }
 
-      // Surf. A white line that shuffles along the waterline, and the single
-      // cheapest thing in the game that makes the sea look wet.
-      if (a.g.wet > 0.6 && (((i % 2) + 2) % 2) === 0 && away < 620) {
-        const far = nodeStep(route, i, 2);
-        const w0 = RINGS[1] + Math.sin(i * 0.7 + this.surf) * 2.2;
-        const w1 = RINGS[1] + Math.sin((i + 2) * 0.7 + this.surf) * 2.2;
-        rt.quad(
-          a.x - a.nx * w0, a.g.l[1] + 0.06, a.z - a.nz * w0,
-          a.x - a.nx * (w0 + 2.8), a.g.l[1] + 0.06, a.z - a.nz * (w0 + 2.8),
-          far.x - far.nx * (w1 + 2.8), far.g.l[1] + 0.06, far.z - far.nz * (w1 + 2.8),
-          far.x - far.nx * w1, far.g.l[1] + 0.06, far.z - far.nz * w1,
-          tint(C.kerbB),
-        );
-      }
-
       this.startLine(state, a.i, a, b, tint);
       if (a.bridge !== undefined) this.bridge(route, a, b, tint);
       if (a.deck) this.viaduct(a, b, tint, i);
@@ -1015,8 +1041,11 @@ export class Renderer {
       if (roof > 0.05) this.tunnel(a, b, tint, i, roof);
 
       const props = route.props[a.i];
-      if (props && away < PROP_FAR) {
+      if (props) {
         for (const prop of props) {
+          // The ones that turn, flap, spin or come on at dusk are not part of a
+          // world that is built once. They are drawn a frame at a time by `live`.
+          if (LIVE_PROPS.has(prop.kind)) continue;
           const off = prop.side * prop.off;
           // Anything that belongs to the track is turned to face along it. A
           // gantry is a wall across the road if it is left pointing at world
@@ -1030,8 +1059,89 @@ export class Renderer {
           const foot = prop.flat ? levelWith(a, off) : groundY(a, Math.sign(off) || 1, Math.abs(off));
           drawProp(rt, prop,
             a.x + a.nx * off, foot + (prop.lift || 0), a.z + a.nz * off,
-            tint, local, prop.align ? a.a : 0, state.tick, night, away);
+            tint, local, prop.align ? a.a : 0, 0, night, 0);
         }
+      }
+    }
+
+    // One past the end, so the last node's length can be worked out the same way
+    // as everybody else's.
+    rt.mark();
+    this.world = rt.keep();
+    this.builtIn = performance.now() - started;
+  }
+
+  /**
+   * The circuit, as a slice of the buffer it was built into.
+   *
+   * The nodes in view are contiguous - the road is a loop and the buffer is in
+   * node order - so this is one range, or two where the view crosses the start
+   * line. Two draw calls for eighteen hundred metres of circuit.
+   */
+  ground(state, theme, p) {
+    const rt = this.rt;
+    const route = state.route;
+    this.keepWorld(state, theme);
+    const n = route.nodes.length;
+    const marks = this.world.marks;
+    const from = (((nodeAt(route, p.s).i - DRAW_BEHIND) % n) + n) % n;
+    const span = Math.min(n, DRAW_AHEAD + DRAW_BEHIND);
+    const to = (from + span) % n;
+    const ranges = to > from
+      ? [[marks[from], marks[to] - marks[from]]]
+      : [[marks[from], marks[n] - marks[from]], [marks[0], marks[to]]];
+    rt.show(this.world, ranges);
+    this.live(state, theme, p);
+  }
+
+  /**
+   * The parts of the circuit that are not the same as they were a frame ago.
+   *
+   * Three kinds. The props that move or light up - see LIVE_PROPS. The surf,
+   * which shuffles along the waterline and is the single cheapest thing in the
+   * game that makes the sea look wet. And that is all: everything else the eye
+   * reads as changing is either a car, or the same geometry under a different
+   * light.
+   */
+  live(state, theme, p) {
+    const rt = this.rt;
+    const route = state.route;
+    const first = nodeAt(route, p.s).i - DRAW_BEHIND;
+    const night = Math.max(0, (this.lightAt - 0.4) / 0.6);
+    for (let step = 0; step < DRAW_AHEAD; step++) {
+      const i = first + step;
+      const a = nodeStep(route, i, 0);
+      const away = step * SEG;
+      const roof = a.tunnel || 0;
+      const dark = (colour) => (roof > 0
+        ? mix(mix(colour, TUNNEL_DARK, roof * 0.62), C.lamp, roof * 0.10)
+        : colour);
+      const tint = (colour) => dark(this.lamp(colour));
+      const local = !route.theme && a.warm > 0.02 && a.warm < 0.98
+        ? this.theme(a.warm) : theme;
+
+      if (a.g.wet > 0.6 && (((i % 2) + 2) % 2) === 0 && away < 620) {
+        const far = nodeStep(route, i, 2);
+        const w0 = RINGS[1] + Math.sin(i * 0.7 + this.surf) * 2.2;
+        const w1 = RINGS[1] + Math.sin((i + 2) * 0.7 + this.surf) * 2.2;
+        rt.quad(
+          a.x - a.nx * w0, a.g.l[1] + 0.06, a.z - a.nz * w0,
+          a.x - a.nx * (w0 + 2.8), a.g.l[1] + 0.06, a.z - a.nz * (w0 + 2.8),
+          far.x - far.nx * (w1 + 2.8), far.g.l[1] + 0.06, far.z - far.nz * (w1 + 2.8),
+          far.x - far.nx * w1, far.g.l[1] + 0.06, far.z - far.nz * w1,
+          tint(C.kerbB),
+        );
+      }
+
+      const props = route.props[a.i];
+      if (!props || away >= PROP_FAR) continue;
+      for (const prop of props) {
+        if (!LIVE_PROPS.has(prop.kind)) continue;
+        const off = prop.side * prop.off;
+        const foot = prop.flat ? levelWith(a, off) : groundY(a, Math.sign(off) || 1, Math.abs(off));
+        drawProp(rt, prop,
+          a.x + a.nx * off, foot + (prop.lift || 0), a.z + a.nz * off,
+          tint, local, prop.align ? a.a : 0, state.tick, night, away);
       }
     }
   }

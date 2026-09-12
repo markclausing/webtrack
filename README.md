@@ -89,6 +89,16 @@ game already did to say *fast*: the lens opening from fifty degrees to seventy,
 the camera dropping two feet and coming in, and the whole thing starting to
 shiver.
 
+**A circuit does not move, so it is built once.** Eighteen hundred metres of
+road, kerbs, barriers, ground and several thousand trees used to be walked,
+transformed and written out sixty times a second, because the colours had to be
+worked out again for the time of day. That went into the shader, so the whole lap
+goes into one buffer when the race starts and a frame is a range of it — two draw
+calls. What is left being built every frame is what actually changes: the eight
+cars and their smoke, the eight kinds of prop that turn or flap or light up at
+dusk, and the surf. On the fastest circuit in the game that took a frame from
+four milliseconds of JavaScript to one and a half.
+
 **And the models have no texture coordinates**, which is why the three that exist
 are sampled from where a surface is in the world rather than from a picture of
 it. Fifteen hundred lines of polygons written out by hand, not one of which says
