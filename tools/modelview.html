@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WebTrack model view</title>
+  <style>
+    body { margin: 0; background: #14161c; color: #aab; font: 12px ui-monospace, monospace; }
+    #wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+    figure { margin: 0; position: relative; }
+    canvas { width: 100%; display: block; }
+    figcaption { position: absolute; left: 6px; top: 4px; text-shadow: 0 1px 2px #000; }
+    #count { padding: 6px; }
+  </style>
+</head>
+<body>
+  <!--
+    A model, on its own, from three sides.
+
+      node tools/modelshot.js            # writes the three views to a file
+
+    Working on the car through the game means driving to it, and the camera in
+    the game sits eight metres behind and slightly above and never anywhere else,
+    which is precisely one of the angles a model has. This is the other five. It
+    is a development tool and it ships with the repository on purpose: the models
+    are the part of this game most likely to be edited by somebody who has never
+    seen the inside of the renderer, and "how do I look at what I just changed"
+    should have an answer that is not "drive to Monaco".
+  -->
+  <div id="wrap">
+    <figure><canvas id="a"></canvas><figcaption>three quarters rear</figcaption></figure>
+    <figure><canvas id="b"></canvas><figcaption>side</figcaption></figure>
+    <figure><canvas id="c"></canvas><figcaption>front</figcaption></figure>
+  </div>
+  <div id="count"></div>
+
+  <script type="module">
+    import { Batch } from '../src/render/gl.js';
+    import { drawRacer, drawProp } from '../src/render/models.js';
+    import { THEMES } from '../src/render/palette.js';
+
+    const q = new URLSearchParams(location.search);
+    const kind = q.get('prop');
+    const team = Number(q.get('team')) || 0;
+    const theme = THEMES[q.get('theme') || 'mountain'];
+
+    /**
+     * The three points of view, as a yaw and a height.
+     *
+     * `dist` frames the model: a car wants seven metres and a grandstand is
+     * eighteen metres wide, so the default put the camera inside the building.
+     * The heights scale with it, which keeps the angle the same whatever is
+     * being looked at.
+     */
+    const back = Number(q.get('dist')) || 7.2;
+    const VIEWS = [
+      { yaw: 0.62, high: back * 0.21, back },
+      { yaw: Math.PI / 2, high: back * 0.13, back },
+      { yaw: Math.PI, high: back * 0.17, back },
+    ];
+
+    let tris = 0;
+    for (const [i, id] of ['a', 'b', 'c'].entries()) {
+      const canvas = document.getElementById(id);
+      canvas.width = 640;
+      canvas.height = 520;
+      const rt = new Batch(canvas);
+      rt.resize(640, 520);
+      rt.focal = 620;
+      rt.fogFar = 4000;
+      const v = VIEWS[i];
+      rt.light({
+        sun: [Math.sin(2.2) * 0.95, 0.3, Math.cos(2.2) * 0.95],
+        ambient: 0.42,
+        fogColour: [0.09, 0.10, 0.12],
+        fogNear: 400,
+        fogFar: 900,
+      });
+      rt.begin([[0.55, 0xff2a2420], [1, 0xff141118]]);
+      rt.setCamera(
+        Math.sin(v.yaw) * -v.back, v.high, Math.cos(v.yaw) * -v.back,
+        v.yaw, Math.atan(0.09), 0,
+      );
+      // A patch of ground to stand on, so the model has a floor and the wheels
+      // have something to sit against.
+      const floor = Math.max(9, back * 2.5);
+      rt.quad(-floor, 0, -floor, floor, 0, -floor, floor, 0, floor, -floor, 0, floor, 0xff32363c);
+      const tint = (c) => c;
+      if (kind) {
+        drawProp(rt, { kind, s: 1, side: 1, off: 0 }, 0, 0, 0, tint, theme, 0, 0, 0);
+      } else {
+        drawRacer(rt, {
+          kind: 'player', team, roll: 0, wheel: Number(q.get('steer')) || 0,
+          speed: 60, slide: 0, dirt: 0, spinT: 0,
+        }, 0, 0, 0, 0, tint, 0, 0);
+      }
+      tris = rt.tris;
+      rt.blit();
+    }
+    document.getElementById('count').textContent
+      = `${kind || 'car'}: ${tris} triangles`;
+    globalThis.__ready = true;
+  </script>
+</body>
+</html>

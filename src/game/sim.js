@@ -31,7 +31,7 @@ import {
   GRIP_KERB, GRIP_ROUGH, GRIP_VERGE, KERB_TOP, NUDGE, VERGE_SCRUB,
   NUDGE_COST, OFFROAD_DRAG, OFFROAD_TOP, ROLL_DRAG, SCRUB, SEG, SLOPE_PULL, VERGE_TOP,
   SPIN_AT, SPIN_KEEP, SPIN_TIME, STEER_FLOOR, STEER_RATE, STEER_SPEED, TOP_SPEED, TOW_DRAG,
-  TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP, CAR_HALF,
+  TOW_RANGE, TOW_WIDTH, WALL_AT, WALL_KEEP, CAR_HALF, WINGS, topSpeedWith,
 } from '../constants.js';
 import { at as ghostAt, note, tape, timeAt as ghostTimeAt, whole } from './ghost.js';
 import { nextRandom, randRange } from '../util.js';
@@ -260,8 +260,11 @@ function drive(state, car) {
   // The tow: less air in front of you is less drag, and it is the only thing
   // that will drag you past somebody on a straight.
   // Drag, and how much air there is to make it. A fifth less at Mexico City,
-  // which is most of why the cars are quicker down the straight there.
-  acc -= DRAG * (state.air ?? 1) * car.speed * car.speed * (1 - TOW_DRAG * car.tow);
+  // which is most of why the cars are quicker down the straight there - and
+  // more or less of it depending on how much wing the car is carrying, which is
+  // the whole of what the downforce setting costs you.
+  acc -= DRAG * (state.air ?? 1) * (car.dragScale || 1)
+    * car.speed * car.speed * (1 - TOW_DRAG * car.tow);
   acc -= ROLL_DRAG * (0.04 + (surf === 'road' || surf === 'kerb' ? 0 : OFFROAD_DRAG * outside));
   /**
    * And the grass pulling, which is the bit you feel.
@@ -684,7 +687,11 @@ function safeSpeed(state, car, share = AI_GRIP) {
   // for the corner being slightly different than it looked - and over the old
   // 0.82, because that margin was a second a lap of nothing.
   const brake = BRAKE * 0.92;
-  let limit = TOP_SPEED;
+  // Where this particular car stops gaining, which is not TOP_SPEED once there
+  // is a wing setting: a driver on the small wing who capped themselves at the
+  // medium car's terminal speed would lift on the straight for no reason, which
+  // is exactly the straight they gave up corner speed to be quick down.
+  let limit = topSpeedWith(car.dragScale || 1, state.air ?? 1);
   const from = nodeAt(state.route, car.s).i;
   const reach = Math.ceil(AI_LOOK / SEG);
 
@@ -936,8 +943,13 @@ export function makeRace(options) {
 export function seedField(state) {
   for (const car of state.cars) {
     if (car.kind === 'player') {
+      // The wing is yours alone. The rivals run the medium one all afternoon, so
+      // the setting is a trade against a fixed field rather than a way of
+      // turning the difficulty down with the difficulty setting untouched.
+      const wing = WINGS[state.wing] || WINGS.mid;
       car.power = DRIVE;
-      car.gripScale = 1;
+      car.gripScale = wing.grip;
+      car.dragScale = wing.drag;
       continue;
     }
     // Pole is the quickest and the back of the grid the slowest, by about one
@@ -947,6 +959,7 @@ export function seedField(state) {
     const pace = 1 - car.slot * AI_SPREAD;
     car.power = DRIVE * AI_TOP * state.cfg.ai * pace;
     car.gripScale = AI_GRIP * state.cfg.ai * pace * randRange(state, 0.997, 1.01);
+    car.dragScale = 1;
     car.think = Math.floor(nextRandom(state) * 12);
   }
   order(state);

@@ -29,8 +29,23 @@ export const ROAD_HALF = 7;
 export const VERGE = 3.4;
 /** The painted kerb, which is the first metre and a half of that. */
 export const RUMBLE = 1.5;
-/** Nodes drawn ahead of the camera. Past this the world is haze. */
-export const DRAW_AHEAD = 165;
+/**
+ * Nodes drawn ahead of the camera. Past this the world is haze.
+ *
+ * A hundred and sixty-five of them is a kilometre, and a kilometre was not a
+ * choice about how far you can see - it was what a software rasteriser could
+ * afford. At three hundred and fifty kilometres an hour a kilometre is ten
+ * seconds, which is about two corners: the world arrived out of the fog at the
+ * speed you were driving into it.
+ *
+ * Three hundred is eighteen hundred metres, and on a real circuit that is a
+ * different thing entirely - it is far enough to see across the infield to the
+ * corner after next, which is what standing at a circuit actually looks like.
+ * It costs about six thousand triangles and a third of a millisecond, and the
+ * only reason it was not always this is that every one of those triangles used
+ * to be filled by hand.
+ */
+export const DRAW_AHEAD = 300;
 /** And behind, so the track does not vanish out of the mirror on a crest. */
 export const DRAW_BEHIND = 6;
 
@@ -280,6 +295,74 @@ export const TIERS = {
   hard: { clock: 0.86, ai: 1.075, grip: 0.96, label: 'Hard' },
 };
 
+// --- The wing ----------------------------------------------------------------
+
+/**
+ * How much wing is on the car: the one thing about it you choose.
+ *
+ * It is the oldest decision in motor racing and it is a straight trade. A wing
+ * makes grip out of air, so more of it is more corner speed; it makes that grip
+ * by pushing against the air, so more of it is also more drag, and drag is what
+ * sets the top speed. There is no setting here that is quicker everywhere, and
+ * that is the point of having the setting at all - Monza wants the smallest wing
+ * that will still get the car round the second chicane, and Monaco wants every
+ * degree there is because nothing there is long enough to pay for it.
+ *
+ * `grip` multiplies the car's share of GRIP and `drag` its share of DRAG, and
+ * both go on the player's car alone. The rivals run the medium wing all
+ * afternoon, whatever you have chosen, so this is a choice against a fixed field
+ * rather than a difficulty dial - that is what `skill` is for.
+ *
+ * The honest simplification is that this does not vary with speed. Real
+ * downforce goes up with the square of it, so a real low-wing car loses most of
+ * its advantage in slow corners and almost none on a fast one; here a wing is
+ * worth the same at eighty as at three hundred. Making it speed-dependent would
+ * change how every corner on every circuit drives, and the trade you feel -
+ * corner speed against straight-line speed - is already the whole of it.
+ */
+/**
+ * The three of them, and why they are these three numbers.
+ *
+ * The spread looks lopsided - a two and a half per cent of grip against a forty
+ * per cent of drag - and it has to be, because the two are not paid for in the
+ * same currency. Grip is spent in every corner of every lap; drag is only
+ * really felt in the last few seconds of a straight, where the square law
+ * finally catches the engine. The first pass at this gave the big wing seven per
+ * cent more grip for forty per cent more drag, which sounded like a trade and
+ * was not: it was quicker than the small wing at Monza, on the one circuit in
+ * the game that exists to be a straight.
+ *
+ * Driven by the reference driver these come out at about six tenths a lap either
+ * way, in opposite directions on opposite circuits: the small wing wins Monza,
+ * Las Vegas and Spa, the big one wins Monaco, Singapore, Zandvoort and Jeddah,
+ * and on the mixed ones the medium is as good as either. Which is the shape the
+ * setting is supposed to have.
+ */
+export const WINGS = {
+  low: { grip: 0.975, drag: 0.6, label: 'Low' },
+  mid: { grip: 1, drag: 1, label: 'Medium' },
+  high: { grip: 1.035, drag: 1.45, label: 'High' },
+};
+
+/**
+ * The speed a car with this much drag actually reaches, in metres per second.
+ *
+ * The same sum TOP_SPEED is the answer to, done rather than written down: where
+ * the acceleration curve running out at DRIVE meets the drag going up with the
+ * square of the speed. It exists because the menu says what a wing costs you in
+ * kilometres an hour, and a number typed into a blurb is a number that goes
+ * quietly wrong the first time anybody touches ACCEL.
+ *
+ * With a medium wing at sea level it gives back TOP_SPEED, which is the check
+ * that it is the same sum.
+ */
+export function topSpeedWith(drag = 1, air = 1) {
+  const a = DRAG * air * drag;
+  const b = ACCEL / DRIVE;
+  const c = ACCEL - ROLL_DRAG * 0.04;
+  return (-b + Math.sqrt(b * b + 4 * a * c)) / (2 * a);
+}
+
 // --- The gearbox -------------------------------------------------------------
 
 /**
@@ -333,6 +416,23 @@ export function gearAt(speed) {
  */
 export const SCREEN_W = 640;
 export const SCREEN_H = 448;
+
+/**
+ * The most pixels a frame is allowed to be.
+ *
+ * The picture is not six hundred and forty by four hundred and forty-eight any
+ * more - it is whatever the window is, times the device pixel ratio, because
+ * that is what a graphics card is for and the two numbers above are now only the
+ * reference the lens and the display are written against.
+ *
+ * There has to be a ceiling somewhere, though. A retina laptop at full ratio is
+ * sixteen million pixels a frame; the difference between that and four million
+ * is not visible at arm's length on flat-shaded polygons and it is four times the
+ * fill. Four million is a 2560 by 1600 window at full ratio, or any window at
+ * all on a phone, and past it the picture is rendered slightly smaller and the
+ * compositor stretches it - which is exactly what it is good at.
+ */
+export const MAX_PIXELS = 4_000_000;
 
 /**
  * Field of view, as the focal length of a screen this wide.

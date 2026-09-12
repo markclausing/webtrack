@@ -32,7 +32,7 @@
 import {
   CAM_AHEAD, CAM_BACK, CAM_BACK_FAST, CAM_HIGH, CAM_HIGH_FAST, CAM_LAG, CHECKPOINT_TIME,
   DRAW_AHEAD, DRAW_BEHIND, FOCAL, FOCAL_FAST, gearAt, GRID_GAP, GRID_OFF, LIGHTS,
-  ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
+  MAX_PIXELS, ROAD_HALF, RUMBLE, SCREEN_H, SCREEN_W, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
 } from '../constants.js';
 import { BRIDGE_NODES, RINGS, TOWERS } from '../game/route.js';
 import {
@@ -41,7 +41,19 @@ import {
 } from '../game/state.js';
 import { drawProp, drawRacer, drawShadow, drawSmoke } from './models.js';
 import { C, lit, SUN_BEARING, TEAM_COLOURS, THEMES, TIMES } from './palette.js';
-import { md, mix, Raster, shade } from './raster.js';
+import { md, mix, shade } from './colour.js';
+import { Batch } from './gl.js';
+import { Hud, HUD_BASE_H } from './hud.js';
+
+/**
+ * How far the scenery stands.
+ *
+ * Nine hundred metres, once, because that was the whole world. Trees and
+ * grandstands are the cheapest thing in the game per metre of distance - a tree
+ * is four triangles - and the far ones are what tell you there is a circuit out
+ * there rather than a road, so they go as far as the road does.
+ */
+const PROP_FAR = DRAW_AHEAD * SEG;
 
 /** Where the haze starts biting, and where nothing is left of the colour. */
 const FOG_NEAR = 190;
@@ -92,9 +104,18 @@ const MAP_H = 52;
  * move continuously, which is what a bitmap interface at a higher resolution has
  * always looked like.
  */
+/**
+ * How wide the layout space is, which is no longer a fixed number.
+ *
+ * It was four hundred and eighty by three hundred and thirty-six, which is the
+ * shape a television was. The picture fills the window now, and a window is
+ * whatever shape the person opening it chose, so the height is fixed and the
+ * width follows: on a wide screen there is simply more space between the thing
+ * anchored to the left edge and the thing anchored to the right one. Every panel
+ * on this display was already written against one edge or against the middle,
+ * which is why that works at all.
+ */
 const HUD_BASE_W = 480;
-const HUD_BASE_H = 336;
-const HUD_SCALE = SCREEN_W / HUD_BASE_W;
 
 const HUD_BACK = md(12, 12, 24);
 const HUD_EDGE = md(80, 84, 110);
@@ -115,15 +136,30 @@ const PHANTOM = md(120, 220, 235);
 /** What a tunnel takes the daylight down to. Not black: black is a hole. */
 const TUNNEL_DARK = md(18, 20, 26);
 
+/**
+ * A display that is not there.
+ *
+ * The screenshot tool draws the world without one and so does the frame meter's
+ * first pass. Every method a panel could ask for, doing nothing.
+ */
+const NO_HUD = {
+  rect() {}, span() {}, panel() {}, text() { return 0; }, textMid() { return 0; },
+  glyph() { return 0; }, begin() {}, blit() {},
+};
+
 export class Renderer {
-  constructor(canvas) {
+  /**
+   * @param canvas the one the world is drawn on, in WebGL
+   * @param hudCanvas the one over the top of it, in 2D. Optional: the tools that
+   *   only want the world do not pass one.
+   */
+  constructor(canvas, hudCanvas = null) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d', { alpha: false });
-    this.rt = new Raster(SCREEN_W, SCREEN_H);
-    this.canvas.width = SCREEN_W;
-    this.canvas.height = SCREEN_H;
+    this.rt = new Batch(canvas);
+    this.hudLayer = hudCanvas ? new Hud(hudCanvas) : null;
     this.cam = null;
     this.surf = 0;
+    this.size(canvas.clientWidth || SCREEN_W, canvas.clientHeight || SCREEN_H);
   }
 
   /** A new race: the camera must not glide in from where the last one ended. */
@@ -175,9 +211,22 @@ export class Renderer {
    * The arguments are ignored and kept: `fit()` still calls this on every resize,
    * and there is nothing left for it to do.
    */
-  size() {
-    this.canvas.width = SCREEN_W;
-    this.canvas.height = SCREEN_H;
+  size(width = SCREEN_W, height = SCREEN_H) {
+    // One device pixel per screen pixel, and no more than four million of them.
+    // A retina laptop at two is sixteen million pixels a frame for a picture
+    // nobody can see the difference in, and a phone will simply run out of fill.
+    const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
+    const want = Math.min(1, Math.sqrt(MAX_PIXELS / Math.max(1, width * height * dpr * dpr)));
+    const w = Math.max(320, Math.round(width * dpr * want));
+    const h = Math.max(224, Math.round(height * dpr * want));
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
+    this.rt.resize(w, h);
+    this.hudLayer?.resize(w, h);
+    this.hudW = h ? (w / h) * HUD_BASE_H : HUD_BASE_W;
+    this._ui = null;
   }
 
   draw(state, { chrome = true } = {}) {
@@ -195,16 +244,22 @@ export class Renderer {
     );
     // The horizon moves with the camera, so the sky bands move with it. Signed
     // the other way it looks almost right, which is worse than looking wrong.
-    const lift = Math.tan(cam.pitch) * rt.focal / SCREEN_H;
+    const lift = Math.tan(cam.pitch) * rt.focal / rt.h;
     rt.begin(this.sky(theme).map(([at, colour]) => [at - lift, colour]));
     this.sun(cam);
     rt.setCamera(cam.x, cam.y, cam.z, cam.yaw, cam.pitch, cam.roll);
 
+    this.shine(state, theme, p);
     this.ground(state, theme, p);
     this.cars(state, theme, p);
 
-    if (chrome) this.hud(state, p);
-    rt.blit(this.ctx);
+    rt.blit();
+    // The display is a canvas of its own over the top, so it is drawn after the
+    // world has been handed over rather than into the same buffer.
+    if (chrome && this.hudLayer) {
+      this.hudLayer.begin();
+      this.hud(state, p);
+    }
   }
 
   /**
@@ -214,7 +269,7 @@ export class Renderer {
    * report how long the frame took, which is not known until the frame is over.
    */
   show() {
-    this.rt.blit(this.ctx);
+    this.rt.blit();
   }
 
   /**
@@ -278,7 +333,17 @@ export class Renderer {
     while (turn < -Math.PI) turn += Math.PI * 2;
     cam.yaw += turn * (CAM_LAG + 0.12);
 
-    this.rt.focal = FOCAL + (FOCAL_FAST - FOCAL) * eased;
+    /**
+     * The lens, in pixels of the picture as it actually is.
+     *
+     * FOCAL is a number of pixels on a screen four hundred and forty-eight tall,
+     * which is what this game used to be. The picture is whatever size the window
+     * is now, so it is scaled by the height rather than by the width: the
+     * vertical field of view stays exactly what it was and a wider window shows
+     * more at the sides. Scaled by the width instead, a widescreen monitor would
+     * show the same road through a letterbox, which is the wrong way round.
+     */
+    this.rt.focal = (FOCAL + (FOCAL_FAST - FOCAL) * eased) * (this.rt.h / SCREEN_H);
 
     // A shiver that grows with speed, and a proper thump when something hits.
     const buzz = eased * 0.35 + state.shake;
@@ -387,14 +452,68 @@ export class Renderer {
     // Behind you, or so far round the edge that it would be a smear rather than
     // a disc: the tangent runs away long before the field of view does.
     if (Math.abs(turn) > 1.1) return;
-    const x = Math.round(SCREEN_W / 2 + Math.tan(turn) * rt.focal);
-    const horizon = SCREEN_H / 2 - Math.tan(cam.pitch) * rt.focal;
-    const y = Math.round(horizon - now.sunHigh * SCREEN_H);
-    const r = Math.round(now.sunSize);
-    for (let dy = -r; dy <= r; dy++) {
-      const half = Math.round(Math.sqrt(Math.max(0, r * r - dy * dy)));
-      rt.rect(x - half, y + dy, half * 2 + 1, 1, now.sun);
-    }
+    const x = rt.w / 2 + Math.tan(turn) * rt.focal;
+    const horizon = rt.h / 2 - Math.tan(cam.pitch) * rt.focal;
+    const y = horizon - now.sunHigh * rt.h;
+    // The size is written for a screen four hundred and forty-eight tall, like
+    // the lens, and scales with the picture for the same reason.
+    rt.disc(x, y, now.sunSize * (rt.h / SCREEN_H), now.sun);
+  }
+
+  /**
+   * The sun, the ambient light and what the distance is made of.
+   *
+   * Worked out once a frame and handed to the card, where it is applied per
+   * pixel. Three things come out of the time of day and one out of where the car
+   * is standing.
+   *
+   * The sun's bearing does not move - it is a fixed direction in the world, which
+   * is what makes coming out of a corner with it ahead of you feel like coming
+   * out of a corner with it ahead of you - and its height comes from the same
+   * number that puts the disc on the screen, so the shadow side of a building
+   * and the sun you can see agree with each other.
+   *
+   * Ambient rises as the sun sets, which sounds backwards and is not: it is the
+   * share of the light that has no direction, and by night almost all of it has
+   * none. A directional term at midnight would light one side of every wall from
+   * a sun that is not there.
+   */
+  shine(state, theme, p) {
+    const now = this.now;
+    // Where the sun is in the world. The height is read off the same fraction of
+    // the screen the disc is drawn at, through the lens it was authored for.
+    const high = Math.atan(now.sunHigh * SCREEN_H / FOCAL);
+    const flat = Math.cos(high);
+    const dim = now.dim;
+    /**
+     * Inside a tunnel the distance stops existing.
+     *
+     * Monaco's is eight hundred and forty metres long and you can see the far
+     * end of it from the mouth. Fogged at the usual distance that end is a grey
+     * smudge; it should be a bright hole, because that is what it is. Rather
+     * than give every vertex a haze of its own, the fog is simply pushed out
+     * while the car is under a roof - everything visible at that moment is the
+     * tunnel, so there is nothing else for it to be wrong about.
+     */
+    const roof = state.route.nodes[nodeAt(state.route, p.s).i].tunnel || 0;
+    const far = FOG_FAR + roof * 2600;
+    this.rt.light({
+      sun: [Math.sin(SUN_BEARING) * flat, Math.sin(high), Math.cos(SUN_BEARING) * flat],
+      /**
+       * How much of the light has no direction in it.
+       *
+       * Two fifths in the afternoon and nearly all of it once the sun has gone.
+       * The first number is the one that decides how much a wall facing the sun
+       * differs from the wall round the corner from it, and at the two thirds it
+       * started at the difference was there and you had to look for it. At two
+       * fifths a building has a bright side, which is the whole reason the faces
+       * were given normals.
+       */
+      ambient: Math.min(0.94, 0.42 + 0.52 * (1 - dim)),
+      fogColour: rgb(theme.fog),
+      fogNear: FOG_NEAR + roof * 600,
+      fogFar: far,
+    });
   }
 
   /**
@@ -468,7 +587,6 @@ export class Renderer {
       const a = nodeStep(route, i, 0);
       const b = nodeStep(route, i, 1);
       const away = step * SEG;
-      const f = fog(away);
       // The headlights: at night the near tarmac is a good deal brighter than
       // the rest of the world, which is what a car's own lights look like from
       // inside it and is most of what makes a night lap readable.
@@ -498,10 +616,13 @@ export class Renderer {
       const dark = (colour) => (roof > 0
         ? mix(mix(colour, TUNNEL_DARK, roof * 0.62), C.lamp, roof * 0.10)
         : colour);
-      const haze = roof > 0 ? f * (1 - roof) : f;
-      const tint = (colour) => mix(dark(this.lamp(colour)), theme.fog, haze);
+      // No haze in here any more: the distance is mixed in per pixel by the
+      // shader, which is both cheaper and right. It used to be worked out once
+      // for a whole section of road and applied to the near end and the far end
+      // alike, so a straight at dusk had a visible join every forty metres.
+      const tint = (colour) => dark(this.lamp(colour));
       const road = beam > 0
-        ? (colour) => mix(dark(shade(this.lamp(colour), 1 + beam * 2.4)), theme.fog, haze)
+        ? (colour) => dark(shade(this.lamp(colour), 1 + beam * 2.4))
         : tint;
       // The ground beside this node takes its colours from this node, which is
       // how a circuit can leave the hills and arrive at the sea inside a lap.
@@ -688,7 +809,7 @@ export class Renderer {
       if (roof > 0.05) this.tunnel(a, b, tint, i, roof);
 
       const props = route.props[a.i];
-      if (props && away < 900) {
+      if (props && away < PROP_FAR) {
         for (const prop of props) {
           const off = prop.side * prop.off;
           // Anything that belongs to the track is turned to face along it. A
@@ -975,7 +1096,7 @@ export class Renderer {
     const at = this.at(state, car);
     if (Math.hypot(at.x - this.cam.x, at.z - this.cam.z) < 5.4) return;
     // No shadow: a recording does not stand between the sun and the road.
-    const tint = (colour) => mix(PHANTOM, theme.fog, fog(Math.abs(away)));
+    const tint = () => PHANTOM;
     /**
      * Every other pixel, and no depth written - the same trick the tyre smoke
      * uses. A checkerboard at this resolution is what a sixteen-bit machine had
@@ -1118,8 +1239,7 @@ export class Renderer {
 
   /** A fog function for one distance, made once and handed to a model. */
   tinter(theme, away) {
-    const f = fog(away);
-    return (colour) => mix(this.lampCar(colour), theme.fog, f);
+    return (colour) => this.lampCar(colour);
   }
 
   // --- The panel ------------------------------------------------------------
@@ -1141,41 +1261,21 @@ export class Renderer {
    */
 
   /**
-   * The raster, taking coordinates in the HUD's own four-hundred-and-eighty-wide
-   * space instead of in pixels.
+   * The display layer, or something shaped like it when there is not one.
+   *
+   * It used to be a proxy that scaled the HUD's own coordinates onto the pixel
+   * buffer the world was drawn in. The scaling lives in hud.js now, so this is
+   * only the answer to "is there a display to draw on" - and the tools that draw
+   * the world without one get an object that quietly does nothing, which is
+   * cheaper than a check at every call site.
    */
   get ui() {
-    if (this._ui) return this._ui;
-    const rt = this.rt;
-    const u = HUD_SCALE;
-    const q = (n) => Math.round(n * u);
-    // At least one, and whole: half a pixel of bitmap font is no font at all.
-    const k = (n) => Math.max(1, Math.round((n || 1) * u));
-    this._ui = {
-      panel: (x, y, w, h, a, b) => rt.panel(q(x), q(y), q(w), q(h), a, b),
-      rect: (x, y, w, h, c) => rt.rect(q(x), q(y), q(w), q(h), c),
-      /**
-       * A rectangle given by its edges rather than by a corner and a size.
-       *
-       * The difference matters wherever shapes are built out of rows. Scaling a
-       * position and a height separately rounds each of them on its own, so two
-       * rows that touched at four hundred and eighty are one pixel apart at six
-       * hundred and forty - or one pixel on top of each other. The corner arrow
-       * was eight such rows and came out with a comb down the side of it.
-       * Scaling both edges instead makes the next row start exactly where the
-       * last one stopped, whatever the scale is.
-       */
-      span: (x0, y0, x1, y1, c) => rt.rect(q(x0), q(y0), q(x1) - q(x0), q(y1) - q(y0), c),
-      text: (str, x, y, c, n) => rt.text(str, q(x), q(y), c, k(n)),
-      textMid: (str, x, y, c, n) => rt.textMid(str, q(x), q(y), c, k(n)),
-      blit: (...args) => rt.blit(...args),
-    };
-    return this._ui;
+    return this.hudLayer || NO_HUD;
   }
 
   hud(state, p) {
     const rt = this.ui;
-    const W = HUD_BASE_W;
+    const W = this.hudW;
     const SCREEN_H = HUD_BASE_H;
     const qual = state.mode === 'qual';
 
@@ -1337,7 +1437,7 @@ export class Renderer {
     const colour = sharp >= 3 ? (near ? BAD : WARN) : sharp === 2 ? WARN : HUD_DIM;
     const bend = worst > 0 ? 1 : -1;
     const wide = 10 + sharp * 8;
-    const x = HUD_BASE_W / 2 + (bend > 0 ? 26 : -26 - wide);
+    const x = this.hudW / 2 + (bend > 0 ? 26 : -26 - wide);
     rt.panel(x, 28, wide, 20, HUD_BACK, colour);
 
     // Chevrons, drawn as rows between two edges rather than as rows of a fixed
@@ -1368,7 +1468,7 @@ export class Renderer {
    */
   lights(state) {
     const rt = this.ui;
-    const W = HUD_BASE_W;
+    const W = this.hudW;
     const on = Math.min(5, Math.floor((LIGHTS - state.lights) / 40));
     rt.panel(W / 2 - 56, 78, 112, 24, HUD_BACK, HUD_EDGE);
     for (let i = 0; i < 5; i++) {
@@ -1398,11 +1498,9 @@ function cableHeight(t) {
   return sag + (high - sag) * (1 - Math.sin(u * Math.PI));
 }
 
-/** How much of the haze colour is in something this far away. */
-function fog(away) {
-  if (away <= FOG_NEAR) return 0;
-  const t = (away - FOG_NEAR) / (FOG_FAR - FOG_NEAR);
-  return Math.min(1, t) ** 0.75;
+/** A packed colour, as the three floats a shader takes. */
+function rgb(colour) {
+  return [(colour & 255) / 255, ((colour >> 8) & 255) / 255, ((colour >> 16) & 255) / 255];
 }
 
 /** The tarmac's height at an offset, including the camber into the corner. */

@@ -22,6 +22,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { makeCanvas } from './glstub.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -105,20 +106,27 @@ class El {
 
   setPointerCapture() {}
 
-  getContext() {
-    const self = this;
-    // The count is the point: it is the only evidence from out here that a
-    // frame was actually finished rather than thrown away halfway through.
-    return {
-      canvas: self,
-      imageSmoothingEnabled: false,
-      // The frame counter. It used to hang off drawImage, which is what the
-      // renderer used to blow the picture up onto a window-sized canvas; the
-      // canvas is the size of the picture now and the browser does the blowing
-      // up, so a finished frame is one putImageData and nothing else.
-      putImageData() { self.drawn = (self.drawn || 0) + 1; },
-      drawImage() {},
-    };
+  /**
+   * Either context, and both of them stubs.
+   *
+   * The world asks for WebGL and the display asks for 2D. Neither draws
+   * anything here - see tools/glstub.js for what a graphics card that is not
+   * there is worth - but both take every call the renderer makes, which is what
+   * this test has always actually been checking. A frame that got as far as
+   * handing vertices over is a frame that went through every line.
+   */
+  getContext(kind) {
+    if (!this.stubs) this.stubs = makeCanvas(this.width || 1280, this.height || 800);
+    this.stubs.width = this.width;
+    this.stubs.height = this.height;
+    const ctx = this.stubs.getContext(kind);
+    if (kind !== '2d') this.gl = ctx;
+    return ctx;
+  }
+
+  /** How many times the card was handed a frame. The old counter, renamed. */
+  get drawn() {
+    return this.gl ? this.gl.counts.draws : 0;
   }
 }
 
@@ -202,6 +210,18 @@ ok('the controls table has a row for every action',
 ok('the route blurb says something about the circuit',
   byId.get('routeBlurb').textContent.includes('mountain'));
 
+// The settings rows are buttons that have to do something, and the one that says
+// what it does in worked-out numbers is the one where a typo shows up as an
+// empty line rather than as an error.
+{
+  const medium = byId.get('wingBlurb').textContent;
+  byData.get('wing').find((b) => b.dataset.wing === 'low').fire('click');
+  const small = byId.get('wingBlurb').textContent;
+  ok(`the downforce blurb reads the car rather than a typed-in number (${small})`,
+    /\d{3} km\/h/.test(medium) && small !== medium);
+  byData.get('wing').find((b) => b.dataset.wing === 'mid').fire('click');
+}
+
 // --- Pressing start ----------------------------------------------------------------
 
 /** One turn of the browser's animation loop: whatever asked for a frame gets one. */
@@ -229,8 +249,11 @@ const screen = byId.get('screen');
 const before = screen.drawn || 0;
 const started = Date.now();
 pump(240);
+// Draw calls rather than frames: a frame is a sky, the solid world and whatever
+// you can see through, so the number is a small multiple of the frames. What is
+// being asked is the same question - did the loop keep going for four seconds.
 const drawn = (screen.drawn || 0) - before;
-ok(`four seconds of the loop drew ${drawn} frames in ${Date.now() - started}ms`, drawn > 200);
+ok(`four seconds of the loop made ${drawn} draw calls in ${Date.now() - started}ms`, drawn > 200);
 ok('and the race is still going',
   byId.get('gameover').classes.has('hidden') && byId.get('menu').classes.has('hidden'));
 

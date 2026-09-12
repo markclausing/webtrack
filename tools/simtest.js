@@ -12,7 +12,7 @@
 // for.
 
 import {
-  BTN, CAR_HALF, GRIP, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT,
+  BTN, CAR_HALF, GRIP, ROAD_HALF, SEG, TICK_RATE, TOP_SPEED, WALL_AT, WINGS,
 } from '../src/constants.js';
 import { buildRoute, RINGS } from '../src/game/route.js';
 import { SURVEYED_KEYS } from '../src/game/circuits.js';
@@ -291,6 +291,58 @@ for (const tier of ['easy', 'normal', 'hard']) {
   const [timid, brave, wild] = times.map((r) => player(r).best);
   ok(`braking later is quicker: ${times.map((r) => formatTime(player(r).best)).join('  ')}`,
     brave < timid && wild < brave);
+}
+
+// The wing, which is the same kind of test: a setting that is quicker
+// everywhere is not a setting, it is an upgrade.
+//
+// So this asks the one question the three numbers in WINGS exist to answer -
+// does the small wing win the circuit that is a straight, and the big one the
+// circuit that is not - and it asks it by driving both, because the arithmetic
+// that says it should is the arithmetic being tested.
+{
+  const lap = (route, wing) => {
+    const state = makeRace({ route, mode: 'qual', tier: 'normal', wing, seed: 5 });
+    const p = player(state);
+    for (let t = 0; t < TICK_RATE * 400 && p.lap < 3; t++) {
+      step(state, driveLine(state, 0.97));
+      state.clock = 999;
+    }
+    return player(state).best;
+  };
+
+  const fast = ['low', 'mid', 'high'].map((w) => lap('monza', w));
+  ok(`monza wants the small wing: ${fast.map(formatTime).join('  ')}`,
+    fast[0] < fast[1] && fast[1] < fast[2]);
+
+  const slow = ['low', 'mid', 'high'].map((w) => lap('monaco', w));
+  ok(`monaco wants the big one: ${slow.map(formatTime).join('  ')}`,
+    slow[2] < slow[1] && slow[1] < slow[0]);
+
+  // And the straight-line half of the trade, which is the part the menu
+  // promises: the small wing has to actually be faster down the road.
+  const trap = (wing) => {
+    const state = makeRace({ route: 'monza', mode: 'qual', tier: 'normal', wing, seed: 5 });
+    const p = player(state);
+    let best = 0;
+    for (let t = 0; t < TICK_RATE * 200 && p.lap < 2; t++) {
+      step(state, driveLine(state, 0.97));
+      state.clock = 999;
+      best = Math.max(best, p.speed);
+    }
+    return best;
+  };
+  const [low, mid, high] = ['low', 'mid', 'high'].map(trap);
+  ok(`and it is worth ${kmh(low - high)} km/h at the trap `
+    + `(${kmh(low)} / ${kmh(mid)} / ${kmh(high)} km/h)`,
+    low > mid + 4 && mid > high + 4);
+
+  // The rivals are not in on it. Whatever you have bolted to your car, theirs is
+  // the medium one - or the setting is a difficulty dial wearing a hat.
+  const state = makeRace({ route: 'monza', mode: 'gp', tier: 'normal', wing: 'low', seed: 5 });
+  ok('the wing is on the player\'s car alone',
+    player(state).dragScale === WINGS.low.drag
+    && state.cars.slice(1).every((car) => car.dragScale === 1));
 }
 
 // A race nobody drives must end, and must end on the clock rather than by

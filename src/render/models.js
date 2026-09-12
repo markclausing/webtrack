@@ -20,8 +20,8 @@
  * as you arrive.
  */
 
-import { C, DUST, SMOKE, TEAM_COLOURS } from './palette.js';
-import { shade } from './raster.js';
+import { C, CROWD, DUST, SMOKE, TEAM_COLOURS } from './palette.js';
+import { mix, shade } from './colour.js';
 
 /**
  * Puts local coordinates into the world.
@@ -70,16 +70,23 @@ class Placer {
 
 const put = new Placer();
 
-/** A flat box: four sides and a lid. Five faces is a building, a crate, a stand. */
+/**
+ * A flat box: four sides and a lid. Five faces is a building, a crate, a stand.
+ *
+ * One colour, and it used to be three. The sides were written out at sixty-eight
+ * and eighty-four per cent of the top, which is a sun directly overhead, painted
+ * on by hand, and the same sun at four in the afternoon as at dusk with it on the
+ * horizon. The faces carry their normals now and the light is worked out where
+ * the light is - so a building at Monaco has a bright side and a dark side, they
+ * are the sides the sun says they are, and they swap over as the afternoon goes.
+ */
 function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
-  const dark = tint(shade(colour, 0.68));
-  const side = tint(shade(colour, 0.84));
-  const lit = tint(colour);
-  put.face(rt, dark, [x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0]);
-  put.face(rt, dark, [x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1]);
-  put.face(rt, side, [x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1]);
-  put.face(rt, side, [x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0]);
-  put.face(rt, lit, [x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1]);
+  const c = tint(colour);
+  put.face(rt, c, [x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0]);
+  put.face(rt, c, [x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1]);
+  put.face(rt, c, [x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1]);
+  put.face(rt, c, [x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0]);
+  put.face(rt, c, [x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1]);
 }
 
 // --- Scenery -----------------------------------------------------------------
@@ -757,31 +764,86 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
         0.13, 1.06, 0.01, -0.13, 1.06, 0.01]);
       break;
     case 'stand': {
-      // A grandstand: long along the track, facing across it, and solid.
-      //
-      // It used to be a set of separate plates - a slope, a roof and a canopy
-      // floating two metres above that on two thin legs - which from any
-      // distance read as flat polygons hanging in the air rather than as a
-      // building. Everything here now meets something else: back wall to roof,
-      // roof to posts, posts to fascia. Nothing is left over on its own.
-      //
-      // Built facing local +z. Nobody is modelled: at this size a crowd is a
-      // texture, there are no textures, so a crowd is a stripe.
+      /**
+       * A grandstand: long along the track, facing across it, and full of people.
+       *
+       * It was a sloped plate with a stripe painted across it, and the comment
+       * here used to explain why: at this size a crowd is a texture, there are no
+       * textures, so a crowd is a stripe. Both halves of that were true of a
+       * renderer that filled every triangle by hand. A grandstand is thirty
+       * metres of the picture at every corner on sixteen of these circuits, and a
+       * stripe is what it looked like.
+       *
+       * So it is terraced now: eight rows, each with a tread and a riser, and the
+       * risers carry the people. The people are blocks - six to a row, each a
+       * different shade off the same hash, so no two rows repeat - and at forty
+       * metres that is a crowd, at two hundred it is a texture, and up close it is
+       * still not people but it is seating with something in it.
+       *
+       * A hundred and thirty triangles against twenty. Everything still meets
+       * something else: back wall to roof, roof to posts, posts to fascia, treads
+       * to risers. Nothing is left over on its own, which was the thing that made
+       * the old one read as flat plates hanging in the air.
+       */
       const wall = tint(shade(theme.ridge, 0.72));
       const side = tint(shade(theme.ridge, 0.6));
       const deck = tint(shade(theme.ridge, 0.94));
-      put.face(rt, wall, [-9, 0, -5, 9, 0, -5, 9, 8.4, -5, -9, 8.4, -5]);
-      put.face(rt, deck, [-9, 1, 0, 9, 1, 0, 9, 6.4, -4.6, -9, 6.4, -4.6]);
-      put.face(rt, tint(C.crowd), [-8.4, 2.2, -1.4, 8.4, 2.2, -1.4,
-        8.4, 5.2, -3.4, -8.4, 5.2, -3.4]);
-      put.face(rt, wall, [-9, 0, 0, 9, 0, 0, 9, 1, 0, -9, 1, 0]);
-      put.face(rt, side, [-9, 0, 0, -9, 0, -5, -9, 7.4, -5, -9, 1, 0]);
-      put.face(rt, side, [9, 0, -5, 9, 0, 0, 9, 1, 0, 9, 7.4, -5]);
-      put.face(rt, tint(C.metal), [-9.4, 8.4, -5.2, 9.4, 8.4, -5.2,
+      const ROWS = 8;
+      const back = -4.6;
+      const front = -0.6;
+      const low = 1.1;
+      const high = 6.4;
+
+      // The terracing, from the front row back and up.
+      for (let r = 0; r < ROWS; r++) {
+        const t0 = r / ROWS;
+        const t1 = (r + 1) / ROWS;
+        const z0 = front + (back - front) * t0;
+        const z1 = front + (back - front) * t1;
+        const y0 = low + (high - low) * t0;
+        const y1 = low + (high - low) * t1;
+        // The tread you sit on, and the riser behind it.
+        put.face(rt, deck, [-9, y0, z0, 9, y0, z0, 9, y0, z1, -9, y0, z1]);
+        put.face(rt, side, [-9, y0, z1, 9, y0, z1, 9, y1, z1, -9, y1, z1]);
+        /**
+         * And the people on it.
+         *
+         * Six blocks to a row rather than one strip, each picked out of the
+         * crowd colour by a hash of where it is. A single colour across the whole
+         * stand reads as a painted band; six that differ by a tenth read as a
+         * crowd, and the difference costs twelve triangles a row.
+         */
+        for (let c = 0; c < 6; c++) {
+          const x0 = -8.6 + c * (17.2 / 6) + 0.1;
+          const x1 = x0 + (17.2 / 6) - 0.2;
+          // A cheap deterministic scatter: the same stand looks the same every
+          // lap, and two stands next to each other do not look like each other.
+          // Two numbers that share no factor with the palette length, so the
+          // pattern does not line up into stripes down the stand.
+          const h = (r * 5 + c * 3) % CROWD.length;
+          const who = shade(CROWD[h], 0.88 + ((r * 3 + c * 7) % 5) * 0.06);
+          // In front of the riser, not behind it. The stand is built going away
+          // from the track, so the row behind is at a smaller z - and a crowd
+          // placed a a few centimetres further back is a crowd inside the
+          // concrete, which is exactly where the first pass put it.
+          const face = z1 + 0.06;
+          put.face(rt, tint(who), [x0, y0 + 0.12, face, x1, y0 + 0.12, face,
+            x1, y1 - 0.12, face, x0, y1 - 0.12, face]);
+        }
+      }
+
+      // The shell round it: back wall, front fascia, two ends and a roof on posts.
+      put.face(rt, wall, [-9, 0, back - 0.4, 9, 0, back - 0.4,
+        9, 8.4, back - 0.4, -9, 8.4, back - 0.4]);
+      put.face(rt, wall, [-9, 0, front, 9, 0, front, 9, low, front, -9, low, front]);
+      put.face(rt, side, [-9, 0, front, -9, 0, back - 0.4, -9, 7.4, back - 0.4, -9, low, front]);
+      put.face(rt, side, [9, 0, back - 0.4, 9, 0, front, 9, low, front, 9, 7.4, back - 0.4]);
+      put.face(rt, tint(C.metal), [-9.4, 8.4, back - 0.6, 9.4, 8.4, back - 0.6,
         9.4, 7.6, 0.8, -9.4, 7.6, 0.8]);
-      for (const at of [-8.6, 8.6]) {
-        put.face(rt, side, [at - 0.3, 1, 0.4, at + 0.3, 1, 0.4,
-          at + 0.3, 7.7, 0.6, at - 0.3, 7.7, 0.6]);
+      // Four posts rather than two: a roof this wide on two legs is a canopy.
+      for (const at of [-8.6, -3, 3, 8.6]) {
+        put.face(rt, side, [at - 0.22, 1, 0.4, at + 0.22, 1, 0.4,
+          at + 0.22, 7.7, 0.6, at - 0.22, 7.7, 0.6]);
       }
       break;
     }
@@ -937,21 +999,166 @@ export function drawShadow(rt, x, y, z, yaw, wide, long, tint, pitch = 0) {
 
 // --- The car -------------------------------------------------------------------
 
-/** Half the track, half the wheelbase, and the height of the airbox. */
+/** Half the track, half the wheelbase, and the size of a tyre. */
 const HALF = 0.88;
 const AXLE = 1.5;
+const TYRE_R = 0.34;
+/** How many segments a tyre is made of. Ten is round at any distance that matters. */
+const TYRE_SEGS = 10;
 
 /**
- * A single seater, from any angle, in about twenty faces.
+ * A wheel, as a wheel.
  *
- * Built from the back forwards, because the back is what you look at. The rear
- * wing is the widest thing on it and sits highest, which is what makes a car two
- * hundred metres up the road read as a racing car and not as a dot; the four
- * wheels standing out in the air are what stop it reading as a saloon; and the
- * helmet is how you tell at a glance that there is somebody in it.
+ * It was two flat quads and a pentagon for a long time: a tread you saw from
+ * behind, a disc you saw from the side, and nothing in between. From directly
+ * behind that is a tyre; from three quarters on, which is where the camera
+ * actually sits, it is a piece of cardboard - and the four wheels standing out
+ * in the air are the whole silhouette of an open wheeler, so it is the piece of
+ * cardboard you look at for three minutes.
+ *
+ * Ten segments of tread with a sidewall each side and a rim in the middle. Forty
+ * triangles a wheel against four, which is a hundred and sixty against sixteen
+ * for a car, and at fifteen thousand triangles a frame that is a rounding error.
+ *
+ * The normals do the rest: a cylinder made of ten flat faces lit by one sun has
+ * a highlight that runs round it, which is what makes it read as round rather
+ * than as a decagon.
  */
+function wheel(rt, tyre, wall, rim, cx, cz, width, steer = 0) {
+  const sin = Math.sin(steer);
+  const cos = Math.cos(steer);
+  // Steering turns the wheel about its own centre, so the corners are worked out
+  // in the wheel's own frame and turned on the way out.
+  const put3 = (out, at, ox, oy, oz) => {
+    out[at] = cx + ox * cos - oz * sin;
+    out[at + 1] = oy;
+    out[at + 2] = cz + ox * sin + oz * cos;
+  };
+  const p = new Float64Array(12);
+  for (let i = 0; i < TYRE_SEGS; i++) {
+    const a0 = (i / TYRE_SEGS) * Math.PI * 2;
+    const a1 = ((i + 1) / TYRE_SEGS) * Math.PI * 2;
+    const y0 = TYRE_R + Math.sin(a0) * TYRE_R;
+    const z0 = Math.cos(a0) * TYRE_R;
+    const y1 = TYRE_R + Math.sin(a1) * TYRE_R;
+    const z1 = Math.cos(a1) * TYRE_R;
+    // The tread.
+    put3(p, 0, -width, y0, z0);
+    put3(p, 3, width, y0, z0);
+    put3(p, 6, width, y1, z1);
+    put3(p, 9, -width, y1, z1);
+    put.face(rt, tyre, p);
+    // And a sidewall each side, as a fan back to the hub.
+    for (const side of [-width, width]) {
+      put3(p, 0, side, TYRE_R, 0);
+      put3(p, 3, side, y0, z0);
+      put3(p, 6, side, y1, z1);
+      put.face(rt, wall, p.subarray(0, 9));
+    }
+  }
+  /**
+   * The rim: a small disc standing a little proud of the sidewall.
+   *
+   * Small on purpose. At three fifths of the radius in a bright metal it is not
+   * a rim, it is a white wheel - which is what the first pass at this looked
+   * like from any distance at all. Two fifths, in something nearer to the colour
+   * of a brake drum than to chrome, is a wheel with a rim in it.
+   */
+  for (const side of [-width - 0.012, width + 0.012]) {
+    for (let i = 0; i < TYRE_SEGS; i++) {
+      const a0 = (i / TYRE_SEGS) * Math.PI * 2;
+      const a1 = ((i + 1) / TYRE_SEGS) * Math.PI * 2;
+      put3(p, 0, side, TYRE_R, 0);
+      put3(p, 3, side, TYRE_R + Math.sin(a0) * TYRE_R * 0.40, Math.cos(a0) * TYRE_R * 0.40);
+      put3(p, 6, side, TYRE_R + Math.sin(a1) * TYRE_R * 0.40, Math.cos(a1) * TYRE_R * 0.40);
+      put.face(rt, rim, p.subarray(0, 9));
+    }
+  }
+}
+
 /**
- * The car.
+ * A shape lofted along the length of the car.
+ *
+ * Each station is a rectangle at a distance down the car - how wide, how low,
+ * how high - and this joins consecutive ones with four faces. It is how a tub
+ * that tapers to a nose and an engine cover that tapers to nothing are written
+ * as six numbers each rather than as a dozen polygons with the corners typed out
+ * twice.
+ */
+function loft(rt, colour, stations, { cap = true, at = 0 } = {}) {
+  const p = new Float64Array(12);
+  const face = (ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz) => {
+    p[0] = at + ax; p[1] = ay; p[2] = az;
+    p[3] = at + bx; p[4] = by; p[5] = bz;
+    p[6] = at + cx; p[7] = cy; p[8] = cz;
+    p[9] = at + dx; p[10] = dy; p[11] = dz;
+    put.face(rt, colour, p);
+  };
+  for (let i = 0; i < stations.length - 1; i++) {
+    const a = stations[i];
+    const b = stations[i + 1];
+    // Top, bottom and the two sides.
+    face(-a.hw, a.y1, a.z, a.hw, a.y1, a.z, b.hw, b.y1, b.z, -b.hw, b.y1, b.z);
+    face(-a.hw, a.y0, a.z, -b.hw, b.y0, b.z, b.hw, b.y0, b.z, a.hw, a.y0, a.z);
+    face(-a.hw, a.y0, a.z, -a.hw, a.y1, a.z, -b.hw, b.y1, b.z, -b.hw, b.y0, b.z);
+    face(a.hw, a.y0, a.z, b.hw, b.y0, b.z, b.hw, b.y1, b.z, a.hw, a.y1, a.z);
+  }
+  if (!cap) return;
+  const first = stations[0];
+  const last = stations[stations.length - 1];
+  face(-first.hw, first.y0, first.z, first.hw, first.y0, first.z,
+    first.hw, first.y1, first.z, -first.hw, first.y1, first.z);
+  face(last.hw, last.y0, last.z, -last.hw, last.y0, last.z,
+    -last.hw, last.y1, last.z, last.hw, last.y1, last.z);
+}
+
+/**
+ * A wing: a plane with thickness, and an endplate at each end.
+ *
+ * Written as one thing because there are three of them on the car and they are
+ * the same object at three sizes. The plane is given a leading and a trailing
+ * edge at different heights, which is what makes it read as an aerofoil from the
+ * side rather than as a shelf.
+ */
+function wingPlane(rt, colour, edge, { hw, zFront, zBack, yFront, yBack, thick, plate }) {
+  const p = new Float64Array(12);
+  const face = (v) => { p.set(v); put.face(rt, colour, p); };
+  // Upper surface, lower surface, and the trailing edge between them.
+  face([-hw, yFront, zFront, hw, yFront, zFront, hw, yBack, zBack, -hw, yBack, zBack]);
+  face([-hw, yFront - thick, zFront, -hw, yBack - thick, zBack,
+    hw, yBack - thick, zBack, hw, yFront - thick, zFront]);
+  face([-hw, yBack, zBack, hw, yBack, zBack,
+    hw, yBack - thick, zBack, -hw, yBack - thick, zBack]);
+  if (!plate) return;
+  for (const side of [-1, 1]) {
+    const x = side * hw;
+    const q = new Float64Array(12);
+    q.set([x, plate.y0, plate.z0, x, plate.y1, plate.z0, x, plate.y1, plate.z1, x, plate.y0, plate.z1]);
+    put.face(rt, edge, q);
+  }
+}
+
+/**
+ * A single seater, from any angle.
+ *
+ * It was about twenty faces, which was the right answer for a renderer that
+ * filled every one of them by hand, and the comment here used to say so: if you
+ * cannot say what it is from three polygons, it does not need more than five.
+ * That rule still holds for a tree at four hundred metres. It never held for
+ * this: the car is the thing you look at for three minutes without a break, it
+ * is eight metres from the camera the whole time, and twenty flat faces is what
+ * it looks like from eight metres.
+ *
+ * So it is about five hundred triangles now, and every one of them is one of
+ * four things that were missing. The wheels are round. The suspension is there,
+ * which is most of what an open wheeler looks like from behind - four wheels
+ * hanging off a body they are not attached to was the oldest lie in this model.
+ * There is a halo over the driver's head, because there is on the cars this is
+ * a car of. And the tub is lofted through six stations rather than being a
+ * wedge, so the nose has a shape.
+ *
+ * Eight of these is four thousand triangles, which is a quarter of a frame, and
+ * a frame has room for four of those.
  *
  * `pitch` is the slope of the road under it, and it was missing for a long time.
  * Nothing in the Placer could tilt a model nose-up or nose-down, so on a hill the
@@ -959,75 +1166,192 @@ const AXLE = 1.5;
  * steepest, fifteen in a hundred, that buried the nose a third of a metre in the
  * tarmac. A buried nose is not a static ugliness, it is a fight in the depth
  * buffer that resolves differently every frame as the camera moves, and it reads
- * as the whole car shivering. Spa was the worst of the seven because Spa is the
- * steepest of the seven, which is how it was found.
+ * as the whole car shivering.
  */
 export function drawRacer(rt, car, x, y, z, yaw, tint, night = 0, pitch = 0) {
   const pal = TEAM_COLOURS[car.team % TEAM_COLOURS.length];
   put.set(x, y, z, yaw, car.roll || 0, 1, pitch);
 
   const body = tint(pal.body);
-  const dark = tint(shade(pal.body, 0.72));
+  const dark = tint(shade(pal.body, 0.86));
   const wing = tint(pal.wing);
-  const wingLit = tint(shade(pal.wing, 1.25));
   const trim = tint(pal.trim);
   const tyre = tint(C.tyre);
-  const rim = tint(C.chrome);
+  const wall = tint(shade(C.tyre, 1.2));
+  const rim = tint(shade(C.metal, 0.9));
+  const carbon = tint(shade(C.tyre, 1.05));
 
-  // Wheels: tread you see from behind, disc you see from the side. They stand
-  // clear of the body, which is the whole silhouette of an open wheeler.
-  for (const zz of [-AXLE, AXLE]) {
+  // The wheels, and the arms holding them on. The fronts point where the wheel
+  // is pointed, which at a third of full lock is a few degrees - enough to see
+  // from behind, and the only part of this car that answers the steering.
+  const steer = (car.wheel || 0) * 0.34;
+  for (const front of [false, true]) {
+    const zz = front ? AXLE : -AXLE;
+    const width = front ? 0.17 : 0.22;
     for (const side of [-1, 1]) {
-      const wx = side * HALF;
-      put.face(rt, tyre, [wx - 0.18, 0.04, zz - 0.36, wx + 0.18, 0.04, zz - 0.36,
-        wx + 0.18, 0.72, zz - 0.36, wx - 0.18, 0.72, zz - 0.36]);
-      put.face(rt, tyre, [wx + 0.18, 0.04, zz + 0.36, wx - 0.18, 0.04, zz + 0.36,
-        wx - 0.18, 0.72, zz + 0.36, wx + 0.18, 0.72, zz + 0.36]);
-      put.face(rt, shade(tyre, 0.82), [wx + side * 0.19, 0.04, zz - 0.33,
-        wx + side * 0.19, 0.4, zz - 0.4, wx + side * 0.19, 0.72, zz,
-        wx + side * 0.19, 0.4, zz + 0.4, wx + side * 0.19, 0.04, zz + 0.33]);
-      put.face(rt, rim, [wx + side * 0.2, 0.3, zz - 0.12, wx + side * 0.2, 0.46, zz,
-        wx + side * 0.2, 0.3, zz + 0.12, wx + side * 0.2, 0.14, zz]);
+      const wx = side * (HALF + (front ? 0 : 0.04));
+      wheel(rt, tyre, wall, rim, wx, zz, width, front ? steer : 0);
+      /**
+       * Two wishbones and a trackrod, as blades.
+       *
+       * Thin quads rather than boxes: at eight metres a suspension arm is two
+       * pixels wide and a box costs five faces to say what one face says. What
+       * matters is that there is something between the wheel and the body,
+       * because four wheels floating beside a tub is what the car looked like
+       * without them.
+       */
+      const inner = side * 0.3;
+      for (const [y0, y1, dz] of [[0.16, 0.22, 0.2], [0.42, 0.5, -0.16]]) {
+        const p = new Float64Array(12);
+        p.set([
+          inner, y0, zz + dz * 0.3, wx, y1, zz + dz,
+          wx, y1 + 0.045, zz + dz, inner, y0 + 0.045, zz + dz * 0.3,
+        ]);
+        put.face(rt, carbon, p);
+      }
     }
   }
 
-  // The tub, from the nose back, and the sidepods either side of it.
-  put.face(rt, body, [-0.16, 0.22, 2.35, 0.16, 0.22, 2.35, 0.44, 0.54, 0.9, -0.44, 0.54, 0.9]);
-  put.face(rt, dark, [-0.16, 0.22, 2.35, -0.44, 0.54, 0.9, -0.44, 0.2, 0.9, -0.16, 0.14, 2.35]);
-  put.face(rt, dark, [0.44, 0.54, 0.9, 0.16, 0.22, 2.35, 0.16, 0.14, 2.35, 0.44, 0.2, 0.9]);
-  box(rt, tint, pal.body, -0.46, 0.46, 0.18, 0.56, -1.1, 0.9);
-  box(rt, tint, shade(pal.body, 0.9), -0.9, -0.5, 0.16, 0.66, -0.9, 0.7);
-  box(rt, tint, shade(pal.body, 0.9), 0.5, 0.9, 0.16, 0.66, -0.9, 0.7);
+  /**
+   * The tub, lofted from the nose to the gearbox.
+   *
+   * Six stations. The nose is narrow and low, it rises and widens to the
+   * cockpit, and then falls away to almost nothing over the back axle - which is
+   * what a modern single seater is, and what a wedge with a flat top was not.
+   */
+  loft(rt, body, [
+    { z: 2.42, hw: 0.13, y0: 0.20, y1: 0.32 },
+    { z: 1.90, hw: 0.19, y0: 0.18, y1: 0.40 },
+    { z: 1.10, hw: 0.34, y0: 0.16, y1: 0.52 },
+    { z: 0.35, hw: 0.46, y0: 0.15, y1: 0.60 },
+    { z: -0.60, hw: 0.44, y0: 0.16, y1: 0.62 },
+    { z: -1.55, hw: 0.26, y0: 0.18, y1: 0.50 },
+    { z: -2.05, hw: 0.17, y0: 0.20, y1: 0.40 },
+  ]);
 
-  // The cockpit, the airbox behind the driver's head, and the head.
-  put.face(rt, tint(C.tyre), [-0.34, 0.58, 0.86, 0.34, 0.58, 0.86,
-    0.32, 0.6, 0.16, -0.32, 0.6, 0.16]);
-  put.face(rt, trim, [-0.2, 0.6, 0.2, 0.2, 0.6, 0.2, 0.17, 1.04, -0.1, -0.17, 1.04, -0.1]);
-  put.face(rt, tint(shade(pal.trim, 0.8)), [-0.17, 1.04, -0.1, 0.17, 1.04, -0.1,
-    0.2, 0.98, -1.0, -0.2, 0.98, -1.0]);
-  put.face(rt, tint(C.helmet), [-0.16, 0.62, 0.48, 0.16, 0.62, 0.48,
-    0.16, 0.92, 0.42, -0.16, 0.92, 0.42]);
+  /**
+   * The sidepods, one either side, on their own centre lines.
+   *
+   * The inlet at the front, the widest part level with the driver, and a taper
+   * into the waist in front of the back wheel - which is the shape that makes
+   * the gap between the wheels read as a car rather than as a slab. Lofted about
+   * an axis of their own rather than about the middle of the car, because a
+   * sidepod is not symmetrical about anything.
+   */
+  for (const side of [-1, 1]) {
+    loft(rt, dark, [
+      { z: 0.86, hw: 0.13, y0: 0.22, y1: 0.44 },
+      { z: 0.55, hw: 0.25, y0: 0.17, y1: 0.64 },
+      { z: -0.30, hw: 0.26, y0: 0.16, y1: 0.60 },
+      { z: -1.05, hw: 0.17, y0: 0.17, y1: 0.42 },
+      { z: -1.45, hw: 0.09, y0: 0.18, y1: 0.32 },
+    ], { cap: false, at: side * 0.62 });
+  }
 
-  // The engine cover, tapering to nothing over the gearbox.
-  put.face(rt, body, [-0.4, 0.6, -0.2, 0.4, 0.6, -0.2, 0.2, 0.48, -1.9, -0.2, 0.48, -1.9]);
-  put.face(rt, dark, [-0.4, 0.6, -0.2, -0.2, 0.48, -1.9, -0.2, 0.2, -1.9, -0.44, 0.2, -0.2]);
-  put.face(rt, dark, [0.2, 0.48, -1.9, 0.4, 0.6, -0.2, 0.44, 0.2, -0.2, 0.2, 0.2, -1.9]);
+  // The cockpit opening, the airbox behind the driver's head, and the head.
+  put.face(rt, carbon, [-0.34, 0.60, 0.88, 0.34, 0.60, 0.88,
+    0.32, 0.62, 0.14, -0.32, 0.62, 0.14]);
+  put.face(rt, tint(C.helmet), [-0.15, 0.64, 0.50, 0.15, 0.64, 0.50,
+    0.15, 0.94, 0.44, -0.15, 0.94, 0.44]);
+  put.face(rt, tint(shade(C.helmet, 0.7)), [-0.15, 0.94, 0.44, 0.15, 0.94, 0.44,
+    0.14, 0.90, 0.14, -0.14, 0.90, 0.14]);
+  /**
+   * The engine cover, and the airbox on top of it.
+   *
+   * Two things rather than one, and the first pass had them as one: a single
+   * shape in the trim colour from the driver's shoulders to the gearbox, which
+   * on a car whose trim is yellow is a yellow blanket over the whole car. The
+   * cover is the body colour, like the rest of the body; the airbox is the scoop
+   * over the driver's head and nothing else, and it is small.
+   */
+  loft(rt, body, [
+    { z: 0.10, hw: 0.30, y0: 0.56, y1: 0.70 },
+    { z: -0.50, hw: 0.28, y0: 0.52, y1: 0.74 },
+    { z: -1.30, hw: 0.22, y0: 0.46, y1: 0.62 },
+    { z: -1.95, hw: 0.14, y0: 0.36, y1: 0.48 },
+  ], { cap: false });
+  loft(rt, trim, [
+    { z: 0.22, hw: 0.15, y0: 0.78, y1: 0.94 },
+    { z: -0.10, hw: 0.17, y0: 0.72, y1: 1.02 },
+    { z: -0.72, hw: 0.15, y0: 0.66, y1: 0.86 },
+  ], { cap: false });
 
-  // The wings. Wide, flat and dark, and the reason the car is legible from a
-  // long way back.
-  put.face(rt, wingLit, [-0.95, 0.16, 2.5, 0.95, 0.16, 2.5, 0.95, 0.24, 2.05, -0.95, 0.24, 2.05]);
-  put.face(rt, wing, [-0.95, 0.1, 2.48, 0.95, 0.1, 2.48, 0.95, 0.16, 2.5, -0.95, 0.16, 2.5]);
-  put.face(rt, wingLit, [-0.82, 0.78, -2.1, 0.82, 0.78, -2.1, 0.82, 1.02, -2.32, -0.82, 1.02, -2.32]);
-  put.face(rt, wing, [-0.82, 0.78, -2.1, -0.82, 1.02, -2.32, -0.86, 1.02, -2.32, -0.86, 0.78, -2.1]);
-  put.face(rt, wing, [-0.86, 0.5, -2.34, -0.7, 0.5, -2.34, -0.7, 1.08, -2.34, -0.86, 1.08, -2.34]);
-  put.face(rt, wing, [0.7, 0.5, -2.34, 0.86, 0.5, -2.34, 0.86, 1.08, -2.34, 0.7, 1.08, -2.34]);
-  // And one red light in the middle of it, which is what a wet grand prix looks
-  // like from behind and what a tow looks like here. After dark it is not tinted
-  // at all: a light is a light, and the one thing that should not get darker
-  // when the sun goes down is the thing you are following.
+  /**
+   * The halo.
+   *
+   * A hoop over the driver's head on a single pillar in front of him. It is four
+   * segments a side and one in the middle, it is the least aerodynamic looking
+   * thing on the car, and it is the single detail that dates these cars to the
+   * decade they are from - which is worth more than any amount of shaping
+   * elsewhere.
+   */
+  {
+    const p = new Float64Array(12);
+    const ring = [
+      [-0.34, 0.72, 0.62], [-0.36, 0.98, 0.42], [-0.30, 1.06, 0.04],
+      [-0.18, 1.08, -0.22], [0, 1.09, -0.30],
+    ];
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < ring.length - 1; i++) {
+        const a = ring[i];
+        const b = ring[i + 1];
+        p.set([
+          side * a[0], a[1], a[2], side * b[0], b[1], b[2],
+          side * b[0], b[1] + 0.05, b[2], side * a[0], a[1] + 0.05, a[2],
+        ]);
+        put.face(rt, carbon, p);
+      }
+    }
+    // The pillar, down the middle, to the nose of the cockpit.
+    p.set([-0.04, 0.66, 0.86, 0.04, 0.66, 0.86, 0.04, 1.09, 0.56, -0.04, 1.09, 0.56]);
+    put.face(rt, carbon, p);
+    p.set([-0.05, 1.05, 0.58, 0.05, 1.05, 0.58, 0.05, 1.09, -0.30, -0.05, 1.09, -0.30]);
+    put.face(rt, carbon, p);
+  }
+
+  /**
+   * The wings, which are what makes the car legible from two hundred metres.
+   *
+   * Two elements each now rather than one plane: the main and the flap, with the
+   * gap between them, and endplates with a shape rather than a rectangle. At
+   * distance it reads as it always did; at eight metres it is a wing.
+   */
+  wingPlane(rt, wing, wing, {
+    hw: 0.95, zFront: 2.62, zBack: 2.24, yFront: 0.14, yBack: 0.22, thick: 0.05,
+    plate: { y0: 0.06, y1: 0.40, z0: 2.66, z1: 2.16 },
+  });
+  wingPlane(rt, tint(shade(pal.wing, 1.3)), wing, {
+    hw: 0.86, zFront: 2.30, zBack: 2.10, yFront: 0.24, yBack: 0.34, thick: 0.04,
+  });
+  wingPlane(rt, wing, wing, {
+    hw: 0.78, zFront: -2.08, zBack: -2.36, yFront: 0.98, yBack: 1.14, thick: 0.05,
+    plate: { y0: 0.62, y1: 1.24, z0: -2.02, z1: -2.46 },
+  });
+  wingPlane(rt, tint(shade(pal.wing, 1.3)), wing, {
+    hw: 0.72, zFront: -2.32, zBack: -2.46, yFront: 1.14, yBack: 1.24, thick: 0.04,
+  });
+  // And the two pylons it stands on, off the gearbox. Without them the wing
+  // floats: there is a foot of air between it and the car from every angle
+  // except directly behind.
+  for (const side of [-1, 1]) {
+    const px = side * 0.11;
+    put.face(rt, carbon, [px - 0.02, 0.42, -1.96, px + 0.02, 0.42, -1.96,
+      px + 0.02, 1.00, -2.16, px - 0.02, 1.00, -2.16]);
+    put.face(rt, carbon, [px - 0.02, 0.42, -1.96, px - 0.02, 1.00, -2.16,
+      px - 0.05, 1.00, -2.16, px - 0.05, 0.42, -1.96]);
+  }
+  // And the diffuser under the gearbox, which is the one part of the floor you
+  // ever see: it is the thing directly in front of the car behind.
+  put.face(rt, carbon, [-0.34, 0.14, -1.90, 0.34, 0.14, -1.90,
+    0.30, 0.30, -2.30, -0.30, 0.30, -2.30]);
+
+  // One red light in the middle of it, which is what a wet grand prix looks like
+  // from behind and what a tow looks like here. After dark it is not tinted at
+  // all: a light is a light, and the one thing that should not get darker when
+  // the sun goes down is the thing you are following.
   const lamp = night > 0.35 ? C.tail : tint(C.kerbA);
-  put.face(rt, lamp, [-0.12, 0.58, -2.36, 0.12, 0.58, -2.36,
-    0.12, 0.76, -2.36, -0.12, 0.76, -2.36]);
+  put.face(rt, lamp, [-0.10, 0.60, -2.38, 0.10, 0.60, -2.38,
+    0.10, 0.76, -2.38, -0.10, 0.76, -2.38]);
 }
 
 /**

@@ -18,10 +18,10 @@
 
 import { Sound } from './audio.js';
 import { boardFor } from './config.js';
-import { MODES, TIERS } from './constants.js';
+import { GRIP, MODES, TIERS, WINGS, topSpeedWith } from './constants.js';
 import { Highscores, levelOf, makeId, NAME_LENGTH, placeOf } from './highscores.js';
 import { bestPosted, keepOwn, ownBest, postGhost } from './ghosts.js';
-import { pack } from './game/ghost.js';
+import { pack, unpack } from './game/ghost.js';
 import {
   ACTIONS, InputDevices, keyLabel, loadBindings, PRESETS, saveBindings,
 } from './input.js';
@@ -34,7 +34,7 @@ import { isTouchDevice, TouchControls } from './touch.js';
 const TICK_MS = 1000 / 60;
 
 const canvas = document.getElementById('screen');
-const renderer = new Renderer(canvas);
+const renderer = new Renderer(canvas, document.getElementById('hud'));
 const sound = new Sound();
 const highscores = new Highscores();
 
@@ -85,6 +85,7 @@ let mode = 'gp';
 let route = 'pass';
 let tier = 'normal';
 let dusk = false;
+let wing = 'mid';
 
 const game = {
   state: null,
@@ -174,12 +175,11 @@ function meter(dt, steps) {
   meterTimes.push(dt);
   if (meterTimes.length > 30) meterTimes.shift();
   const worst = Math.max(...meterTimes);
-  const rt = renderer.rt;
+  const rt = renderer.ui;
   const bad = worst > 18;
-  rt.panel(4, rt.h - 16, 116, 12, 0xff101018, bad ? 0xff4060ff : 0xff40a060);
-  rt.text(`${dt.toFixed(1)}MS X${steps} ${rt.tris}T`, 8, rt.h - 13,
+  rt.panel(4, 318, 116, 12, 0xff101018, bad ? 0xff4060ff : 0xff40a060);
+  rt.text(`${dt.toFixed(1)}MS X${steps} ${renderer.rt.tris}T`, 8, 321,
     bad ? 0xff4060ff : 0xffd0d8e0);
-  renderer.show();
 }
 
 /** Whatever the simulation said happened, said out loud. */
@@ -201,7 +201,7 @@ function attract() {
   // Always a grand prix behind the menu, whatever is selected in front of it: an
   // empty circuit is the correct thing to qualify on and the wrong thing to
   // watch.
-  const state = makeRace({ route, mode: 'gp', tier, dusk, seed: (Math.random() * 1e9) | 0 });
+  const state = makeRace({ route, mode: 'gp', tier, dusk, wing, seed: (Math.random() * 1e9) | 0 });
   // Started a long way in, at speed, with the lights already out and the clock
   // wound up: the menu is never showing a standing start it will not finish, and
   // never the same forty metres of track twice.
@@ -221,7 +221,7 @@ function attract() {
 
 function startRun() {
   sound.wake();
-  game.state = makeRace({ route, mode, tier, dusk, seed: (Date.now() & 0x7fffffff) });
+  game.state = makeRace({ route, mode, tier, dusk, wing, seed: (Date.now() & 0x7fffffff) });
   haunt(game.state);
   game.playing = true;
   game.paused = false;
@@ -389,6 +389,11 @@ function renderMode() {
       + 'per cent of each other and of you, they will shut the door, and the board '
       + 'keeps the whole race rather than your best lap.';
 }
+pick('wing', (value) => {
+  wing = value;
+  renderWing();
+  game.demo = attract();
+});
 pick('dusk', (value) => {
   dusk = value === 'on';
   renderDusk();
@@ -404,6 +409,28 @@ function renderDusk() {
       + 'the light, and the board does not care either way.';
 }
 pick('talk', (value) => sound.voice(value === 'on'));
+
+/**
+ * What the wing costs and what it buys, in the two numbers you can feel.
+ *
+ * The top speed is worked out from the drag the car is carrying rather than
+ * written down here, because a number typed into a blurb is a number that goes
+ * quietly wrong the first time anybody touches ACCEL. The corner speed is quoted
+ * for a sixty metre radius, which is a third gear corner, because a percentage
+ * of grip means nothing and a speed through a corner means something.
+ */
+function renderWing() {
+  const cfg = WINGS[wing] || WINGS.mid;
+  const top = Math.round(topSpeedWith(cfg.drag) * 3.6);
+  const corner = Math.round(Math.sqrt(GRIP * cfg.grip * 60) * 3.6);
+  document.getElementById('wingBlurb').textContent
+    = `About ${top} km/h flat out and ${corner} through a third gear corner. `
+    + 'A few km/h in every corner against a great many at the end of the '
+    + 'straight, so the circuit chooses this rather than you. It is on your car '
+    + 'alone - the others run the medium wing whatever you pick - and the board '
+    + 'does not ask which you had, because none of the three is quicker '
+    + 'everywhere.';
+}
 
 function renderSkill() {
   const cfg = TIERS[tier];
@@ -707,6 +734,7 @@ document.getElementById('routeBlurb').textContent = ROUTES[route].blurb;
 renderMode();
 renderDusk();
 renderSkill();
+renderWing();
 renderKeys();
 renderScores(mode, route, tier);
 syncScores();
@@ -714,3 +742,114 @@ game.demo = attract();
 game.last = performance.now();
 requestAnimationFrame(frame);
 requestAnimationFrame(pickerFrame);
+
+/**
+ * Photograph mode: a race set up from the address bar, for the tools.
+ *
+ * `?play=monza&ticks=900` opens the page straight into a race at Monza with
+ * fifteen seconds of it already driven by the game's own reference driver, and
+ * then sets `window.__ready`. That is what tools/screenshot.js waits for.
+ *
+ * It exists because the renderer needs a graphics card now and therefore a real
+ * browser, and a real browser has to be told what to show. The work is split
+ * where the two halves are good at it: the tool runs the simulation in Node to
+ * find the tick a picture should be taken at - which is a search, and a search
+ * over three thousand ticks is a second of arithmetic - and then asks the page
+ * for exactly that tick. The same seed and the same hands give the same race in
+ * both places, which is the property simtest checks anyway.
+ *
+ * Everything it can set is something the menu can also set. Without `play=`
+ * none of it runs.
+ */
+{
+  const q = new URLSearchParams(location.search);
+  const want = q.get('play');
+  if (want && ROUTES[want]) {
+    route = want;
+    mode = MODES[q.get('mode')] ? q.get('mode') : 'gp';
+    tier = TIERS[q.get('tier')] ? q.get('tier') : 'normal';
+    wing = WINGS[q.get('wing')] ? q.get('wing') : 'mid';
+    dusk = q.get('dusk') === '1';
+    const seed = Number(q.get('seed')) || 20260903;
+    sound.enable(false);
+    game.state = makeRace({ route, mode, tier, dusk, wing, seed });
+    /**
+     * A lap to race against, for the one picture that is about racing one.
+     *
+     * Driven here and now rather than loaded from the board: a photograph of the
+     * ghost should be a photograph of the thing, and the board on the machine
+     * taking the picture is empty.
+     */
+    if (q.get('ghost') === '1') {
+      const warm = makeRace({ route, mode: 'qual', tier, seed });
+      for (let t = 0; t < 40000 && !warm.over; t++) {
+        step(warm, driveLine(warm, 0.97));
+        warm.clock = 999;
+      }
+      if (warm.best) {
+        const length = game.state.route.length;
+        game.state.ghost = {
+          ...unpack(pack(warm.best, Math.round(warm.best.time)), length), name: 'REC',
+        };
+      }
+    }
+    game.playing = true;
+    game.paused = false;
+    game.acc = 0;
+    game.demo = null;
+    renderer.reset();
+    menu.classList.add('hidden');
+
+    const ticks = Math.min(60 * 60 * 10, Number(q.get('ticks')) || 0);
+    const push = Number(q.get('push')) || 0.95;
+    for (let t = 0; t < ticks; t++) {
+      step(game.state, driveLine(game.state, push));
+      // Neither the clock nor the flag is what a photograph is about, and
+      // running out of either halfway through a set of pictures would leave the
+      // rest of them of the same frame.
+      game.state.clock = Math.max(game.state.clock, 40);
+      game.state.over = false;
+      game.state.finished = false;
+      // The camera is eased towards where it should be a little each tick, so it
+      // has to be stepped every tick rather than only on the frame that is kept.
+      // Eased only on the kept frame it ends up four hundred metres behind the
+      // car, which produces a picture of a road disappearing sideways and half
+      // an hour of looking for a bug in the projection.
+      renderer.follow(game.state, player(game.state));
+    }
+    // Held still while the picture is taken. A frame is still drawn every time
+    // round the loop, so the page is live rather than frozen.
+    game.paused = true;
+    renderer.draw(game.state);
+    /**
+     * A way in for the measuring tools.
+     *
+     * Only in photograph mode, so nothing a player runs has it. It exists
+     * because the one number worth knowing about a renderer is how long a frame
+     * takes on the machine it is running on, and that number cannot be got from
+     * Node: the harness there stubs the card out, which is how seventeen
+     * milliseconds once hid behind a drawImage that did nothing.
+     */
+    globalThis.__probe = {
+      draw: () => renderer.draw(game.state),
+      tris: () => renderer.rt.tris,
+      size: () => [renderer.rt.w, renderer.rt.h],
+      /**
+       * The same frame with the handover to the card taken out.
+       *
+       * Two numbers rather than one, because they are two different machines'
+       * problems. This one is the processor walking the circuit and writing
+       * vertices, which is the only part this code can do anything about; the
+       * difference between it and `draw` is the card - and on a machine with no
+       * card, where these tools run, that difference is a software
+       * implementation of one and means nothing at all.
+       */
+      build: () => {
+        const blit = renderer.rt.blit;
+        renderer.rt.blit = () => {};
+        try { renderer.draw(game.state); } finally { renderer.rt.blit = blit; }
+      },
+    };
+    globalThis.__ready = true;
+  }
+}

@@ -7,9 +7,10 @@ them. Twenty-seven closed circuits, eight single seaters, and an afternoon that
 runs out: you start in daylight, the sun is on the horizon by the second lap and
 you finish in the dark.
 
-No dependencies, no build step, no WebGL — HTML, CSS and JavaScript exactly as
-the browser receives them, and a polygon renderer written by hand into a
-`Uint32Array` at 640 × 448.
+No dependencies, no build step, no assets — HTML, CSS and JavaScript exactly as
+the browser receives them, and a WebGL renderer of about four hundred lines with
+no library behind it. The picture is drawn at the size of your window: flat
+shaded, lit by one sun, and nothing in it is a texture or a sprite.
 
 ![The last corner at Zandvoort, eighteen degrees of banking](docs/screenshots/banked.png)
 
@@ -65,6 +66,13 @@ rather than a wider line.
 
 **All of it is measured from the outside wheel**, not from the middle of the
 car, so a wheel over the edge is a wheel over the edge.
+
+**The wing is yours to choose.** Low, medium or high, in the menu, and it is a
+trade rather than an upgrade: the small wing is about 373 km/h flat out, the big
+one 333, and the big one is the quicker car in every corner in between. Monza
+and Las Vegas want the small one, Monaco and Singapore want the big one, and on
+a circuit that is neither the medium is as good as either. The other seven cars
+run the medium wing whatever you pick, and the board never asks which you had.
 
 **The tow is real.** Sitting in somebody's hole in the air is the only thing that
 will drag you past them on a straight, and the only warning you get that it has
@@ -135,8 +143,23 @@ nothing to install.
 `npm test` drives the whole thing headlessly: races to the flag on every
 circuit, checks that nothing is standing on the road, that every recorded lap
 survives being written down and read back, and that the game asks for the sounds
-it says it does. [worker/README.md](worker/README.md) has the two commands that
-put the shared board live.
+it says it does. It needs no graphics card — the renderer is built against a
+stub of one, which is enough to catch everything except what the picture looks
+like.
+
+The picture is checked by looking at it:
+
+```bash
+node tools/screenshot.js docs       # the set this README uses
+node tools/modelshot.js             # one model, on its own, from three sides
+node tools/modelshot.js --prop=stand --dist=30
+```
+
+Both drive a headless Chrome over the DevTools protocol, because a WebGL
+renderer needs a graphics driver and a graphics driver needs a browser. That is
+a WebSocket and some JSON, so it is still no dependencies.
+[worker/README.md](worker/README.md) has the two commands that put the shared
+board live.
 
 ## Elsewhere
 

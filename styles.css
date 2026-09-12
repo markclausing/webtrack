@@ -30,36 +30,32 @@ html, body {
   place-items: center;
 }
 
-/* The canvas holds the picture at its own size and the window stretches it.
-   The comment that used to be here said the renderer letterboxed itself, which
-   it did not: it stretched the frame to whatever shape the window was, so on
-   anything that was not ten by seven the picture was quietly the wrong shape. */
-#screen {
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
+/* Two canvases, the same size, one on top of the other: the world in WebGL and
+   the head-up display in 2D over it.
+
+   Both are now sized to the window rather than to a fixed 640 x 448, so there is
+   no letterboxing left to do and nothing is being stretched - the picture is
+   drawn at the shape of the window and the lens opens sideways to suit. The
+   pixel-doubling that used to be the whole look is gone with it; what is left
+   of that look is the flat shading, which was always the part doing the work. */
+#screen, #hud {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
-  background: #080706;
   outline: none;
-  /* The canvas is 640 x 448 and the browser stretches it. contain keeps it in
-     proportion and letterboxes the rest against the background above; pixelated
-     stops it being smoothed on the way up, which is the whole look. Done here
-     rather than with a drawImage in the frame loop because the compositor does
-     it on the graphics hardware and the frame loop did it in JavaScript. */
-  object-fit: contain;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
 }
 
-/* Standing up, the picture goes to the top rather than the middle.
-   A ten-by-seven playfield in a nine-by-nineteen window is a third of the screen
-   whatever you do with it, so the only question is where the other two thirds
-   go. Centred, they go half above the picture and half below, and both halves
-   are wasted: you look up at nothing and your thumbs rest on nothing. At the top
-   it is one space, it is under the picture, and it is exactly where the thumbs
-   already are. */
-@media (orientation: portrait) {
-  #screen { object-position: center top; }
+#screen {
+  background: #080706;
+}
+
+/* Nothing on the display is clickable: the panels are painted over the world and
+   every control is either a key or one of the touch buttons above it. */
+#hud {
+  pointer-events: none;
+  z-index: 1;
 }
 
 .overlay {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A motorcycle road war in the browser, in software-rendered polygons. Shares its plumbing with websoccer, webtennis, webracing and webtype.",
+  "description": "A grand prix game in the browser, in WebGL polygons with no library behind them. Shares its plumbing with websoccer, webtennis, webracing and webtype.",
   "scripts": {
     "start": "node server/board.js",
     "test": "node tools/simtest.js && node tools/pagecheck.js && node tools/boardtest.js && node tools/touchtest.js && node tools/ghosttest.js && node tools/soundtest.js && node tools/clearance.js && node tools/sync-shared.js",

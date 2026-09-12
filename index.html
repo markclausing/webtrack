@@ -20,6 +20,10 @@
 <body>
   <div id="app">
     <canvas id="screen" tabindex="0"></canvas>
+    <!-- The display, over the top of the world. The world is WebGL and this is
+         2D: panels and a bitmap font are rectangles, and reading a frame back off
+         the card to put letters on it would cost more than drawing it. -->
+    <canvas id="hud"></canvas>
 
     <div id="touch" class="hidden">
       <div id="stick" aria-label="Steer"><div id="knob"></div></div>
@@ -88,6 +92,16 @@
         </div>
         <p id="skillBlurb" class="fineprint"></p>
 
+        <div class="row" id="wingRow">
+          <label>Downforce</label>
+          <div class="btns">
+            <button data-wing="low">Low</button>
+            <button data-wing="mid" class="active">Medium</button>
+            <button data-wing="high">High</button>
+          </div>
+        </div>
+        <p id="wingBlurb" class="fineprint"></p>
+
         <div class="row">
           <label>Sunset</label>
           <div class="btns">
@@ -141,6 +155,12 @@
               four and a half g and the corner is worth three: you can have all
               of one or all of the other, and asking for both at once gets you
               neither and a lot of grass.</li>
+            <li><b>Pick the wing for the circuit, not for the car.</b> The big
+              one is a few km/h through every corner and forty off the top end;
+              the small one is the same trade the other way round. Monza and Las
+              Vegas are won on the straights, Monaco and Singapore are not won
+              there at all, and on everything in between the medium wing is as
+              good as either.</li>
             <li><b>Sit behind somebody on the straight.</b> The tow is worth
               nearly half your drag and about twenty km/h. It is the only thing
               that will get you past a car as quick as yours, and it runs out at

@@ -18,7 +18,7 @@
 
 import {
   CAR_HALF, GRID_GAP, GRID_OFF, LAPS, LIGHTS, MODES, ROAD_HALF, RUMBLE, SEG, START_TIME,
-  TICK_RATE, TIERS, VERGE,
+  TICK_RATE, TIERS, VERGE, WINGS,
 } from '../constants.js';
 import { buildRoute } from './route.js';
 import { tape } from './ghost.js';
@@ -109,7 +109,7 @@ export function makeCar(kind, slot, s, x, extra = {}) {
  * and the feeling that you earned each one.
  */
 export function makeState({
-  route = 'pass', mode = 'gp', tier = 'normal', seed = 1, dusk = false,
+  route = 'pass', mode = 'gp', tier = 'normal', seed = 1, dusk = false, wing = 'mid',
 } = {}) {
   const real = SURVEYED[route];
   const rules = MODES[mode] || MODES.gp;
@@ -153,6 +153,15 @@ export function makeState({
     laps: LAPS[route] || SURVEYED[route]?.laps || 3,
     field,
     tier,
+    /**
+     * How much wing is on your car, and only on yours.
+     *
+     * A key into WINGS rather than the numbers themselves, because it is also
+     * what the menu selected and what a saved setting would have to write down.
+     * The numbers reach the car in seedField, which is where everything else
+     * about a particular car is decided.
+     */
+    wing: WINGS[wing] ? wing : 'mid',
     cfg,
     rng: seed | 0,
     tick: 0,

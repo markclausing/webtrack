@@ -1,102 +1,124 @@
-// Draws frames of the game without a browser and writes them out as PNGs.
+// Photographs the game, without anybody having to sit and play it.
 //
 //   node tools/screenshot.js                  # a handful, into shots/
-//   node tools/screenshot.js pass 900 4 3     # route, tick, how many, blow-up
+//   node tools/screenshot.js pass 900 4       # route, tick, how many
 //   node tools/screenshot.js docs             # the set the README uses
+//   ONLY=climb node tools/screenshot.js docs  # just that one, again
 //
-// The renderer needs three things from a browser and no more: an ImageData to
-// write into, a canvas element to hand the finished picture to, and a 2D context
-// on that canvas. All three are stubbed below in about twenty lines, which is
-// the whole argument for a renderer that talks to a Uint32Array instead of to a
-// graphics API - it will run anywhere the arithmetic runs.
+// This used to run entirely in Node, because the renderer wrote into a
+// Uint32Array and would run anywhere the arithmetic ran. It draws in WebGL now,
+// so the picture has to come from something with a graphics driver in it - a
+// headless Chrome, driven over the DevTools protocol by tools/browser.js, which
+// is a WebSocket and some JSON and still no dependencies.
 //
-// This is not a test. It is how you find out that the horizon is in the wrong
-// place, and finding that out from a file is a great deal quicker than finding
-// it out from a browser.
+// The work is split where each half is good at it. Finding the moment worth
+// photographing is a search over three thousand ticks of simulation and it
+// happens here, in Node, in about a second per picture. Drawing that tick is one
+// frame and it happens in the browser, which is asked for it by name:
+// ?play=zandvoort&ticks=1487. The same seed and the same hands give the same
+// race in both places - simtest checks exactly that property - so the tick this
+// finds is the tick that gets drawn.
+//
+// It is not a test. It is how you find out that the horizon is in the wrong
+// place, and finding that out from a file is quicker than finding it out from a
+// browser.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { deflateSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { launch, open, sleep } from './browser.js';
+import { driveLine, makeRace, step } from '../src/game/sim.js';
+import { nodeAt, player } from '../src/game/state.js';
+import { pack, unpack } from '../src/game/ghost.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = Number(process.env.PORT) || 8080;
+const WIDTH = Number(process.env.SHOT_WIDTH) || 1600;
+const HEIGHT = Number(process.env.SHOT_HEIGHT) || 1000;
+/** The seed every picture is taken on, so the same call gives the same frame. */
+const SEED = 20260903;
 
-const CRC = (() => {
-  const table = new Int32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c;
+/**
+ * Runs the race until the moment is right, and says which tick that was.
+ *
+ * The camera is eased every tick even though nothing is being drawn, because
+ * `follow` is what some of these conditions are about and because it costs
+ * nothing next to the simulation.
+ */
+function findTick({ route, mode, dusk = false, push = 0.95, ghost = false }, when) {
+  const state = makeRace({ route, mode, tier: 'normal', seed: SEED, dusk });
+  if (ghost) {
+    // The same warm-up lap the page drives, written down and read back the same
+    // way. It has to be the real recording rather than a stand-in: the condition
+    // this is searching for is about where the ghost has got to, and the
+    // simulation plays it back every tick.
+    const warm = makeRace({ route, mode: 'qual', tier: 'normal', seed: SEED });
+    for (let t = 0; t < 40000 && !warm.over; t++) {
+      step(warm, driveLine(warm, 0.97));
+      warm.clock = 999;
+    }
+    if (warm.best) {
+      state.ghost = {
+        ...unpack(pack(warm.best, Math.round(warm.best.time)), state.route.length),
+        name: 'REC',
+      };
+    }
   }
-  return table;
-})();
-
-function chunk(type, data) {
-  const out = Buffer.alloc(data.length + 12);
-  out.writeUInt32BE(data.length, 0);
-  out.write(type, 4, 'ascii');
-  data.copy(out, 8);
-  let c = -1;
-  const body = out.subarray(4, 8 + data.length);
-  for (let i = 0; i < body.length; i++) c = CRC[(c ^ body[i]) & 0xff] ^ (c >>> 8);
-  out.writeUInt32BE((c ^ -1) >>> 0, 8 + data.length);
-  return out;
+  for (let t = 1; t < 60 * 60 * 6; t++) {
+    step(state, driveLine(state, push));
+    state.clock = Math.max(state.clock, 40);
+    state.over = false;
+    state.finished = false;
+    if (when(state)) {
+      return { tick: t, lap: player(state).lap + 1, kmh: Math.round(player(state).speed * 3.6) };
+    }
+  }
+  return null;
 }
 
-// --- Just enough browser ------------------------------------------------------
-
-class FakeImageData {
-  constructor(width, height) {
-    this.width = width;
-    this.height = height;
-    this.data = new Uint8ClampedArray(width * height * 4);
-  }
+/** The address that draws one particular tick of one particular race. */
+function addressFor({ route, mode, dusk, push, ghost }, tick) {
+  const q = new URLSearchParams({ play: route, mode, ticks: String(tick), seed: String(SEED) });
+  if (dusk) q.set('dusk', '1');
+  if (ghost) q.set('ghost', '1');
+  if (push && push !== 0.95) q.set('push', String(push));
+  return `http://localhost:${PORT}/?${q}`;
 }
-
-const fakeCanvas = () => {
-  const canvas = { width: 640, height: 448 };
-  canvas.getContext = () => ({
-    canvas,
-    imageSmoothingEnabled: false,
-    putImageData() {},
-    drawImage() {},
-  });
-  return canvas;
-};
-
-globalThis.ImageData = FakeImageData;
-globalThis.document = { createElement: () => fakeCanvas() };
-
-const { Renderer } = await import('../src/render/renderer.js');
-const { driveLine, makeRace, step } = await import('../src/game/sim.js');
-const { nodeAt, player } = await import('../src/game/state.js');
-const { SEG } = await import('../src/constants.js');
 
 // --- Riding to the interesting bit ---------------------------------------------
 
-const [route = 'grand', until = '1500', count = '6', zoom = '3'] = process.argv.slice(2);
-const state = makeRace({ route, mode: process.env.MODE || 'gp', tier: 'normal', seed: 31337 });
-
-// A ghost to photograph, when one is asked for: a lap driven here and now, so
-// the picture shows the thing rather than a fixture.
-if (process.env.GHOST) {
-  const { pack, unpack } = await import('../src/game/ghost.js');
-  const warm = makeRace({ route, mode: 'qual', tier: 'normal', seed: 31337 });
-  for (let t = 0; t < 40000 && !warm.best; t++) {
-    step(warm, driveLine(warm, 0.97));
-    warm.clock = 999;
-  }
-  if (warm.best) {
-    const ticks = Math.round(warm.best.time);
-    state.ghost = { ...unpack(pack(warm.best, ticks), state.route.length), name: 'REC' };
-  }
-}
-const renderer = new Renderer(fakeCanvas());
-
-/** The game's own reference driver, so a screenshot is of the game driving. */
-const hand = (world) => driveLine(world, Number(process.env.PUSH) || 0.95);
+const [route = 'grand', until = '1500', count = '6'] = process.argv.slice(2);
 
 mkdirSync(path.join(ROOT, 'shots'), { recursive: true });
+
+/**
+ * The browser, and one page reused for every picture.
+ *
+ * A page per picture would be simpler and is four seconds of Chrome starting up
+ * each time. This navigates the one page instead, which is a reload and a
+ * circuit being built, and that is the cost that is actually unavoidable.
+ */
+await launch({ width: WIDTH, height: HEIGHT });
+
+async function photograph(url, file, note) {
+  const page = await open(url, { width: WIDTH, height: HEIGHT });
+  const ready = await page.ready(90);
+  if (!ready) {
+    console.log(`  !! ${file}: the page never became ready`);
+    for (const line of page.logs.slice(0, 4)) console.log(`     ${line.level}: ${line.text}`);
+    await page.close();
+    return false;
+  }
+  // One more frame after ready, so the picture is of a settled camera rather
+  // than of the first frame after a circuit was built.
+  await sleep(250);
+  writeFileSync(file, await page.screenshot());
+  console.log(`${path.relative(ROOT, file)}  ${note}`);
+  const bad = page.logs.filter((l) => l.level === 'error');
+  for (const line of bad.slice(0, 3)) console.log(`     error: ${line.text.slice(0, 200)}`);
+  await page.close();
+  return true;
+}
 
 /**
  * The pictures the README needs, taken when the thing they are pictures of
@@ -290,103 +312,30 @@ if (route === 'docs') {
   mkdirSync(path.join(ROOT, 'docs', 'screenshots'), { recursive: true });
   // ONLY=climb to take one of them again without waiting for the other thirty.
   const only = process.env.ONLY;
-  for (const [name, when, on, mode, share = 0.95, dusk = false] of want) {
+  for (const [name, when, on, mode, push = 0.95, dusk = false] of want) {
     if (only && name !== only) continue;
-    const world = makeRace({ route: on, mode, tier: 'normal', seed: 20260903, dusk });
-    // A lap to race against, for the one picture that is about racing one.
-    if (name === 'ghost') {
-      const { pack, unpack } = await import('../src/game/ghost.js');
-      const warm = makeRace({ route: on, mode: 'qual', tier: 'normal', seed: 20260903 });
-      for (let t = 0; t < 40000 && !warm.over; t++) {
-        step(warm, driveLine(warm, 0.97));
-        warm.clock = 999;
-      }
-      if (warm.best) {
-        const ticks = Math.round(warm.best.time);
-        world.ghost = { ...unpack(pack(warm.best, ticks), world.route.length), name: 'REC' };
-      }
+    const race = { route: on, mode, dusk, push, ghost: name === 'ghost' };
+    const found = findTick(race, when);
+    if (!found) {
+      console.log(`could not catch ${name}`);
+      continue;
     }
-    const view = new Renderer(fakeCanvas());
-
-    let got = false;
-    for (let t = 0; t < 60 * 60 * 6 && !got; t++) {
-      step(world, driveLine(world, share));
-      world.clock = Math.max(world.clock, 40);
-      world.over = false;
-      world.finished = false;
-      view.follow(world, player(world));
-      if (when(world)) {
-        view.draw(world);
-        writeFileSync(path.join(ROOT, 'docs', 'screenshots', `${name}.png`), png(view.rt, 2));
-        console.log(`docs/screenshots/${name}.png  lap ${player(world).lap + 1}, `
-          + `${Math.round(player(world).speed * 3.6)}km/h`);
-        got = true;
-      }
-    }
-    if (!got) console.log(`could not catch ${name}`);
+    await photograph(addressFor(race, found.tick), path.join(ROOT, 'docs', 'screenshots', `${name}.png`),
+      `tick ${found.tick}, lap ${found.lap}, ${found.kmh}km/h`);
   }
   process.exit(0);
 }
 
-const stops = Number(count);
+// --- Or a handful along one circuit ----------------------------------------------
+
 const target = Number(until);
-let shot = 0;
+const stops = Number(count);
+const race = { route, mode: process.env.MODE || 'gp', push: Number(process.env.PUSH) || 0.95 };
+const every = Math.max(1, Math.floor(target / stops));
 
-for (let t = 0; t <= target; t++) {
-  step(state, hand(state));
-  // The clock is not what this is about, and running out of it halfway through
-  // a set of pictures would leave half of them of the same frame.
-  state.clock = Math.max(state.clock, 40);
-  state.over = false;
-  state.finished = false;
-  // The camera is eased towards where it should be a little each frame, so it
-  // has to be stepped every tick like it is in the game. Only easing it on the
-  // frames that get saved leaves it four hundred metres behind the car, which
-  // produces a picture of a road disappearing sideways and half an hour of
-  // looking for a bug in the projection.
-  renderer.follow(state, player(state));
-  if (t > 0 && t % Math.floor(target / stops) === 0 && shot < stops) {
-    renderer.draw(state);
-    const name = `shot-${route}-${String(++shot).padStart(2, '0')}.png`;
-    writeFileSync(path.join(ROOT, 'shots', name), png(renderer.rt, Number(zoom)));
-    console.log(`${name}  tick ${t}  ${(player(state).s / 1000).toFixed(2)}km  `
-      + `${Math.round(player(state).speed * 3.6)}km/h  ${renderer.rt.tris} triangles`);
-  }
+for (let i = 1; i <= stops; i++) {
+  const tick = i * every;
+  const name = `shot-${route}-${String(i).padStart(2, '0')}.png`;
+  await photograph(addressFor(race, tick), path.join(ROOT, 'shots', name), `tick ${tick}`);
 }
-
-// --- Writing it out --------------------------------------------------------------
-
-/**
- * The frame, blown up by whole pixels.
- *
- * Nearest neighbour and nothing else, for the same reason the game does it that
- * way: a screenshot of a 320 x 224 game that has been smoothed on the way out is
- * a screenshot of a different game.
- */
-function png(rt, zoom = 1) {
-  const w = rt.w * zoom;
-  const h = rt.h * zoom;
-  const raw = Buffer.alloc(h * (w * 4 + 1));
-  const src = Buffer.from(rt.image.data.buffer);
-  for (let y = 0; y < h; y++) {
-    const at = y * (w * 4 + 1);
-    raw[at] = 0;
-    const from = Math.floor(y / zoom) * rt.w * 4;
-    for (let x = 0; x < w; x++) {
-      src.copy(raw, at + 1 + x * 4, from + Math.floor(x / zoom) * 4,
-        from + Math.floor(x / zoom) * 4 + 4);
-    }
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0);
-  ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 6;
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw, { level: 9 })),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
-}
-
+process.exit(0);

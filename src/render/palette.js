@@ -20,7 +20,7 @@
  * because everything distant becomes it.
  */
 
-import { md } from './raster.js';
+import { md } from './colour.js';
 
 export const C = {
   road: md(74, 74, 82),
@@ -529,6 +529,22 @@ export const TEAM_COLOURS = [
   { body: md(40, 40, 48), wing: md(20, 20, 24), trim: md(230, 190, 40) },      // NERO
   { body: md(240, 240, 240), wing: md(150, 150, 156), trim: md(200, 30, 60) }, // BIANCO
   { body: md(128, 50, 180), wing: md(70, 26, 100), trim: md(240, 230, 240) },  // VIOLA
+];
+
+/**
+ * The people in the grandstands.
+ *
+ * Seven colours, and they have to be seven different ones rather than seven
+ * shades of the same. A crowd was one muted mauve for a long time, on the
+ * reasoning that at two hundred metres a crowd is a texture - and it was right
+ * about the distance and wrong about the colour, because what the eye reads as
+ * a crowd is not the average tone, it is the fact that no two square metres of
+ * it are the same. Pale, dark, a red, a blue and two in between: mixed six to a
+ * row across eight rows, that is forty-eight patches and no repeat you can see.
+ */
+export const CROWD = [
+  md(214, 208, 200), md(64, 68, 84), md(178, 68, 62), md(70, 96, 150),
+  md(226, 196, 120), md(120, 128, 138), md(148, 96, 120),
 ];
 
 /** Smoke off a locked tyre, and the dust a car picks up off the grass. */
