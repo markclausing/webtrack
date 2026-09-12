@@ -176,6 +176,117 @@ const PHANTOM = md(120, 220, 235);
 const TUNNEL_DARK = md(18, 20, 26);
 
 /**
+ * How far the ground beside each node may reach before it is on top of another
+ * part of the circuit.
+ *
+ * A ring of ground is drawn out to three hundred and forty metres, and where a
+ * lap comes back alongside or underneath itself that ring is laid over the other
+ * carriageway - a flat slab across the road with kerbs and barriers standing on
+ * it, and the road it covers gone. It is the same fault twice over: from the car
+ * it is an obstacle on the track, and from a distance it is the track floating,
+ * because what you are missing is underneath a lid.
+ *
+ * The first version of this asked only about roads at the same height, on the
+ * reasoning that a flyover passes over its own lap by design and its ground
+ * belongs where it is. That is true of the flyover and wrong about everything
+ * else: Monaco is stacked, and the whole trouble is a ring belonging to the
+ * upper road hanging out over the lower one. So the test is not how far apart
+ * the two are in height, it is which of them is on top - our ground stops where
+ * it would be level with somebody else's road or above it, and carries on where
+ * it passes underneath, because there it is hidden by the road anyway.
+ *
+ * It lives here rather than in route.js because it needs `groundY`, and it is
+ * worked out once per circuit alongside the world that is built once.
+ */
+function groundReach(route) {
+  if (route.groundReach) return;
+  route.groundReach = true;
+  const nodes = route.nodes;
+  const count = nodes.length;
+  const CELL = 24;
+  /** How far out the ground is asked about. Past this it is haze. */
+  const FAR = 150;
+  /**
+   * How far along the lap before a node counts as somewhere else.
+   *
+   * Four, and it was twelve. A hairpin turns a hundred and eighty degrees in
+   * less than twelve nodes - Monaco's Loews does it in about eight - so at
+   * exactly the corner where one side's ground lies across the other side's
+   * road, the two sides were inside the window that says "this is still you".
+   * That is the corner it was reported at.
+   *
+   * Four is safe because a node's ground starts at its own kerb: the road of the
+   * node next door is the same strip of tarmac and is already outside the offset
+   * the ground is measured from, so there is nothing for a small window to
+   * mistake.
+   */
+  const ELSEWHERE = 4;
+
+  let minX = Infinity;
+  let minZ = Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x);
+    minZ = Math.min(minZ, n.z);
+  }
+  const grid = new Map();
+  for (const n of nodes) {
+    const key = `${Math.floor((n.x - minX) / CELL)},${Math.floor((n.z - minZ) / CELL)}`;
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(n);
+  }
+
+  /** Is ground at this point, at this height, sitting on somebody else's road? */
+  const overRoad = (i, px, pz, h) => {
+    const cx = Math.floor((px - minX) / CELL);
+    const cz = Math.floor((pz - minZ) / CELL);
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oz = -1; oz <= 1; oz++) {
+        const near = grid.get(`${cx + ox},${cz + oz}`);
+        if (!near) continue;
+        for (const b of near) {
+          const apart = Math.min(Math.abs(i - b.i), count - Math.abs(i - b.i));
+          if (apart < ELSEWHERE) continue;
+          const dx = px - b.x;
+          const dz = pz - b.z;
+          if (Math.abs(dx * b.dx + dz * b.dz) > SEG * 0.6) continue;
+          const across = dx * b.nx + dz * b.nz;
+          if (Math.abs(across) > b.half + 0.4) continue;
+          // Level with their road or above it: a lid. Below it: hidden by it.
+          if (h > roadY(b, across) - 1.5) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  for (let i = 0; i < count; i++) {
+    const a = nodes[i];
+    for (const side of [-1, 1]) {
+      let reach = FAR;
+      const kerb = a.half + RUMBLE;
+      for (let off = kerb; off < FAR; off += 6) {
+        const px = a.x + a.nx * side * off;
+        const pz = a.z + a.nz * side * off;
+        if (!overRoad(i, px, pz, groundY(a, side, off))) continue;
+        // Back to the last metre that was clear, not the last six: stopping at
+        // the coarse step ends the ground six metres short of the road it was
+        // about to cover, which is a gap with the sky in it.
+        let back = off;
+        while (back > kerb && overRoad(i,
+          a.x + a.nx * side * back, a.z + a.nz * side * back,
+          groundY(a, side, back))) {
+          back -= 1;
+        }
+        reach = Math.max(kerb, back + 1);
+        break;
+      }
+      if (side < 0) a.groundL = reach;
+      else a.groundR = reach;
+    }
+  }
+}
+
+/**
  * A display that is not there.
  *
  * The screenshot tool draws the world without one and so does the frame meter's
@@ -699,6 +810,7 @@ export class Renderer {
   keepWorld(state, theme) {
     const rt = this.rt;
     const route = state.route;
+    groundReach(route);
     /**
      * Keyed on the circuit's name rather than on the object.
      *
@@ -1042,10 +1154,22 @@ export class Renderer {
         if (innerA >= outer && innerB >= outer) continue;
         if (((i % every) + every) % every !== 0) continue;
         const far = nodeStep(route, i, every);
-        // The near bands are grass, sand and gravel, and they take the ground
-        // surface. Not the far ones: at three hundred metres out a band is a
-        // wedge of colour under the haze and a texture on it is noise.
-        rt.ground = band < 2 ? 2 : 0;
+        /**
+         * All but the outermost band takes the ground surface.
+         *
+         * It used to be the first two, on the reasoning that at three hundred
+         * metres a band is a wedge of colour under the haze and a texture on it
+         * is noise. That is true of the last one and was wrong about the third,
+         * which is where a circuit's hillsides are: at Monaco the ground falls
+         * fifteen metres from the hairpin to the road below it over about sixty,
+         * and drawn as one untextured quad that slope reads as a flat plate laid
+         * across the view rather than as the hillside it is. It was reported as
+         * something lying over the road, and it is not over the road - the road
+         * below is fifty-seven metres away and fifteen down, and at Monaco you
+         * genuinely cannot see it from Loews - but a plate and a hillside should
+         * not look the same.
+         */
+        rt.ground = band < 3 ? 2 : 0;
         for (const side of [-1, 1]) {
           /**
            * How far this ring may reach on this side.

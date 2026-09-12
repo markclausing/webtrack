@@ -1235,9 +1235,9 @@ function infill(nodes, out, add) {
       const d = 9 + ((seed * 7) % 1) * 8;
       const h = 7 + ((seed * 13) % 1) * 21;
       const off = a.wall + 12 + w * 0.5;
-      // Not past where the ground stops: that is another part of the circuit.
-      const reach = (side < 0 ? a.groundL : a.groundR) ?? 1e9;
-      if (off + Math.max(w, d) * 0.5 > reach) continue;
+      // Nothing here about another part of the circuit: `add` asks that of every
+      // prop against every node, with the building's own footprint, and drops it
+      // if it does not fit.
       // And not where the map already has one.
       const x = a.x + a.nx * side * off;
       const z = a.z + a.nz * side * off;
@@ -1426,67 +1426,6 @@ function narrowWhereItFoldsBack(nodes) {
     return false;
   };
 
-  /**
-   * And how far the ground beside each node may reach before it is on top of
-   * another part of the circuit.
-   *
-   * This is the larger half of the same problem and it was the one being
-   * reported. A ring of ground is drawn out to three hundred and forty metres,
-   * and where a lap folds back on itself that ring is laid across the other
-   * carriageway - a flat grey slab over the road with the kerbs and barriers of
-   * somewhere else standing on it. From the car it reads as an obstacle across
-   * the track, which at Monaco's hairpin is exactly what was reported; and where
-   * the slab is drawn over the road, the road under it has gone, which is what
-   * "the track is floating" is.
-   *
-   * A quarter of the trouble is that it is right for the ground to get close.
-   * Two carriageways with eight metres between them have eight metres of ground
-   * between them. What is not right is going past the far kerb.
-   */
-  for (let i = 0; i < count; i++) {
-    const a = nodes[i];
-    for (const side of [-1, 1]) {
-      let reach = FAR_GROUND;
-      // Outwards until it lands on somebody else's road, in steps of six
-      // metres - the length of one node, and finer than the quad this limit is
-      // used to cut, whose corners are six metres apart along the track.
-      for (let off = a.half + 1.5; off < FAR_GROUND; off += 6) {
-        if (!onSomebodyElse(i, a, a.x + a.nx * side * off, a.z + a.nz * side * off)) continue;
-        /**
-         * Back off to the last metre that was clear, not the last six.
-         *
-         * Six metres is a cheap step to search with and an expensive one to stop
-         * at: the ground would end six metres short of the road it was going to
-         * cover, which is a gap with the sky in it - exactly the kind of hole
-         * this whole exercise has been closing. A metre at a time from the hit
-         * backwards puts the edge of the ground against the edge of the road,
-         * where the road is fifteen centimetres higher and wins the depth test
-         * on the overlap.
-         */
-        let back = off;
-        while (back > a.half + 1.5
-          && onSomebodyElse(i, a, a.x + a.nx * side * back, a.z + a.nz * side * back)) {
-          back -= 1;
-        }
-        reach = Math.max(a.half + 1.5, back + 1);
-        break;
-      }
-      if (side < 0) a.groundL = reach;
-      else a.groundR = reach;
-    }
-  }
-
-  /**
-   * Never inside the kerb, and never tighter than a metre outside it.
-   *
-   * The first version of this floor was three quarters of a metre from the edge
-   * of the tarmac - which is inside the kerb, because a kerb is a metre and a
-   * half wide. At Baku it put the barrier seventy centimetres behind the white
-   * line and at Miami fifty, so a car riding the kerb was a car hitting the
-   * wall, and the report was that it spins there. A barrier standing on somebody
-   * else's road is a picture problem; a barrier standing on your own kerb is the
-   * race.
-   */
   for (let i = 0; i < count; i++) {
     const a = nodes[i];
     /**
