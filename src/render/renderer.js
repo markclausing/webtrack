@@ -1046,49 +1046,58 @@ export class Renderer {
         // surface. Not the far ones: at three hundred metres out a band is a
         // wedge of colour under the haze and a texture on it is noise.
         rt.ground = band < 2 ? 2 : 0;
-        /**
-         * Cut at every ring edge it spans, and not just at its own two.
-         *
-         * A band is a flat quad between two offsets, so the surface it draws is
-         * a straight line across it - and `groundY`, which is where every tree,
-         * lorry and grandstand beside the road is stood, is a piecewise curve
-         * through the height of each ring. While a band is one ring wide the two
-         * agree at both ends and everywhere between.
-         *
-         * The last one is not one ring wide. It is always drawn, and where a
-         * circuit's ground stops short it stands in for the rings that were
-         * skipped - two hundred and forty metres of it in one quad, cutting the
-         * corner off a curve that was meant to go through two more heights. The
-         * things standing on it were therefore in the air, by up to twenty-three
-         * metres at Monaco, sixteen at Baku and nine at Las Vegas, which is what
-         * a floating grandstand is.
-         *
-         * So it is cut at the edges it crosses and each piece takes its own
-         * heights. It costs two quads a node on eight of the twenty-seven
-         * circuits and nothing anywhere else.
-         */
-        const cuts = [innerA];
-        const cutsB = [innerB];
-        // Every ring edge, not the ones after this band: the rings the last band
-        // stands in for are the ones before it, which is where the first attempt
-        // at this started counting and found nothing to cut.
-        for (let k = 0; k < BANDS.length; k++) {
-          if (BANDS[k][0] > innerA && BANDS[k][0] < outer) {
-            cuts.push(BANDS[k][0]);
-            cutsB.push(BANDS[k][0]);
-          }
-        }
-        cuts.sort((x, y) => x - y);
-        cutsB.sort((x, y) => x - y);
-        cuts.push(outer);
-        cutsB.push(outer);
         for (const side of [-1, 1]) {
+          /**
+           * How far this ring may reach on this side.
+           *
+           * See narrowWhereItFoldsBack in route.js. A ring drawn out to three
+           * hundred and forty metres where the lap folds back is a slab of
+           * ground laid over the other carriageway with the road under it gone,
+           * which from the car is an obstacle across the track - Monaco's
+           * hairpin - and which is the other half of what "the track is
+           * floating" means.
+           */
+          const stopA = Math.min(outer, side < 0 ? (a.groundL ?? outer) : (a.groundR ?? outer));
+          const stopB = Math.min(outer, side < 0 ? (far.groundL ?? outer) : (far.groundR ?? outer));
+          if (stopA <= innerA && stopB <= innerB) continue;
+
+          /**
+           * Cut at every ring edge it spans, and not just at its own two.
+           *
+           * A band is a flat quad between two offsets, so the surface it draws
+           * is a straight line across it - and `groundY`, which is where every
+           * tree, lorry and grandstand beside the road is stood, is a piecewise
+           * curve through the height of each ring. While a band is one ring wide
+           * the two agree at both ends and everywhere between.
+           *
+           * The last one is not one ring wide. It is always drawn, and where a
+           * circuit's ground stops short it stands in for the rings that were
+           * skipped - two hundred and forty metres of it in one quad, cutting
+           * the corner off a curve that was meant to go through two more
+           * heights. The things standing on that stretch were therefore in the
+           * air, by up to twenty-three metres at Monaco.
+           */
+          const cuts = [innerA];
+          const cutsB = [innerB];
+          const reach = Math.min(stopA, stopB);
+          for (let k = 0; k < BANDS.length; k++) {
+            if (BANDS[k][0] > innerA && BANDS[k][0] < reach) {
+              cuts.push(BANDS[k][0]);
+              cutsB.push(BANDS[k][0]);
+            }
+          }
+          cuts.sort((x, y) => x - y);
+          cutsB.sort((x, y) => x - y);
+          cuts.push(Math.max(innerA, stopA));
+          cutsB.push(Math.max(innerB, stopB));
+
           const colour = bandColour(local, a, side, kind, i, this.surf);
           for (let k = 0; k < cuts.length - 1; k++) {
             const i0 = cuts[k];
             const i1 = cuts[k + 1];
             const j0 = cutsB[k];
             const j1 = cutsB[k + 1];
+            if (i1 <= i0 && j1 <= j0) continue;
             rt.quad(
               a.x + a.nx * side * i0, groundY(a, side, i0), a.z + a.nz * side * i0,
               a.x + a.nx * side * i1, groundY(a, side, i1), a.z + a.nz * side * i1,

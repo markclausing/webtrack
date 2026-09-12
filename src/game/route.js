@@ -1258,6 +1258,8 @@ function narrowWhereItFoldsBack(nodes) {
   // the circuit rather than as the piece this barrier belongs to.
   const ELSEWHERE = 12;
   const CELL = 24;
+  /** How far out the ground is asked about. Past this it is haze. */
+  const FAR_GROUND = 150;
 
   let minX = Infinity;
   let minZ = Infinity;
@@ -1296,6 +1298,56 @@ function narrowWhereItFoldsBack(nodes) {
     }
     return false;
   };
+
+  /**
+   * And how far the ground beside each node may reach before it is on top of
+   * another part of the circuit.
+   *
+   * This is the larger half of the same problem and it was the one being
+   * reported. A ring of ground is drawn out to three hundred and forty metres,
+   * and where a lap folds back on itself that ring is laid across the other
+   * carriageway - a flat grey slab over the road with the kerbs and barriers of
+   * somewhere else standing on it. From the car it reads as an obstacle across
+   * the track, which at Monaco's hairpin is exactly what was reported; and where
+   * the slab is drawn over the road, the road under it has gone, which is what
+   * "the track is floating" is.
+   *
+   * A quarter of the trouble is that it is right for the ground to get close.
+   * Two carriageways with eight metres between them have eight metres of ground
+   * between them. What is not right is going past the far kerb.
+   */
+  for (let i = 0; i < count; i++) {
+    const a = nodes[i];
+    for (const side of [-1, 1]) {
+      let reach = FAR_GROUND;
+      // Outwards until it lands on somebody else's road, in steps of six
+      // metres - the length of one node, and finer than the quad this limit is
+      // used to cut, whose corners are six metres apart along the track.
+      for (let off = a.half + 1.5; off < FAR_GROUND; off += 6) {
+        if (!onSomebodyElse(i, a, a.x + a.nx * side * off, a.z + a.nz * side * off)) continue;
+        /**
+         * Back off to the last metre that was clear, not the last six.
+         *
+         * Six metres is a cheap step to search with and an expensive one to stop
+         * at: the ground would end six metres short of the road it was going to
+         * cover, which is a gap with the sky in it - exactly the kind of hole
+         * this whole exercise has been closing. A metre at a time from the hit
+         * backwards puts the edge of the ground against the edge of the road,
+         * where the road is fifteen centimetres higher and wins the depth test
+         * on the overlap.
+         */
+        let back = off;
+        while (back > a.half + 1.5
+          && onSomebodyElse(i, a, a.x + a.nx * side * back, a.z + a.nz * side * back)) {
+          back -= 1;
+        }
+        reach = Math.max(a.half + 1.5, back + 1);
+        break;
+      }
+      if (side < 0) a.groundL = reach;
+      else a.groundR = reach;
+    }
+  }
 
   for (let i = 0; i < count; i++) {
     const a = nodes[i];
