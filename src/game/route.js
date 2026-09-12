@@ -27,7 +27,7 @@
  * actually there.
  */
 
-import { CHECKPOINT_EVERY, ROAD_HALF, SEG, WALL_AT } from '../constants.js';
+import { CHECKPOINT_EVERY, ROAD_HALF, RUMBLE, SEG, WALL_AT } from '../constants.js';
 import {
   centreLine, measured, NARROWEST, profile, SURVEYED, things, tunnels, WIDEN,
 } from './circuits.js';
@@ -1476,36 +1476,70 @@ function narrowWhereItFoldsBack(nodes) {
     }
   }
 
+  /**
+   * Never inside the kerb, and never tighter than a metre outside it.
+   *
+   * The first version of this floor was three quarters of a metre from the edge
+   * of the tarmac - which is inside the kerb, because a kerb is a metre and a
+   * half wide. At Baku it put the barrier seventy centimetres behind the white
+   * line and at Miami fifty, so a car riding the kerb was a car hitting the
+   * wall, and the report was that it spins there. A barrier standing on somebody
+   * else's road is a picture problem; a barrier standing on your own kerb is the
+   * race.
+   */
   for (let i = 0; i < count; i++) {
     const a = nodes[i];
-    const floor = a.half + 0.75;
+    /**
+     * Never inside the kerb, and never tighter than a metre outside it.
+     *
+     * The first version of this floor was three quarters of a metre from the
+     * edge of the tarmac - which is inside the kerb, because a kerb is a metre
+     * and a half wide. At Baku it put the barrier seventy centimetres behind the
+     * white line and at Miami fifty, so a car riding the kerb was a car hitting
+     * the wall, and the report was that it spins there. A barrier standing on
+     * somebody else's road is a picture problem; a barrier standing on your own
+     * kerb is the race.
+     */
+    const floor = a.half + RUMBLE + 1;
     const was = a.wall;
-    let w = a.wall;
-    let clear = false;
-    while (w > floor) {
-      clear = [-1, 1].every((side) => !onSomebodyElse(
-        i, a, a.x + a.nx * side * w, a.z + a.nz * side * w,
-      ));
-      if (clear) break;
+    const clears = (w) => [-1, 1].every((side) => !onSomebodyElse(
+      i, a, a.x + a.nx * side * w, a.z + a.nz * side * w,
+    ));
+
+    /**
+     * Asked where it already is, before anything is moved.
+     *
+     * The version before this one went straight into the loop that walks it
+     * inwards, and the loop will not run when the barrier is already at or
+     * inside the floor - which on a street circuit it always is, because on a
+     * street circuit the barrier is at the kerb. So every node at Monaco, Baku,
+     * Singapore and Jeddah came out of it marked as having no rail at all,
+     * which is four circuits with no barrier anywhere.
+     */
+    if (clears(was)) continue;
+
+    let w = was;
+    while (w - 0.25 >= floor) {
       w -= 0.25;
+      if (clears(w)) break;
     }
-    if (clear) {
+    if (w >= floor && clears(w)) {
       a.wall = w;
       continue;
     }
+
     /**
      * And where no distance works, there is no barrier to draw.
      *
      * At Miami two parts of the lap are two and four fifths of a metre apart
      * with six metres of road each: they are not two carriageways with a gap,
-     * they are the same tarmac, which is what a circuit that crosses itself
-     * looks like to an importer reading ways off a map. No barrier position
-     * clears, because the other road covers this one.
+     * they are the same tarmac, which is what a circuit crossing itself looks
+     * like to an importer reading ways off a map. No barrier position clears,
+     * because the other road covers this one.
      *
-     * So the rail is not drawn at these - about fifteen nodes at Miami and
-     * twenty at Baku - and the simulation keeps the line it always had. An
-     * invisible wall where a wall has always been is a thing nobody notices; a
-     * visible one across the road is what was reported.
+     * So the rail is not drawn at those, and the simulation keeps the line it
+     * always had - an invisible wall where a wall has always been is a thing
+     * nobody notices, and a visible one across the road is what was reported.
      */
     a.wall = was;
     a.open = 1;

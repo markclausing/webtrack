@@ -1323,14 +1323,35 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
        * thousand runs of advertising hoarding stood at right angles to the
        * circuit like a row of gates. Built along z it needs no turn at all.
        */
-      const long = 5.6;
-      // The boards, front and back, above the height of the barrier.
+      /**
+       * Six metres and a bit either way, against the six metres a node is.
+       *
+       * They are placed every second node, which is twelve metres, and they were
+       * eleven and a fifth long - so between every pair of boards there was
+       * eighty centimetres of daylight, all the way round eight circuits. They
+       * overlap now.
+       */
+      const long = 6.4;
+      /**
+       * And solid to four metres rather than to two and three quarters.
+       *
+       * A real catch fence is mesh and you can see through it, which is true and
+       * is not what this renderer can draw: there is no transparency in the
+       * solid pass, so a fence is either a few rails with the whole world
+       * visible between them or it is a wall. With rails you could see straight
+       * over the boarding at everything beyond, which was the thing the boarding
+       * was put there to stand in front of.
+       *
+       * Four metres is about what a hoarding with a debris fence behind it
+       * blocks from inside a car, and it leaves the last two metres as rails, so
+       * the tops of the buildings still show over it.
+       */
       put.face(rt, tint(board.body),
-        [0, 1.15, -long, 0, 1.15, long, 0, 2.75, long, 0, 2.75, -long]);
+        [0, 0.9, -long, 0, 0.9, long, 0, 4.0, long, 0, 4.0, -long]);
       put.face(rt, tint(shade(board.wing, 0.9)),
-        [0.14, 1.15, long, 0.14, 1.15, -long, 0.14, 2.75, -long, 0.14, 2.75, long]);
+        [0.14, 0.9, long, 0.14, 0.9, -long, 0.14, 4.0, -long, 0.14, 4.0, long]);
       put.face(rt, tint(shade(board.body, 0.8)),
-        [0, 2.75, -long, 0, 2.75, long, 0.14, 2.75, long, 0.14, 2.75, -long]);
+        [0, 4.0, -long, 0, 4.0, long, 0.14, 4.0, long, 0.14, 4.0, -long]);
       // A post at each end, and the fence standing on them.
       for (const at of [-long, long]) {
         put.face(rt, post, [-0.07, 0, at - 0.09, -0.07, 0, at + 0.09,
@@ -1339,7 +1360,7 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
           0.07, 6.2, at - 0.09, 0.07, 6.2, at + 0.09]);
       }
       const wire = tint(shade(C.metal, 0.85));
-      for (const y of [4.1, 6.0]) {
+      for (const y of [5.0, 6.0]) {
         put.face(rt, wire, [-0.04, y, -long, -0.04, y, long,
           -0.04, y + 0.09, long, -0.04, y + 0.09, -long]);
       }
