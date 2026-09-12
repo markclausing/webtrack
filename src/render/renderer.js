@@ -1008,10 +1008,22 @@ export class Renderer {
         const from = band === BANDS.length - 1 && band > a.reach
           ? BANDS[Math.max(0, Math.min(a.reach, BANDS.length - 1))][0]
           : inner0;
-        // A band that starts at the kerb starts wherever the kerb happens to be.
-        const inner = from === BANDS[0][0]
-          ? Math.max(ha + RUMBLE, from - (ROAD_HALF - ha))
-          : from;
+        /**
+         * A band that starts at the kerb starts wherever the kerb happens to be
+         * - which is not the same place at both ends of it.
+         *
+         * The quad runs from this node to the next and the road is not the same
+         * width at the two. Taking the inner edge from this node alone and using
+         * it at both ends leaves a sliver of nothing between the kerb and the
+         * grass wherever the road narrows: two and a half metres of it at Austin,
+         * about a metre at Interlagos, and something on sixteen of the twenty-four
+         * surveyed circuits. It is the third way the ground has been found to
+         * have a hole in it and the same mistake as the other two - a shared edge
+         * worked out twice and not from the same numbers.
+         */
+        const startsAtKerb = from === BANDS[0][0];
+        const innerA = startsAtKerb ? bandInner(a, from) : from;
+        const innerB = startsAtKerb ? bandInner(b, from) : from;
         if (((i % every) + every) % every !== 0) continue;
         const far = nodeStep(route, i, every);
         // The near bands are grass, sand and gravel, and they take the ground
@@ -1021,10 +1033,10 @@ export class Renderer {
         for (const side of [-1, 1]) {
           const colour = bandColour(local, a, side, kind, i, this.surf);
           rt.quad(
-            a.x + a.nx * side * inner, groundY(a, side, inner), a.z + a.nz * side * inner,
+            a.x + a.nx * side * innerA, groundY(a, side, innerA), a.z + a.nz * side * innerA,
             a.x + a.nx * side * outer, groundY(a, side, outer), a.z + a.nz * side * outer,
             far.x + far.nx * side * outer, groundY(far, side, outer), far.z + far.nz * side * outer,
-            far.x + far.nx * side * inner, groundY(far, side, inner), far.z + far.nz * side * inner,
+            far.x + far.nx * side * innerB, groundY(far, side, innerB), far.z + far.nz * side * innerB,
             tint(colour),
           );
         }
@@ -1164,21 +1176,51 @@ export class Renderer {
    */
   tunnel(a, b, tint, i, roof = 1) {
     const rt = this.rt;
-    const wide = a.wall + 0.4;
+    /**
+     * How far apart the walls are - at each end of this section, not at one.
+     *
+     * A tunnel section runs from this node to the next and the barrier line the
+     * walls stand on is not in the same place at the two. Built to this node's
+     * width at both ends, every section ends where the next one does not begin,
+     * and eight hundred and forty metres of Monaco has a slit of daylight down
+     * each wall every six metres. It is the same mistake as the sliver between
+     * the kerb and the grass: a shared edge worked out once and used twice.
+     */
+    const wideA = a.wall + 0.4;
+    const wideB = b.wall + 0.4;
     const high = 5.5;
     const wall = tint(shade(C.chrome, 0.5));
     const ceiling = tint(shade(C.shadow, 1.35));
     const strip = mix(C.lamp, C.hot, 0.25);
 
+    const floor = tint(shade(C.chrome, 0.34));
     for (const side of [-1, 1]) {
-      const at = side * wide;
-      const ax = a.x + a.nx * at;
-      const az = a.z + a.nz * at;
-      const bx = b.x + b.nx * at;
-      const bz = b.z + b.nz * at;
-      const ay = roadY(a, at);
-      const by = roadY(b, at);
+      const atA = side * wideA;
+      const atB = side * wideB;
+      const ax = a.x + a.nx * atA;
+      const az = a.z + a.nz * atA;
+      const bx = b.x + b.nx * atB;
+      const bz = b.z + b.nz * atB;
+      const ay = roadY(a, atA);
+      const by = roadY(b, atB);
       rt.quad(ax, ay, az, bx, by, bz, bx, by + high, bz, ax, ay + high, az, wall);
+      /**
+       * And the footway between the kerb and the wall, which was not there.
+       *
+       * No ground at all is drawn inside a tunnel - there is a wall where the
+       * verge would be, and a strip of daylit grass along the inside of a
+       * mountain is worse than nothing. But the wall stands at the barrier and
+       * the kerb ends a metre and a half inside it, so between the two there was
+       * a metre and a half of no floor, all the way through.
+       */
+      const eA = side * (a.half + RUMBLE);
+      const eB = side * (b.half + RUMBLE);
+      rt.quad(
+        a.x + a.nx * eA, roadY(a, eA), a.z + a.nz * eA,
+        b.x + b.nx * eB, roadY(b, eB), b.z + b.nz * eB,
+        bx, by, bz, ax, ay, az,
+        floor,
+      );
     }
     /**
      * The roof, where there is one.
@@ -1194,15 +1236,24 @@ export class Renderer {
      * Above half, then. That is where the tags say you are under something.
      */
     if (roof < 0.5) return;
-    const ay = roadY(a, 0) + high;
-    const by = roadY(b, 0) + high;
+    /**
+     * The roof meets the tops of the walls, which are not at one height.
+     *
+     * It was drawn at the height of the middle of the road plus five and a half
+     * metres, and the walls stand on the edges of it - and the edges of a road
+     * with camber on them are not at the height of the middle. Every roof panel
+     * therefore missed both walls by the camber, which is a slit of daylight
+     * running the length of Monaco's tunnel at the top of each side.
+     */
     rt.quad(
-      a.x - a.nx * wide, ay, a.z - a.nz * wide,
-      b.x - b.nx * wide, by, b.z - b.nz * wide,
-      b.x + b.nx * wide, by, b.z + b.nz * wide,
-      a.x + a.nx * wide, ay, a.z + a.nz * wide,
+      a.x - a.nx * wideA, roadY(a, -wideA) + high, a.z - a.nz * wideA,
+      b.x - b.nx * wideB, roadY(b, -wideB) + high, b.z - b.nz * wideB,
+      b.x + b.nx * wideB, roadY(b, wideB) + high, b.z + b.nz * wideB,
+      a.x + a.nx * wideA, roadY(a, wideA) + high, a.z + a.nz * wideA,
       ceiling,
     );
+    const ay = roadY(a, 0) + high;
+    const by = roadY(b, 0) + high;
     if ((((i % 3) + 3) % 3) === 0) {
       rt.quad(
         a.x - a.nx * 1.1, ay - 0.12, a.z - a.nz * 1.1,
@@ -1832,6 +1883,17 @@ function cableHeight(t) {
 /** A packed colour, as the three floats a shader takes. */
 function rgb(colour) {
   return [(colour & 255) / 255, ((colour >> 8) & 255) / 255, ((colour >> 16) & 255) / 255];
+}
+
+/**
+ * Where the first ring of ground starts, at a given node.
+ *
+ * At the kerb, wherever the kerb happens to be. It is a function rather than two
+ * lines inside the loop so that the test next door can ask the same question the
+ * renderer asks - the bug it is there to catch is the two of them disagreeing.
+ */
+export function bandInner(node, nominal) {
+  return Math.max(node.half + RUMBLE, nominal - (ROAD_HALF - node.half));
 }
 
 /** The tarmac's height at an offset, including the camber into the corner. */

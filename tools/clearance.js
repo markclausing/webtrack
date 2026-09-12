@@ -20,8 +20,9 @@
 // against, inside your own footprint?
 
 import { buildRoute, spreadOf } from '../src/game/route.js';
-import { BANDS, FLAT_DROP, groundY, levelWith, roadY } from '../src/render/renderer.js';
+import { BANDS, bandInner, FLAT_DROP, groundY, levelWith, roadY } from '../src/render/renderer.js';
 import { ROUTES } from '../src/game/state.js';
+import { RUMBLE } from '../src/constants.js';
 
 /**
  * Everything that is standing on the ground, and how far off it is.
@@ -214,6 +215,25 @@ function ringGaps(route) {
       edge = Math.max(edge, outer);
     }
 
+    /**
+     * And the first ring starts exactly where the kerb ends.
+     *
+     * This guards the arithmetic and not the use of it. The bug it was written
+     * after was the renderer working the inner edge out from one node and drawing
+     * it at both ends of a quad that spans two - a sliver of nothing between the
+     * kerb and the grass wherever the road narrows, two and a half metres of it
+     * at Austin and something on sixteen of the twenty-four surveyed circuits -
+     * and no question asked of the geometry can see that, because the geometry
+     * was right and what was done with it was not. What this does catch is the
+     * first ring's nominal edge drifting away from the kerb, which is the other
+     * half of the same invariant.
+     */
+    const edgeHere = a.half + RUMBLE;
+    const startsHere = bandInner(a, BANDS[0][0]);
+    if (Math.abs(startsHere - edgeHere) > 0.01) {
+      out.push({ at: i, kind: 'sliver', from: edgeHere, to: startsHere });
+    }
+
     // And each shared edge traced at the same resolution on both sides, or the
     // two sides of it are two different lines.
     for (let k = 0; k < spans.length - 1; k++) {
@@ -262,8 +282,11 @@ if (process.argv[1] && process.argv[1].endsWith('clearance.js')) {
       for (const g of gaps.slice(0, 10)) {
         console.log(g.kind === 'ring'
           ? `    ground missing from ${g.from.toFixed(0)} to ${g.to.toFixed(0)} m at node ${g.at}`
-          : `    seam at ${g.from.toFixed(0)} m drawn every ${g.here} one side and `
-            + `every ${g.next} the other, at node ${g.at}`);
+          : g.kind === 'sliver'
+            ? `    the grass starts at ${g.to.toFixed(2)} m and the kerb ends at `
+              + `${g.from.toFixed(2)} m, at node ${g.at}`
+            : `    seam at ${g.from.toFixed(0)} m drawn every ${g.here} one side and `
+              + `every ${g.next} the other, at node ${g.at}`);
       }
     }
     if (asked) {
