@@ -83,17 +83,37 @@ const FOG_FAR = DRAW_AHEAD * SEG;
  * the centre of it - both put a grey-green plain over the track with the car
  * apparently driving through a lake.
  *
- * The last number is the only interesting one: the run-off beside the kerb is
- * drawn at every node, the middle distance at every second and the far hills at
- * every fourth. That keeps the work roughly proportional to the pixels a band
- * covers rather than to the metres it spans, which is what makes a kilometre of
- * scenery affordable.
+ * The last number used to be the interesting one. The run-off beside the kerb
+ * was drawn at every node, the middle distance at every second and the far hills
+ * at every fourth, on the reasoning that it keeps the work proportional to the
+ * pixels a band covers rather than to the metres it spans.
+ *
+ * It also put a hole in the world on every circuit in the game.
+ *
+ * Two bands that meet share an edge, and an edge drawn at two different
+ * resolutions is two different edges: the fine one follows every node round the
+ * corner and the coarse one goes straight from one node to the one four along.
+ * At ninety-five metres off the centre line - which is where the middle distance
+ * meets the far hills - that chord cuts the corner by up to a hundred and
+ * sixty-seven metres at Las Vegas, eighty-seven at Monaco, and between eight and
+ * fifty everywhere else. It is not a crack, it is a gap you can see the sky
+ * through, and it was there for as long as the bands have been.
+ *
+ * It was invisible for most of that time and stopped being so for three reasons
+ * at once: the draw distance went from a kilometre to eighteen hundred metres,
+ * the fog stopped being mixed per face, and the picture went from six hundred
+ * and forty pixels across to whatever your window is. None of those caused it.
+ *
+ * So every band is drawn at every node now and the shared edges are the same
+ * line by construction. It costs about fifteen hundred triangles a frame, which
+ * on a card is nothing and in the software rasteriser this was written for would
+ * have been a millisecond and a half - which is presumably why it was four.
  */
-const BANDS = [
+export const BANDS = [
   [ROAD_HALF + RUMBLE, RINGS[0], 'verge', 1],
   [RINGS[0], RINGS[1], 'near', 1],
-  [RINGS[1], RINGS[2], 'mid', 2],
-  [RINGS[2], RINGS[3], 'far', 4],
+  [RINGS[1], RINGS[2], 'mid', 1],
+  [RINGS[2], RINGS[3], 'far', 1],
 ];
 
 /** The little map, in pixels. Small enough to ignore, big enough to read. */
@@ -849,8 +869,29 @@ export class Renderer {
         && (band < a.reach || band === BANDS.length - 1)
         && !a.deck && roof < 0.05; band++) {
         const [inner0, outer, kind, every] = BANDS[band];
-        // The first band starts at the kerb, wherever the kerb happens to be.
-        const inner = band === 0 ? Math.max(ha + RUMBLE, inner0 - (ROAD_HALF - ha)) : inner0;
+        /**
+         * Where this band actually starts.
+         *
+         * Normally its own inner edge. The exception is the last one, which is
+         * drawn whatever `reach` says because beyond it there is nothing at all
+         * and the bottom of the sky shows through - and which therefore has to
+         * start where the last band that *was* drawn stopped. It did not: it
+         * started at its own edge, two hundred metres out, leaving a ring of
+         * nothing between ninety-five and two hundred that you could see the sky
+         * through. On Baku that was every node on the circuit, on Singapore
+         * seven hundred and ninety-four of eight hundred and twenty, and on the
+         * six other street circuits most of them.
+         *
+         * It has always been that way and it was invisible while the fog closed
+         * at a kilometre.
+         */
+        const from = band === BANDS.length - 1 && band > a.reach
+          ? BANDS[Math.max(0, Math.min(a.reach, BANDS.length - 1))][0]
+          : inner0;
+        // A band that starts at the kerb starts wherever the kerb happens to be.
+        const inner = from === BANDS[0][0]
+          ? Math.max(ha + RUMBLE, from - (ROAD_HALF - ha))
+          : from;
         if (((i % every) + every) % every !== 0) continue;
         const far = nodeStep(route, i, every);
         // The near bands are grass, sand and gravel, and they are the other

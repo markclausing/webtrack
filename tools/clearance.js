@@ -20,7 +20,7 @@
 // against, inside your own footprint?
 
 import { buildRoute, spreadOf } from '../src/game/route.js';
-import { FLAT_DROP, groundY, levelWith, roadY } from '../src/render/renderer.js';
+import { BANDS, FLAT_DROP, groundY, levelWith, roadY } from '../src/render/renderer.js';
 import { ROUTES } from '../src/game/state.js';
 
 /**
@@ -163,6 +163,70 @@ export function trespassers(route, slack = 1.5) {
   return found;
 }
 
+/**
+ * And nothing is missing from the ground, either.
+ *
+ * The other half of "there are polygons across the track" is polygons that are
+ * not there. The ground beside the road is drawn as four rings, and both ways it
+ * could fail to close have happened:
+ *
+ * **Two rings drawn at different node resolutions.** They share an edge, and an
+ * edge traced every node and the same edge traced every fourth node are not the
+ * same line. At ninety-five metres off the centre line that chord cut the corner
+ * by a hundred and sixty-seven metres at Las Vegas and by between eight and
+ * ninety everywhere else - a hole with the sky behind it, on every circuit in
+ * the game.
+ *
+ * **A ring skipped in the middle.** Where the ground turns into a cliff a
+ * circuit says so and the rings past that point are not drawn - except the last,
+ * which is always drawn because past it there is nothing at all. Starting that
+ * one at its own inner edge rather than where the last drawn ring stopped leaves
+ * a band of nothing between the two. On Baku that was every node on the lap.
+ *
+ * Neither was a new bug. Both were invisible while the fog closed at a kilometre
+ * and the picture was six hundred and forty pixels across, which is the only
+ * reason they lasted: this asks the question of the geometry instead, where the
+ * answer does not depend on how far you can see.
+ */
+function ringGaps(route) {
+  const out = [];
+  for (let i = 0; i < route.nodes.length; i++) {
+    const a = route.nodes[i];
+    if (a.deck || (a.tunnel || 0) >= 0.05) continue;
+
+    // Which rings are drawn here, and from where - the same two decisions the
+    // renderer makes, and the reason BANDS is exported.
+    const spans = [];
+    for (let band = 0; band < BANDS.length; band++) {
+      if (!(band < a.reach || band === BANDS.length - 1)) continue;
+      const [inner0, outer] = BANDS[band];
+      const from = band === BANDS.length - 1 && band > a.reach
+        ? BANDS[Math.max(0, Math.min(a.reach, BANDS.length - 1))][0]
+        : inner0;
+      spans.push([from, outer, band]);
+    }
+    spans.sort((x, y) => x[0] - y[0]);
+
+    // Tiled from the kerb outwards, with nothing left between them.
+    let edge = spans.length ? spans[0][0] : 0;
+    for (const [from, outer] of spans) {
+      if (from > edge + 0.01) out.push({ at: i, kind: 'ring', from: edge, to: from });
+      edge = Math.max(edge, outer);
+    }
+
+    // And each shared edge traced at the same resolution on both sides, or the
+    // two sides of it are two different lines.
+    for (let k = 0; k < spans.length - 1; k++) {
+      const here = BANDS[spans[k][2]][3];
+      const next = BANDS[spans[k + 1][2]][3];
+      if (here !== next) {
+        out.push({ at: i, kind: 'seam', from: spans[k][1], to: spans[k][1], here, next });
+      }
+    }
+  }
+  return out;
+}
+
 if (process.argv[1] && process.argv[1].endsWith('clearance.js')) {
   const asked = process.argv[2];
   const keys = asked ? [asked] : Object.keys(ROUTES);
@@ -184,13 +248,24 @@ if (process.argv[1] && process.argv[1].endsWith('clearance.js')) {
     const airKinds = {};
     for (const f of air) airKinds[f.kind] = (airKinds[f.kind] || 0) + 1;
     total += air.length;
+    const gaps = ringGaps(route);
+    total += gaps.length;
     console.log(`${key.padEnd(12)} ${String(bad.length).padStart(4)} on the road, `
       + `${String(air.length).padStart(4)} off the ground`
       + (bad.length ? `, worst ${deep.toFixed(1)} m in` : '')
       + (air.length ? `, worst ${highest.toFixed(1)} m up (`
         + `${Object.entries(airKinds).sort((x, y) => y[1] - x[1])
           .map(([k, n]) => `${n} ${k}`).join(', ')})` : '')
+      + (gaps.length ? `, ${gaps.length} nodes with a hole in the ground` : '')
       + `  [${count} props]`);
+    if (asked && gaps.length) {
+      for (const g of gaps.slice(0, 10)) {
+        console.log(g.kind === 'ring'
+          ? `    ground missing from ${g.from.toFixed(0)} to ${g.to.toFixed(0)} m at node ${g.at}`
+          : `    seam at ${g.from.toFixed(0)} m drawn every ${g.here} one side and `
+            + `every ${g.next} the other, at node ${g.at}`);
+      }
+    }
     if (asked) {
       for (const b of bad.sort((x, y) => y.into - x.into).slice(0, 25)) {
         console.log(`    ${b.kind.padEnd(9)} at node ${String(b.at).padStart(5)}`
