@@ -71,6 +71,41 @@ class Placer {
 const put = new Placer();
 
 /**
+ * A number between nought and one that belongs to this one prop.
+ *
+ * Every scattered thing already carries a random heading, because a tree turned
+ * any old way is the point of a tree - so there is a unique number per instance
+ * sitting there unused for anything else. Hashing it gives each tree, each
+ * building and each lorry something of its own without a single byte being added
+ * to the placement.
+ *
+ * They were all identical before this. The sizes varied, because the scatter
+ * hands out a scale, but every oak on every circuit was the same green and the
+ * same shape at a different size - which at four thousand of them along a
+ * straight reads as one tree repeated, which is what it was.
+ */
+/**
+ * The green of one particular tree.
+ *
+ * A wood is not one colour. Half of the difference between a row of trees and
+ * one tree drawn four thousand times is that no two of them are quite the same
+ * green: some are darker, some are yellower where the light gets at them, and a
+ * few are going over. Three quarters of the variation is in the brightness and a
+ * quarter in the hue, which is about what a hedgerow does.
+ */
+function leafy(theme, prop) {
+  const v = variant(prop, 7);
+  const warm = variant(prop, 11);
+  return shade(mix(theme.tree, theme.trunk, warm * 0.16), 0.82 + v * 0.36);
+}
+
+function variant(prop, salt = 0) {
+  const t = Math.sin((prop.r || 0) * 12.9898 + (prop.off || 0) * 78.233 + salt * 37.719)
+    * 43758.5453;
+  return t - Math.floor(t);
+}
+
+/**
  * A cone on its point or on its base: a conifer, a marker, a pile of anything.
  *
  * Six sides. Not eight, and not four: four is a pyramid you can see is a
@@ -121,6 +156,35 @@ function crown(rt, colour, y0, y1, radius, sides = 6, skirt = true) {
 }
 
 /**
+ * A road wheel, lying across the vehicle it belongs to.
+ *
+ * Eight sides, which at the size a lorry's wheel is drawn is round. The car has
+ * its own with ten and a rim in it; this is the cheap one, for the things you
+ * drive past rather than the thing you drive.
+ */
+function roller(rt, tyre, hub, x, y, z, radius, half) {
+  const p = new Float64Array(12);
+  const SIDES = 8;
+  // The axle runs across the vehicle, which in a model built along x is the z
+  // axis. Built the other way round - which is how this was written first - the
+  // wheels lie flat beside the lorry like dropped coins.
+  for (let k = 0; k < SIDES; k++) {
+    const a0 = (k / SIDES) * Math.PI * 2;
+    const a1 = ((k + 1) / SIDES) * Math.PI * 2;
+    const x0 = x + Math.cos(a0) * radius;
+    const y0 = y + Math.sin(a0) * radius;
+    const x1 = x + Math.cos(a1) * radius;
+    const y1 = y + Math.sin(a1) * radius;
+    p.set([x0, y0, z - half, x1, y1, z - half, x1, y1, z + half, x0, y0, z + half]);
+    put.face(rt, tyre, p);
+    for (const side of [z - half, z + half]) {
+      p.set([x, y, side, x0, y0, side, x1, y1, side]);
+      put.face(rt, hub, p.subarray(0, 9));
+    }
+  }
+}
+
+/**
  * A building: a plinth, a shaft with floors on it, a cornice and a roof.
  *
  * Both kinds of building in this game were a box. `block` was a box with one
@@ -144,7 +208,7 @@ function crown(rt, colour, y0, y1, radius, sides = 6, skirt = true) {
 function building(rt, tint, wall, glassColour, w, d, h, seed) {
   // Every building on a street is a slightly different colour from the one next
   // to it, which is most of what stops a row of them reading as one object.
-  const tone = 0.86 + ((seed * 7) % 9) * 0.035;
+  const tone = 0.86 + (Math.floor(seed * 9007) % 9) * 0.035;
   const body = shade(wall, tone);
   const trim = shade(wall, tone * 0.82);
 
@@ -194,14 +258,48 @@ function building(rt, tint, wall, glassColour, w, d, h, seed) {
 
   rt.glass = 0;
 
-  // The cornice, and whatever is on the roof. A building with a flat top and
-  // nothing on it is a box however many windows are in the side of it.
+  /**
+   * The top, of which there are three.
+   *
+   * A street of identical boxes is a street of identical boxes however many
+   * windows are in the sides of them, and the silhouette is what you read at two
+   * hundred metres - not the glazing. So one building in three has a storey set
+   * back from the parapet, one in three has a pitched roof, and the rest have
+   * the flat cornice they always had. Which one is a hash of the building, so
+   * the same one is the same one every lap.
+   */
+  const shape = Math.floor(seed * 7) % 3;
   box(rt, tint, trim, -w - 0.3, w + 0.3, h - 0.55, h, -d - 0.3, d + 0.3);
-  if (h > 6) {
+  if (shape === 1 && h > 8) {
+    // A set-back storey, which is what the top of a pre-war office block does.
+    const sw = w * 0.62;
+    const sd = d * 0.62;
+    const sh = Math.min(4.5, h * 0.22);
+    box(rt, tint, body, -sw, sw, h, h + sh, -sd, sd);
+    box(rt, tint, trim, -sw - 0.25, sw + 0.25, h + sh - 0.4, h + sh, -sd - 0.25, sd + 0.25);
+  } else if (shape === 2) {
+    // A pitched roof: two slopes meeting on a ridge along the longer side, and a
+    // gable at each end. What a building looks like where it is a house rather
+    // than an office.
+    const ridge = h + Math.min(3.4, Math.max(w, d) * 0.55);
+    const p2 = new Float64Array(12);
+    const long = w >= d;
+    const rw = long ? w : 0;
+    const rd = long ? 0 : d;
+    p2.set([-w, h, -d, w, h, -d, rw, ridge, rd, -rw, ridge, -rd]);
+    put.face(rt, tint(shade(body, 0.94)), p2);
+    p2.set([w, h, d, -w, h, d, -rw, ridge, rd, rw, ridge, -rd]);
+    put.face(rt, tint(shade(body, 1.06)), p2);
+    put.face(rt, tint(trim), [-w, h, -d, -rw, ridge, -rd, -w, h, d]);
+    put.face(rt, tint(trim), [w, h, d, rw, ridge, rd, w, h, -d]);
+  }
+  if (shape !== 2 && h > 6) {
+    // A lift housing, off to one side, which every flat roof has.
     const rw = Math.max(0.8, w * 0.34);
     const rd = Math.max(0.8, d * 0.34);
-    const off = w * (((seed * 3) % 5) / 5 - 0.5);
-    box(rt, tint, body, off - rw, off + rw, h, h + Math.min(2.6, h * 0.14), -rd, rd);
+    const off = w * ((Math.floor(seed * 11) % 5) / 5 - 0.5);
+    const base = shape === 1 ? h + Math.min(4.5, h * 0.22) : h;
+    box(rt, tint, body, off - rw, off + rw, base, base + Math.min(2.6, h * 0.14), -rd, rd);
   }
 }
 
@@ -288,7 +386,8 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       }
       const trunk = tint(theme.trunk);
       put.face(rt, trunk, [-0.2, 0, 0, 0.2, 0, 0, 0.2, 1.6, 0, -0.2, 1.6, 0]);
-      cone(rt, tint(theme.tree), 1.1, 6.4, 1.7, near ? 6 : 4);
+      cone(rt, tint(leafy(theme, prop)), 1.1, 5.4 + variant(prop) * 2.2,
+        1.4 + variant(prop, 1) * 0.7, near ? 6 : 4);
       break;
     }
     case 'palm': {
@@ -320,9 +419,14 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
         break;
       }
       const trunk = tint(shade(theme.trunk, 0.85));
+      const needle = leafy(theme, prop);
+      // Spruces vary more than anything else in a wood: some are twice the
+      // height of the one beside them and a good deal narrower.
+      const tall = 8.2 + variant(prop) * 2.8;
+      const fat = 1.1 + variant(prop, 1) * 0.45;
       put.face(rt, trunk, [-0.18, 0, 0, 0.18, 0, 0, 0.18, 1.9, 0, -0.18, 1.9, 0]);
-      cone(rt, tint(theme.tree), 1.2, 6.6, 1.3, near ? 6 : 4);
-      cone(rt, tint(shade(theme.tree, 1.06)), 4.4, 9.4, 0.86, near ? 6 : 3, 0.5);
+      cone(rt, tint(needle), 1.2, tall * 0.72, fat, near ? 6 : 4);
+      cone(rt, tint(shade(needle, 1.06)), tall * 0.47, tall, fat * 0.66, near ? 6 : 3, 0.5);
       break;
     }
     /**
@@ -339,13 +443,19 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       }
       const trunk = tint(theme.trunk);
       const bark = tint(shade(theme.trunk, 0.82));
-      put.face(rt, trunk, [-0.3, 0, -0.28, 0.3, 0, -0.28, 0.3, 2.8, -0.28, -0.3, 2.8, -0.28]);
-      put.face(rt, trunk, [0.3, 0, 0.28, -0.3, 0, 0.28, -0.3, 2.8, 0.28, 0.3, 2.8, 0.28]);
+      // A trunk that is not always the same height, and a crown that is not
+      // always the same shape: some of them are tall and narrow and some are
+      // squat and wide, which is what a row of trees looks like.
+      const stem = 2.2 + variant(prop) * 1.3;
+      const spread = 2.1 + variant(prop, 1) * 0.9;
+      const top = stem + 3.4 + variant(prop, 2) * 2.4;
+      put.face(rt, trunk, [-0.3, 0, -0.28, 0.3, 0, -0.28, 0.3, stem + 0.6, -0.28, -0.3, stem + 0.6, -0.28]);
+      put.face(rt, trunk, [0.3, 0, 0.28, -0.3, 0, 0.28, -0.3, stem + 0.6, 0.28, 0.3, stem + 0.6, 0.28]);
       if (near) {
-        put.face(rt, bark, [-0.28, 0, 0.3, -0.28, 0, -0.3, -0.28, 2.8, -0.3, -0.28, 2.8, 0.3]);
-        put.face(rt, bark, [0.28, 0, -0.3, 0.28, 0, 0.3, 0.28, 2.8, 0.3, 0.28, 2.8, -0.3]);
+        put.face(rt, bark, [-0.28, 0, 0.3, -0.28, 0, -0.3, -0.28, stem + 0.6, -0.3, -0.28, stem + 0.6, 0.3]);
+        put.face(rt, bark, [0.28, 0, -0.3, 0.28, 0, 0.3, 0.28, stem + 0.6, 0.3, 0.28, stem + 0.6, -0.3]);
       }
-      crown(rt, tint(theme.tree), 2.2, 7.4, 2.5, near ? 6 : 4, under);
+      crown(rt, tint(leafy(theme, prop)), stem, top, spread, near ? 6 : 4, under);
       break;
     }
     /**
@@ -737,25 +847,65 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
      * Tuesday.
      */
     case 'lorry': {
+      /**
+       * A transporter: a tractor unit and a trailer, with wheels under them.
+       *
+       * It was two boxes and six flat squares for wheels, which from the side is
+       * a lorry and from three quarters on is two boxes. There are a couple of
+       * hundred of them in the paddocks and they are the only vehicles in this
+       * game that are not racing cars, so they are the only thing that says a
+       * paddock is a place where people arrive from somewhere.
+       */
       const paint = TEAM_COLOURS[((prop.paint ?? prop.i ?? 0) * 5) % TEAM_COLOURS.length].body;
       // White, because a transporter is. Left at plain chrome the only face you
       // ever see from the track is the shaded one, and a row of them read as a
       // row of dark boxes.
       const shell = shade(C.chrome, 1.24);
-      box(rt, tint, shell, -6.5, 2.5, 1.1, 4.6, -1.3, 1.3);
-      box(rt, tint, paint, 2.5, 6.5, 0.8, 3.6, -1.25, 1.25);
-      put.face(rt, tint(C.glass), [5.6, 2.4, -1.3, 6.5, 2.4, -1.3, 6.5, 3.5, -1.3, 5.6, 3.5, -1.3]);
-      // The team's colour down both sides of the trailer, deep enough to be the
-      // thing you see rather than a pinstripe.
+      const tyre = tint(C.tyre);
+      const hub = tint(shade(C.metal, 0.8));
+      const chassis = tint(shade(C.tyre, 1.4));
+
+      // The trailer, on a chassis that is visible under it.
+      box(rt, tint, chassis, -6.6, 2.6, 0.95, 1.25, -1.15, 1.15);
+      box(rt, tint, shell, -6.5, 2.5, 1.25, 4.6, -1.3, 1.3);
+      // The team's colour down both sides, deep enough to be the thing you see
+      // rather than a pinstripe, with the roof left white.
       put.face(rt, tint(paint),
         [-6.2, 2.2, 1.35, 2.2, 2.2, 1.35, 2.2, 4.2, 1.35, -6.2, 4.2, 1.35]);
       put.face(rt, tint(shade(paint, 0.8)),
         [2.2, 2.2, -1.35, -6.2, 2.2, -1.35, -6.2, 4.2, -1.35, 2.2, 4.2, -1.35]);
-      for (const wx of [-5.2, -3.4, 4.4]) {
-        put.face(rt, tint(C.tyre), [wx, 0.2, -1.35, wx + 1.4, 0.2, -1.35,
-          wx + 1.4, 1.2, -1.35, wx, 1.2, -1.35]);
-        put.face(rt, tint(C.tyre), [wx + 1.4, 0.2, 1.35, wx, 0.2, 1.35,
-          wx, 1.2, 1.35, wx + 1.4, 1.2, 1.35]);
+      // The back doors, which is the end of it you are usually looking at.
+      put.face(rt, tint(shade(shell, 0.88)),
+        [-6.55, 1.3, -1.25, -6.55, 1.3, 1.25, -6.55, 4.5, 1.25, -6.55, 4.5, -1.25]);
+      put.face(rt, tint(shade(paint, 0.7)),
+        [-6.6, 2.5, -0.06, -6.6, 2.5, 0.06, -6.6, 4.4, 0.06, -6.6, 4.4, -0.06]);
+
+      /**
+       * The cab, which is where a lorry stops being a box.
+       *
+       * A windscreen that leans back, a roof deflector over it, a step under the
+       * door and a mirror either side. None of it is more than a face or two and
+       * between them they are the difference between a tractor unit and the
+       * front half of a shipping container.
+       */
+      box(rt, tint, paint, 2.6, 6.4, 1.25, 3.5, -1.25, 1.25);
+      put.face(rt, tint(C.glass),
+        [6.4, 2.5, -1.2, 6.4, 2.5, 1.2, 6.15, 3.5, 1.15, 6.15, 3.5, -1.15]);
+      for (const side of [-1.27, 1.27]) {
+        put.face(rt, tint(shade(C.glass, 0.85)),
+          [5.0, 2.5, side, 6.0, 2.5, side, 6.0, 3.3, side, 5.0, 3.3, side]);
+        // The mirror, on an arm.
+        put.face(rt, tint(shade(C.metal, 0.9)),
+          [6.0, 3.1, side * 1.25, 6.0, 3.1, side * 1.5,
+            6.0, 3.7, side * 1.5, 6.0, 3.7, side * 1.25]);
+      }
+      // The deflector on the roof, sloping back to meet the trailer.
+      put.face(rt, tint(shade(paint, 1.1)),
+        [6.2, 3.5, -1.2, 6.2, 3.5, 1.2, 2.7, 4.5, 1.2, 2.7, 4.5, -1.2]);
+
+      // And the wheels, which are round.
+      for (const wx of [-5.4, -3.6, 4.6]) {
+        for (const side of [-1.2, 1.2]) roller(rt, tyre, hub, wx, 0.62, side, 0.62, 0.22);
       }
       break;
     }
@@ -906,8 +1056,7 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       // The glass takes the light: pale and reflecting the sky by day, lit from
       // inside after dark, which is the one thing that says a building is a
       // building rather than a shape once the sun has gone.
-      building(rt, tint, theme.ridge, shade(C.glass, 1.1), w, d, h,
-        (prop.w || 10) + (prop.h || 9));
+      building(rt, tint, theme.ridge, shade(C.glass, 1.1), w, d, h, variant(prop, 3));
       break;
     }
     case 'rock':
@@ -1141,10 +1290,17 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       }
       break;
     }
-    case 'block':
-      // The low one, and the same building as the tall one at a different size.
-      building(rt, tint, theme.ridge, C.glass, 3.4, 3.4, 5.5, (prop.i || 0) + 3);
+    case 'block': {
+      // The low one, and the same building as the tall one at a different size -
+      // which is now not always the same size. They were every one of them six
+      // metres eighty square and five and a half high, two and a half thousand
+      // times over.
+      const v = variant(prop);
+      building(rt, tint, theme.ridge, C.glass,
+        2.6 + v * 2.2, 2.6 + variant(prop, 1) * 2.0,
+        4.2 + variant(prop, 2) * 6.5, v);
       break;
+    }
     case 'boat': {
       const hull = tint(C.kerbB);
       const deep = tint(shade(C.kerbB, 0.7));
