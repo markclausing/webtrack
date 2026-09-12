@@ -71,6 +71,56 @@ class Placer {
 const put = new Placer();
 
 /**
+ * A cone on its point or on its base: a conifer, a marker, a pile of anything.
+ *
+ * Six sides. Not eight, and not four: four is a pyramid you can see is a
+ * pyramid, eight costs a third more for a silhouette nobody can tell from six at
+ * the distance a tree is usually seen, and six lit by one sun has three faces
+ * you can see and each of them a different brightness - which is the whole of
+ * what makes it read as round.
+ */
+function cone(rt, colour, y0, y1, radius, sides = 6, turn = 0) {
+  const p = new Float64Array(9);
+  for (let i = 0; i < sides; i++) {
+    const a0 = turn + (i / sides) * Math.PI * 2;
+    const a1 = turn + ((i + 1) / sides) * Math.PI * 2;
+    p[0] = 0; p[1] = y1; p[2] = 0;
+    p[3] = Math.cos(a0) * radius; p[4] = y0; p[5] = Math.sin(a0) * radius;
+    p[6] = Math.cos(a1) * radius; p[7] = y0; p[8] = Math.sin(a1) * radius;
+    put.face(rt, colour, p);
+  }
+}
+
+/**
+ * A crown: a six-sided band with a dome over it and a taper under it.
+ *
+ * What an oak was made of before this was three flat quads crossed at angles,
+ * which is a perfectly good tree in a renderer with no light in it - you see one
+ * face on and one edge on and the eye fills in the rest. Under a sun it is three
+ * flat cards, and worse, it casts the shadow of three flat cards.
+ */
+function crown(rt, colour, y0, y1, radius, sides = 6, skirt = true) {
+  const p = new Float64Array(12);
+  const low = y0 + (y1 - y0) * 0.18;
+  const waist = y0 + (y1 - y0) * 0.42;
+  for (let i = 0; i < sides; i++) {
+    const a0 = (i / sides) * Math.PI * 2;
+    const a1 = ((i + 1) / sides) * Math.PI * 2;
+    const c0 = Math.cos(a0) * radius; const s0 = Math.sin(a0) * radius;
+    const c1 = Math.cos(a1) * radius; const s1 = Math.sin(a1) * radius;
+    p.set([c0, low, s0, c1, low, s1, c1, waist, s1, c0, waist, s0]);
+    put.face(rt, colour, p);
+    p.set([c0, waist, s0, c1, waist, s1, 0, y1, 0]);
+    put.face(rt, colour, p.subarray(0, 9));
+    // The underside, which is only ever seen from under the tree.
+    if (skirt) {
+      p.set([c1, low, s1, c0, low, s0, 0, y0, 0]);
+      put.face(rt, colour, p.subarray(0, 9));
+    }
+  }
+}
+
+/**
  * A flat box: four sides and a lid. Five faces is a building, a crate, a stand.
  *
  * One colour, and it used to be three. The sides were written out at sixty-eight
@@ -91,7 +141,46 @@ function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
 
 // --- Scenery -----------------------------------------------------------------
 
-export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, night = 0) {
+/**
+ * How much of a model to draw, from how far away it is being seen.
+ *
+ * A tree near the car is a crown with a dome on it and six sides to catch the
+ * light; the same tree four hundred metres up the road is nine pixels tall. The
+ * first pass at rounding the trees put both of them at thirty-two triangles and
+ * took Monza from nineteen thousand a frame to thirty-nine - eight and a half
+ * milliseconds of a sixteen millisecond budget, for trees you cannot see.
+ *
+ * Two hundred metres is where it changes, which is about where a tree stops
+ * having a side to it at this resolution.
+ */
+const NEAR_ENOUGH = 130;
+/**
+ * And where a tree stops being a shape and becomes a smudge.
+ *
+ * Past five hundred metres a seven metre tree is about nine pixels tall on a
+ * screen this size. Everything a crown is made of - the band, the dome, the
+ * trunk under it - is inside one of those pixels, so past here a tree is one
+ * four-sided cone and nothing else. It is the difference between Monza costing
+ * thirty thousand triangles a frame and twenty-two, and there is nothing to see
+ * either way.
+ */
+const A_SMUDGE = 500;
+
+/**
+ * And how close before the underside of a crown is drawn at all.
+ *
+ * A tree is open underneath unless something closes it, and what closes it is
+ * six triangles on the most numerous model in the game. You can only see under
+ * one from inside about sixty metres, and the ones you get that close to are the
+ * ones on the verge beside you.
+ */
+const UNDER_TREE = 60;
+
+export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, night = 0,
+  away = 0) {
+  const near = away < NEAR_ENOUGH;
+  const under = away < UNDER_TREE;
+  const smudge = away > A_SMUDGE;
   const s = prop.s || 1;
   // Trees and rocks are turned any old way and that is the point of them. A
   // gantry, a grandstand and a marker post belong to the track and are handed
@@ -100,15 +189,17 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
   put.set(x, y, z, facing + (prop.r || 0), 0, s);
   switch (prop.kind) {
     case 'pine': {
+      // One cone on a trunk. It was two flat triangles crossed at right angles,
+      // on the reasoning that from any direction you see one face on and the
+      // other edge on - which is what a conifer looks like from a moving
+      // vehicle, and not what it looks like standing still or in its own shadow.
+      if (smudge) {
+        cone(rt, tint(theme.tree), 0.8, 6.4, 1.6, 3);
+        break;
+      }
       const trunk = tint(theme.trunk);
-      const dark = tint(shade(theme.tree, 0.7));
-      const lit = tint(theme.tree);
       put.face(rt, trunk, [-0.2, 0, 0, 0.2, 0, 0, 0.2, 1.6, 0, -0.2, 1.6, 0]);
-      // Two flat triangles crossed at right angles. From any direction you see
-      // one of them face on and the other edge on, which is exactly what a
-      // conifer looks like from a moving vehicle.
-      put.face(rt, lit, [0, 6.4, 0, -1.7, 1.1, 0, 1.7, 1.1, 0]);
-      put.face(rt, dark, [0, 6.4, 0, 0, 1.1, -1.7, 0, 1.1, 1.7]);
+      cone(rt, tint(theme.tree), 1.1, 6.4, 1.7, near ? 6 : 4);
       break;
     }
     case 'palm': {
@@ -133,14 +224,16 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
      * flat triangles give you a column that thins out every ninety degrees.
      */
     case 'spruce': {
+      // Two cones, the upper one narrower and turned off the lower: a conifer
+      // is widest a third of the way up and a single cone is not.
+      if (smudge) {
+        cone(rt, tint(theme.tree), 1.2, 9.4, 1.2, 3);
+        break;
+      }
       const trunk = tint(shade(theme.trunk, 0.85));
-      const dark = tint(shade(theme.tree, 0.6));
-      const mid = tint(shade(theme.tree, 0.8));
-      const lit = tint(theme.tree);
       put.face(rt, trunk, [-0.18, 0, 0, 0.18, 0, 0, 0.18, 1.9, 0, -0.18, 1.9, 0]);
-      put.face(rt, lit, [0, 9.4, 0, -1.25, 1.3, 0, 1.25, 1.3, 0]);
-      put.face(rt, dark, [0, 9.4, 0, 0, 1.3, -1.25, 0, 1.3, 1.25]);
-      put.face(rt, mid, [0, 8.2, 0, -0.9, 1.3, -0.9, 0.9, 1.3, 0.9]);
+      cone(rt, tint(theme.tree), 1.2, 6.6, 1.3, near ? 6 : 4);
+      cone(rt, tint(shade(theme.tree, 1.06)), 4.4, 9.4, 0.86, near ? 6 : 3, 0.5);
       break;
     }
     /**
@@ -148,16 +241,22 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
      * from a moving car - the crown reads as a mass and never as a shape.
      */
     case 'oak': {
+      // A trunk with four sides and a round crown. It was three flat quads
+      // crossed at angles, which is a tree from the front and a set of cards
+      // from anywhere else - and casts the shadow of a set of cards.
+      if (smudge) {
+        cone(rt, tint(theme.tree), 1.6, 7.4, 2.3, 4);
+        break;
+      }
       const trunk = tint(theme.trunk);
-      const dark = tint(shade(theme.tree, 0.66));
-      const mid = tint(shade(theme.tree, 0.86));
-      const lit = tint(shade(theme.tree, 1.08));
-      put.face(rt, trunk, [-0.32, 0, 0, 0.32, 0, 0, 0.32, 2.6, 0, -0.32, 2.6, 0]);
-      // Three overlapping quads at different angles: a crown with a top on it,
-      // rather than a disc that vanishes when you drive past it.
-      put.face(rt, dark, [-2.5, 2.4, 0, 2.5, 2.4, 0, 2.1, 6.6, 0, -2.1, 6.6, 0]);
-      put.face(rt, mid, [0, 2.4, -2.5, 0, 2.4, 2.5, 0, 6.6, 2.1, 0, 6.6, -2.1]);
-      put.face(rt, lit, [-1.7, 6.2, -1.7, 1.7, 6.2, -1.7, 1.7, 7.4, 1.7, -1.7, 7.4, 1.7]);
+      const bark = tint(shade(theme.trunk, 0.82));
+      put.face(rt, trunk, [-0.3, 0, -0.28, 0.3, 0, -0.28, 0.3, 2.8, -0.28, -0.3, 2.8, -0.28]);
+      put.face(rt, trunk, [0.3, 0, 0.28, -0.3, 0, 0.28, -0.3, 2.8, 0.28, 0.3, 2.8, 0.28]);
+      if (near) {
+        put.face(rt, bark, [-0.28, 0, 0.3, -0.28, 0, -0.3, -0.28, 2.8, -0.3, -0.28, 2.8, 0.3]);
+        put.face(rt, bark, [0.28, 0, -0.3, 0.28, 0, 0.3, 0.28, 2.8, 0.3, 0.28, 2.8, -0.3]);
+      }
+      crown(rt, tint(theme.tree), 2.2, 7.4, 2.5, near ? 6 : 4, under);
       break;
     }
     /**
@@ -1212,6 +1311,10 @@ export function drawRacer(rt, car, x, y, z, yaw, tint, night = 0, pitch = 0) {
     }
   }
 
+  // Everything from here on is painted, and the shader gives paint a highlight.
+  // The wheels above are not: a tyre with a gloss on it is a balloon.
+  rt.shine = 1;
+
   /**
    * The tub, lofted from the nose to the gearbox.
    *
@@ -1352,6 +1455,7 @@ export function drawRacer(rt, car, x, y, z, yaw, tint, night = 0, pitch = 0) {
   const lamp = night > 0.35 ? C.tail : tint(C.kerbA);
   put.face(rt, lamp, [-0.10, 0.60, -2.38, 0.10, 0.60, -2.38,
     0.10, 0.76, -2.38, -0.10, 0.76, -2.38]);
+  rt.shine = 0;
 }
 
 /**

@@ -166,13 +166,18 @@ attribute vec3 aPos;
 attribute vec3 aNormal;
 attribute vec4 aColour;
 uniform mat4 uViewProj;
+uniform mat4 uLightProj;
 varying vec4 vColour;
 varying vec3 vNormal;
 varying vec3 vWorld;
+varying vec3 vShadow;
 void main() {
   vColour = aColour;
   vNormal = aNormal;
   vWorld = aPos;
+  // Where this point is in the sun's own view, which is what decides whether
+  // anything is standing between it and the sun.
+  vShadow = (uLightProj * vec4(aPos, 1.0)).xyz * 0.5 + 0.5;
   gl_Position = uViewProj * vec4(aPos, 1.0);
 }`;
 
@@ -181,6 +186,7 @@ precision highp float;
 varying vec4 vColour;
 varying vec3 vNormal;
 varying vec3 vWorld;
+varying vec3 vShadow;
 uniform vec3 uSun;
 uniform vec3 uCamera;
 uniform vec3 uFogColour;
@@ -188,6 +194,37 @@ uniform float uAmbient;
 uniform float uExposure;
 uniform float uFogNear;
 uniform float uFogFar;
+uniform sampler2D uShadow;
+uniform float uShadowTexel;
+uniform float uShadowOn;
+
+/**
+ * How much of the sun reaches this pixel.
+ *
+ * Four taps a pixel rather than one. A single tap gives an edge that is a
+ * staircase of fourteen centimetre steps, which at the near end of the shadow is
+ * a staircase you can count; four taps half a texel apart turn it into two
+ * steps, and past about forty metres there is nothing left to see either way.
+ *
+ * The bias is scaled by how square-on the surface is to the sun, because that is
+ * where the error is: a road lit at seventeen degrees has a texel of shadow map
+ * spanning half a metre of depth, and a constant bias big enough to survive that
+ * lifts every shadow off its own feet.
+ */
+float sunlight(vec3 sc, float slope) {
+  if (uShadowOn < 0.5) return 1.0;
+  // Outside the box there is no answer, and full sun is the right guess: the box
+  // is the near hundred and forty metres and everything past it is fog anyway.
+  if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
+  float bias = 0.0018 + 0.010 * slope;
+  float lit = 0.0;
+  for (int i = 0; i < 4; i++) {
+    vec2 o = vec2(i == 0 || i == 3 ? -0.5 : 0.5, i < 2 ? -0.5 : 0.5) * uShadowTexel;
+    lit += texture2D(uShadow, sc.xy + o).r + bias < sc.z ? 0.0 : 1.0;
+  }
+  return lit * 0.25;
+}
+
 void main() {
   // Two-sided, and it has to be: a tree in this game is two flat quads crossed
   // at right angles, and the winding of a polygon written out by hand fifteen
@@ -196,9 +233,43 @@ void main() {
   // which for a closed box is its outside and for a leaf is both of them.
   vec3 n = normalize(vNormal);
   if (!gl_FrontFacing) n = -n;
-  float wrap = 0.5 + 0.5 * dot(n, uSun);
-  float light = (uAmbient + (1.0 - uAmbient) * wrap) * uExposure;
+  float face = dot(n, uSun);
+  float wrap = 0.5 + 0.5 * face;
+  // Only the directional half is shadowed. Ambient is the light that arrives
+  // from everywhere, and a shadow that took that away as well would be a hole.
+  /**
+   * Only a face that can see the sun is asked whether something is in the way.
+   *
+   * A face pointing away from the sun is already at the ambient and shadowing it
+   * further changes nothing - except that it is exactly where a shadow map is
+   * least sure of itself. Along the line where a surface turns away, the depth
+   * it stored and the depth it is testing agree to within the thickness of a
+   * texel, and the answer comes out speckled. On a six-sided tree crown at a low
+   * sun that speckle is the whole difference between a tree and a tree with a
+   * rash.
+   */
+  float sun = face > 0.02 ? sunlight(vShadow, 1.0 - face) : 1.0;
+  float light = (uAmbient + (1.0 - uAmbient) * wrap * sun) * uExposure;
   vec3 colour = vColour.rgb * light;
+  /**
+   * And a highlight on anything painted.
+   *
+   * The alpha byte carries the material in the solid pass, where nothing is
+   * blended and it is otherwise wasted: two hundred and fifty of two hundred and
+   * fifty-five means paint. A narrow window rather than a threshold, so the half
+   * transparency the smoke uses is not mistaken for a gloss.
+   *
+   * It is worth more than it sounds. A flat-shaded car is the same colour for as
+   * long as it is pointing the same way; a car with a highlight has something
+   * that moves across it as it turns, which is the one thing on the screen that
+   * says the light is coming from somewhere.
+   */
+  float gloss = step(0.96, vColour.a) * step(vColour.a, 0.995);
+  if (gloss > 0.0) {
+    vec3 eye = normalize(uCamera - vWorld);
+    float spec = pow(max(dot(reflect(-uSun, n), eye), 0.0), 22.0);
+    colour += vec3(0.55, 0.55, 0.52) * spec * sun * gloss;
+  }
   float away = length(vWorld - uCamera);
   float fog = clamp((away - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
   gl_FragColor = vec4(mix(colour, uFogColour, pow(fog, 0.75)), vColour.a);
@@ -221,6 +292,86 @@ void main() {
   vColour = aColour;
   gl_Position = vec4(aPos, 0.0, 1.0);
 }`;
+
+/**
+ * The shadow pass: the same world, from the sun, keeping only how far away it is.
+ *
+ * No colour comes out of this and none goes in. It is the solid buffer drawn a
+ * second time with a different matrix, which is why it is nearly free: the
+ * processor has already walked the circuit and written the vertices, and this
+ * hands the card the same bytes again.
+ */
+const DEPTH_VS = `
+precision highp float;
+attribute vec3 aPos;
+uniform mat4 uLightProj;
+void main() { gl_Position = uLightProj * vec4(aPos, 1.0); }`;
+
+const DEPTH_FS = `
+precision highp float;
+void main() { gl_FragColor = vec4(1.0); }`;
+
+/** How many texels across the shadow map is. */
+const SHADOW_SIZE = 2048;
+/**
+ * How far round the camera the shadows reach, in metres.
+ *
+ * A hundred and forty is about four seconds at the speed this game is usually
+ * doing, and it is the distance at which a shadow stops being a shadow and
+ * starts being a smudge: two thousand texels over two hundred and eighty metres
+ * is fourteen centimetres a texel, which is a wheel. Doubling the distance
+ * doubles the smudge and buys shadows nobody looks at.
+ */
+const SHADOW_REACH = 140;
+/** And how deep along the sun's own direction, so a hill behind can still cast. */
+const SHADOW_DEPTH = 900;
+
+/**
+ * The matrix that puts the world into the sun's view.
+ *
+ * An orthographic box, because the sun is far enough away that its rays are
+ * parallel - which is the one thing that makes a directional light cheaper than
+ * a lamp. The box follows the camera and is pushed a little way ahead of it,
+ * because the half of it behind the car is the half nobody is looking at.
+ *
+ * It is snapped to whole texels. Without that, a box that moves smoothly with
+ * the car makes every shadow edge crawl: the texels it lands on change by a
+ * fraction each frame and the staircase along a shadow's edge walks along it.
+ * That shimmer is the single thing that makes a shadow map look like a shadow
+ * map rather than like a shadow.
+ */
+export function lightProjection(out, sun, cam, ahead) {
+  // A basis with the sun down one axis. The world's up is the reference, unless
+  // the sun is directly overhead, which it never is here.
+  const fx = -sun[0]; const fy = -sun[1]; const fz = -sun[2];
+  let rx = fz; let ry = 0; let rz = -fx;        // cross((0,1,0), forward)
+  const rl = Math.hypot(rx, ry, rz) || 1;
+  rx /= rl; ry /= rl; rz /= rl;
+  const ux = ry * fz - rz * fy;
+  const uy = rz * fx - rx * fz;
+  const uz = rx * fy - ry * fx;
+
+  // The centre of the box: a little up the road from the camera.
+  const cx = cam.x + ahead[0];
+  const cy = cam.y + ahead[1];
+  const cz = cam.z + ahead[2];
+  // In light space, snapped to whole texels so the edges do not crawl.
+  const texel = (SHADOW_REACH * 2) / SHADOW_SIZE;
+  let lx = rx * cx + ry * cy + rz * cz;
+  let ly = ux * cx + uy * cy + uz * cz;
+  const lz = fx * cx + fy * cy + fz * cz;
+  lx = Math.round(lx / texel) * texel;
+  ly = Math.round(ly / texel) * texel;
+
+  // Into the box, which runs from minus one to one down each of its three axes.
+  const sx = 1 / SHADOW_REACH;
+  const sz = 2 / SHADOW_DEPTH;
+  out[0] = rx * sx; out[4] = ry * sx; out[8] = rz * sx; out[12] = -lx * sx;
+  out[1] = ux * sx; out[5] = uy * sx; out[9] = uz * sx; out[13] = -ly * sx;
+  out[2] = fx * sz; out[6] = fy * sz; out[10] = fz * sz; out[14] = -lz * sz;
+  out[3] = 0; out[7] = 0; out[11] = 0; out[15] = 1;
+  return out;
+}
 
 // --- The batch ---------------------------------------------------------------
 
@@ -257,6 +408,9 @@ export class Batch {
     this.flat = compile(gl, FLAT_VS, FLAT_FS);
     this.screen = compile(gl, SCREEN_VS, SCREEN_FS);
     this.viewProj = new Float32Array(16);
+    this.lightProj = new Float32Array(16);
+    this.shadow = makeShadowMap(gl);
+    if (this.shadow) this.depth = compile(gl, DEPTH_VS, DEPTH_FS);
 
     this.solid = makeSink(START_TRIS);
     this.clear = makeSink(2048);
@@ -289,6 +443,21 @@ export class Batch {
      * This was how a machine with no alpha channel drew smoke. It has one now.
      */
     this.stipple = 0;
+    /**
+     * Paint rather than plastic.
+     *
+     * A flag, not a colour: it rides in the alpha byte, which the solid pass has
+     * no use for because blending is off while it is drawn. Two hundred and
+     * fifty instead of two hundred and fifty-five says "this face is painted
+     * metal", and the shader gives it a highlight from the sun.
+     *
+     * It is the difference between a car and a shape the colour of a car. A
+     * single seater is the only thing in this world with a gloss on it - the
+     * road is not polished, a tree is not, and a grandstand is concrete - so
+     * this is on for the bodywork and off for everything else, including the
+     * tyres.
+     */
+    this.shine = 0;
   }
 
   /** The size of the picture. Set by the renderer when the window changes. */
@@ -433,7 +602,7 @@ export class Batch {
   push(ax, ay, az, bx, by, bz, cx, cy, cz, colour) {
     const sink = this.stipple ? this.clear : this.solid;
     if ((sink.count + 3) * STRIDE > sink.data.byteLength) grow(sink);
-    const alpha = this.stipple ? 150 : 255;
+    const alpha = this.stipple ? 150 : (this.shine ? 250 : 255);
     // The chequered second colour is now simply the colour in between.
     const c = this.dither ? blend(colour, this.dither) : colour;
     const ux = bx - ax; const uy = by - ay; const uz = bz - az;
@@ -468,8 +637,9 @@ export class Batch {
    * time of day it is. `exposure` is worked out from the sun's height so that a
    * surface pointing straight up is left exactly the colour it was given.
    */
-  light({ sun, ambient, fogColour, fogNear, fogFar }) {
+  light({ sun, ambient, fogColour, fogNear, fogFar, ahead = [0, 0, 0] }) {
     this.sun = sun;
+    this.ahead = ahead;
     this.ambient = ambient;
     this.fogColour = fogColour;
     this.fogNear = fogNear;
@@ -509,9 +679,39 @@ export class Batch {
       gl.enable(gl.DEPTH_TEST);
     }
 
+    // The sun's own view of the world, into a depth texture, before anything is
+    // drawn for the screen. It is the same buffer that is about to be drawn
+    // again, so the only cost is the card filling two thousand square texels.
+    if (this.shadow && this.solid.count) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.flatBuf);
+      gl.bufferData(gl.ARRAY_BUFFER,
+        new Float32Array(this.solid.f32.buffer, 0, this.solid.count * 7), gl.STREAM_DRAW);
+      this.solid.sent = true;
+      lightProjection(this.lightProj, this.sun || [0, 1, 0], this.cam, this.ahead || [0, 0, 0]);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadow.frame);
+      gl.viewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.useProgram(this.depth.program);
+      gl.uniformMatrix4fv(this.depth.uniforms.uLightProj, false, this.lightProj);
+      const d = this.depth.attribs;
+      gl.enableVertexAttribArray(d.aPos);
+      gl.vertexAttribPointer(d.aPos, 3, gl.FLOAT, false, STRIDE, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, this.solid.count);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, this.w, this.h);
+    }
+
     viewProjection(this.viewProj, this.cam, this.focal, this.w, this.h);
     gl.useProgram(this.flat.program);
     gl.uniformMatrix4fv(this.flat.uniforms.uViewProj, false, this.viewProj);
+    gl.uniformMatrix4fv(this.flat.uniforms.uLightProj, false, this.lightProj);
+    if (this.shadow) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.shadow.texture);
+      gl.uniform1i(this.flat.uniforms.uShadow, 0);
+      gl.uniform1f(this.flat.uniforms.uShadowTexel, 1 / SHADOW_SIZE);
+    }
+    gl.uniform1f(this.flat.uniforms.uShadowOn, this.shadow ? 1 : 0);
     const u = this.flat.uniforms;
     gl.uniform3fv(u.uSun, this.sun || [0, 1, 0]);
     gl.uniform3fv(u.uCamera, [this.cam.x, this.cam.y, this.cam.z]);
@@ -527,8 +727,12 @@ export class Batch {
     gl.enableVertexAttribArray(a.aColour);
 
     if (this.solid.count) {
-      gl.bufferData(gl.ARRAY_BUFFER,
-        new Float32Array(this.solid.f32.buffer, 0, this.solid.count * 7), gl.STREAM_DRAW);
+      // Already sent, if the shadow pass has been through it.
+      if (!this.solid.sent) {
+        gl.bufferData(gl.ARRAY_BUFFER,
+          new Float32Array(this.solid.f32.buffer, 0, this.solid.count * 7), gl.STREAM_DRAW);
+      }
+      this.solid.sent = false;
       gl.vertexAttribPointer(a.aPos, 3, gl.FLOAT, false, STRIDE, 0);
       gl.vertexAttribPointer(a.aNormal, 3, gl.FLOAT, false, STRIDE, 12);
       gl.vertexAttribPointer(a.aColour, 4, gl.UNSIGNED_BYTE, true, STRIDE, 24);
@@ -554,6 +758,45 @@ export class Batch {
       gl.disable(gl.BLEND);
     }
   }
+}
+
+/**
+ * The depth texture the sun's view is drawn into, or nothing.
+ *
+ * Nothing on a context that cannot do it - WebGL 1 without the depth texture
+ * extension, which is most phones from before about 2015 - and the shader falls
+ * back to the light it had before, which is the picture this game had last week.
+ * A missing shadow is a missing shadow; a black screen is a bug report.
+ */
+function makeShadowMap(gl) {
+  const depthOk = gl.webgl2 || gl.getExtension('WEBGL_depth_texture');
+  if (!depthOk) return null;
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  if (gl.webgl2) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE, 0,
+      gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+  } else {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, SHADOW_SIZE, SHADOW_SIZE, 0,
+      gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+  }
+  // Nearest, and clamped: a shadow map is a depth, and interpolating between two
+  // depths gives a depth that is at neither of the two things that were there.
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const frame = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, frame);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, texture, 0);
+  if (gl.webgl2) {
+    gl.drawBuffers([gl.NONE]);
+    gl.readBuffer(gl.NONE);
+  }
+  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  return ok ? { texture, frame } : null;
 }
 
 /** A growable heap of vertices, with the two views everything is written through. */

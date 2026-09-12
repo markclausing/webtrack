@@ -8,9 +8,10 @@ runs out: you start in daylight, the sun is on the horizon by the second lap and
 you finish in the dark.
 
 No dependencies, no build step, no assets — HTML, CSS and JavaScript exactly as
-the browser receives them, and a WebGL renderer of about four hundred lines with
+the browser receives them, and a WebGL renderer of about six hundred lines with
 no library behind it. The picture is drawn at the size of your window: flat
-shaded, lit by one sun, and nothing in it is a texture or a sprite.
+shaded, lit by one sun that casts real shadows, and nothing in it is a texture
+or a sprite.
 
 ![The last corner at Zandvoort, eighteen degrees of banking](docs/screenshots/banked.png)
 
@@ -66,6 +67,13 @@ rather than a wider line.
 
 **All of it is measured from the outside wheel**, not from the middle of the
 car, so a wheel over the edge is a wheel over the edge.
+
+**The sun is somewhere, and everything knows where.** It sits on a fixed bearing
+in the world, so coming out of a corner with it ahead of you is a different
+thing from coming out with it behind. Every face carries its normal, so a
+building has a bright side and a dark side and they change over as the afternoon
+goes — and the cars, the trees, the barriers and the grandstands all cast into a
+shadow map that follows the car up the road.
 
 **The wing is yours to choose.** Low, medium or high, in the menu, and it is a
 trade rather than an upgrade: the small wing is about 373 km/h flat out, the big

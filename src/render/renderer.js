@@ -46,6 +46,18 @@ import { Batch } from './gl.js';
 import { Hud, HUD_BASE_H } from './hud.js';
 
 /**
+ * How far the barrier is drawn.
+ *
+ * Further than it was, and not as far as the road. Six hundred and forty metres
+ * was the whole world once; the world goes to eighteen hundred now, and a rail
+ * at that distance is a line one pixel high that costs seven faces a node.
+ */
+const RAIL_FAR = 900;
+
+/** How far up the road the shadow box is pushed, in metres. */
+const SHADOW_AHEAD = 60;
+
+/**
  * How far the scenery stands.
  *
  * Nine hundred metres, once, because that was the whole world. Trees and
@@ -513,6 +525,19 @@ export class Renderer {
       fogColour: rgb(theme.fog),
       fogNear: FOG_NEAR + roof * 600,
       fogFar: far,
+      /**
+       * Where to put the shadow box, relative to the camera.
+       *
+       * Up the road rather than centred on the camera. The camera sits eight
+       * metres behind the car and looks forward, so half a box centred on it is
+       * behind the picture - and at three hundred km/h the useful half is the
+       * hundred metres in front of the car, not the seventy behind it.
+       */
+      ahead: [
+        Math.sin(this.cam.yaw) * SHADOW_AHEAD,
+        0,
+        Math.cos(this.cam.yaw) * SHADOW_AHEAD,
+      ],
     });
   }
 
@@ -704,19 +729,73 @@ export class Renderer {
       // definition; taken off the terrain it slid down the beach on the sea
       // front and left the edge of the track dropping into nothing. On the
       // bridge there is none, because there the railing is the barrier.
-      if (away < 640 && a.bridge === undefined && !a.deck) {
+      if (away < RAIL_FAR && a.bridge === undefined && !a.deck) {
+        /**
+         * Armco has a shape, and the shape is the whole of why it reads.
+         *
+         * It was two flat quads - a face and a back - from half a metre up to a
+         * metre. Flat, it is a ribbon: one colour all the way round the circuit,
+         * which is what a barrier looks like when the only thing that varies
+         * along it is the red and white it is painted.
+         *
+         * Three strips instead, stepped in and out by six centimetres, which is
+         * the W a crash barrier is pressed into. Nothing about that would have
+         * been visible under the old renderer, because a face had whatever
+         * shading was typed next to it - and under this one the three strips
+         * face three different ways, so the top and bottom catch the sun and the
+         * middle does not. That is a line of light running along the barrier all
+         * the way to the corner, and it costs four triangles a node.
+         */
+        const paint = tint((i % 8) < 4 ? C.armco : C.kerbA);
+        const back = tint(shade(C.armco, 0.7));
         for (const side of [-1, 1]) {
           const at = side * a.wall;
+          const nx = a.nx * side;
+          const nz = a.nz * side;
           const ax = a.x + a.nx * at;
           const az = a.z + a.nz * at;
           const bx = b.x + b.nx * at;
           const bz = b.z + b.nz * at;
           const ay = roadY(a, at);
           const by = roadY(b, at);
-          rt.quad(ax, ay + 0.5, az, bx, by + 0.5, bz, bx, by + 1.05, bz, ax, ay + 1.05, az,
-            tint((i % 8) < 4 ? C.armco : C.kerbA));
-          rt.quad(ax, ay + 0.5, az, ax, ay + 1.05, az, bx, by + 1.05, bz, bx, by + 0.5, bz,
-            tint(shade(C.armco, 0.7)));
+          // Out, in, out: the three faces of the pressing, each one leaning a
+          // different way so each one takes a different amount of the sun.
+          const strip = (y0, y1, o0, o1) => {
+            rt.quad(
+              ax + nx * o0, ay + y0, az + nz * o0,
+              bx + nx * o0, by + y0, bz + nz * o0,
+              bx + nx * o1, by + y1, bz + nz * o1,
+              ax + nx * o1, ay + y1, az + nz * o1,
+              paint,
+            );
+          };
+          strip(0.50, 0.70, -0.05, 0.06);
+          strip(0.70, 0.88, 0.06, -0.04);
+          strip(0.88, 1.05, -0.04, 0.05);
+          // The back of it, as one face: nobody sees the shape from behind.
+          rt.quad(ax - nx * 0.06, ay + 0.5, az - nz * 0.06, ax - nx * 0.06, ay + 1.05, az - nz * 0.06,
+            bx - nx * 0.06, by + 1.05, bz - nz * 0.06, bx - nx * 0.06, by + 0.5, bz - nz * 0.06,
+            back);
+          /**
+           * And a post, every other node.
+           *
+           * Twelve metres apart rather than the four a real one is: at four they
+           * are a picket fence at any distance past fifty metres, and at twelve
+           * they are what they are for, which is to say that the rail is
+           * standing on something. They are also what makes the barrier tell you
+           * how fast you are going, which is the job the marker posts do on the
+           * other side of the road.
+           */
+          if ((((i % 2) + 2) % 2) === 0) {
+            const foot = groundY(a, side, Math.abs(at));
+            const top = ay + 0.92;
+            const px = ax - nx * 0.07;
+            const pz = az - nz * 0.07;
+            const wx = -a.nz * side * 0.09;
+            const wz = a.nx * side * 0.09;
+            rt.quad(px - wx, foot, pz - wz, px + wx, foot, pz + wz,
+              px + wx, top, pz + wz, px - wx, top, pz - wz, back);
+          }
         }
       }
 
@@ -824,7 +903,7 @@ export class Renderer {
           const foot = prop.flat ? levelWith(a, off) : groundY(a, Math.sign(off) || 1, Math.abs(off));
           drawProp(rt, prop,
             a.x + a.nx * off, foot + (prop.lift || 0), a.z + a.nz * off,
-            tint, local, prop.align ? a.a : 0, state.tick, night);
+            tint, local, prop.align ? a.a : 0, state.tick, night, away);
         }
       }
     }
@@ -1137,7 +1216,19 @@ export class Renderer {
       // Nose up the hill or down it, so the car sits on the road rather than
       // through it.
       const pitch = -Math.atan(at.slope);
-      drawShadow(rt, at.x, at.y, at.z, yaw, 1.15, 2.5, tint, pitch);
+      /**
+       * The blob under the car, when there is nothing better.
+       *
+       * It was a dark quad on the road under every car, at the size of the car,
+       * and it was the only shadow this game had. There is a real one now - the
+       * car is in the same buffer the sun's view is drawn from, so it casts
+       * where the sun says it should - and drawing both puts two shadows under
+       * one car pointing in different directions.
+       *
+       * It stays for the machines that cannot do the real one, where it is still
+       * the difference between a car on the road and a car hovering over it.
+       */
+      if (!rt.shadow) drawShadow(rt, at.x, at.y, at.z, yaw, 1.15, 2.5, tint, pitch);
       drawRacer(rt, car, at.x, at.y, at.z, yaw, tint, this.lightAt, pitch);
       // Smoke when the tyres have given up, dust when they are on the grass.
       const rough = Math.abs(car.x) > at.node.half + RUMBLE;
