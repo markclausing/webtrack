@@ -8,10 +8,17 @@ runs out: you start in daylight, the sun is on the horizon by the second lap and
 you finish in the dark.
 
 No dependencies, no build step, no assets — HTML, CSS and JavaScript exactly as
-the browser receives them, and a WebGL renderer of about six hundred lines with
+the browser receives them, and a WebGL renderer of about nine hundred lines with
 no library behind it. The picture is drawn at the size of your window: flat
-shaded, lit by one sun that casts real shadows, and nothing in it is a texture
-or a sprite.
+shaded, lit by one sun that casts real shadows, and nothing in it is a sprite.
+
+There are exactly three textures and they are not loaded from anywhere. The
+tarmac, the ground beside it and the concrete are written into a byte array at
+startup out of a seeded generator, in about twenty milliseconds, and that is why
+this repository has no `assets/` folder. They are not colours, either: every
+colour here was chosen against a palette and then put through a time-of-day
+transform, so the textures are grey modulations with a mean of one and the shader
+multiplies. The tarmac stays the colour the palette says and gains an aggregate.
 
 ![The last corner at Zandvoort, eighteen degrees of banking](docs/screenshots/banked.png)
 
@@ -81,6 +88,12 @@ and most of it where the kerbs are going past. It joins the three things this
 game already did to say *fast*: the lens opening from fifty degrees to seventy,
 the camera dropping two feet and coming in, and the whole thing starting to
 shiver.
+
+**And the models have no texture coordinates**, which is why the three that exist
+are sampled from where a surface is in the world rather than from a picture of
+it. Fifteen hundred lines of polygons written out by hand, not one of which says
+where it is on an image — but every one of them knows where it is standing, and
+for a road and a field that is the same information.
 
 **There is weather.** The sky was a gradient, which is a perfectly good sky for a
 game drawn at three hundred and twenty pixels across and is also a third of the

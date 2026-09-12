@@ -138,6 +138,179 @@ export function viewProjection(out, cam, focal, width, height) {
   return out;
 }
 
+// --- The surfaces ------------------------------------------------------------
+
+/** A deterministic little generator, so every player gets the same tarmac. */
+function rng(seed) {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * How many texels across a surface is.
+ *
+ * A hundred and twenty-eight, which over the four metres the tarmac is sampled
+ * at is three centimetres a texel. Two hundred and fifty-six was the first
+ * number tried and cost sixty-three milliseconds of arithmetic at startup for a
+ * difference nobody can see: these are modulations of a colour by a few per
+ * cent, not pictures.
+ */
+const SURFACE = 128;
+
+/**
+ * Value noise on a grid that wraps, so the surface tiles.
+ *
+ * Tiling is the whole requirement. These are sampled from world coordinates
+ * that run for kilometres, so a texture with a seam in it has a seam every four
+ * metres all the way down the straight - which is a thing you notice at three
+ * hundred and not at rest, which is the worst way to find it.
+ */
+function noiseField(seed, grid) {
+  const rand = rng(seed);
+  const points = new Float32Array(grid * grid);
+  for (let i = 0; i < points.length; i++) points[i] = rand();
+  const at = (a, b) => points[(((b % grid) + grid) % grid) * grid + (((a % grid) + grid) % grid)];
+  return (x, y) => {
+    const fx = x * grid;
+    const fy = y * grid;
+    const ix = Math.floor(fx);
+    const iy = Math.floor(fy);
+    const tx = fx - ix;
+    const ty = fy - iy;
+    const sx = tx * tx * (3 - 2 * tx);
+    const sy = ty * ty * (3 - 2 * ty);
+    const a = at(ix, iy);
+    const b = at(ix + 1, iy);
+    const c = at(ix, iy + 1);
+    const d = at(ix + 1, iy + 1);
+    const top = a + (b - a) * sx;
+    return top + ((c + (d - c) * sx) - top) * sy;
+  };
+}
+
+/**
+ * The three surfaces, drawn here, out of nothing.
+ *
+ * This is the one place in the game with a texture in it and there is still no
+ * assets folder: they are written into a byte array by the arithmetic below and
+ * handed to the card, which costs about twenty milliseconds once.
+ *
+ * They are not colours. Every colour in this game was chosen against a palette
+ * and then put through a time-of-day transform, and a texture that replaced any
+ * of that would be a texture that has to know about dusk, about the twenty-seven
+ * circuits' themes, and about the sea at Monaco. So these are *modulations* -
+ * grey, with a mean of one - and the shader multiplies. The tarmac stays the
+ * colour the palette says and gains an aggregate; the grass stays the colour the
+ * circuit says and gains tufts. Nothing else had to change.
+ *
+ * And they are sampled from world coordinates rather than from texture
+ * coordinates, because the models have none: fifteen hundred lines of polygons
+ * written out by hand, not one of which says where it is on a picture. What
+ * every surface does know is where it is in the world, which for a road and a
+ * field is the same information.
+ */
+function makeSurfaces(gl) {
+  const make = (build) => {
+    const data = new Uint8Array(SURFACE * SURFACE * 4);
+    build(data);
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, SURFACE, SURFACE, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    // A road seen at three degrees is the case anisotropy exists for, and this
+    // game is mostly a road seen at three degrees.
+    const aniso = gl.getExtension('EXT_texture_filter_anisotropic')
+      || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
+    if (aniso) {
+      const most = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+      gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, most));
+    }
+    return texture;
+  };
+
+  const put = (data, i, v) => {
+    const b = Math.max(0, Math.min(255, Math.round(v)));
+    data[i] = b; data[i + 1] = b; data[i + 2] = b; data[i + 3] = 255;
+  };
+
+  return {
+    /**
+     * Tarmac: aggregate, and the patches it has been mended with.
+     *
+     * Three things at three scales. The fine speckle is the stone in it and is
+     * what you see from inside the car; the patches are what you see a hundred
+     * metres up the road, where the speckle has gone to grey; and the faint
+     * darker lane down the middle is where everybody drives, which is the only
+     * part of this that is about a racing circuit rather than about a road.
+     */
+    tarmac: make((data) => {
+      const grit = noiseField(7, 64);
+      const patch = noiseField(11, 8);
+      const lane = noiseField(13, 4);
+      for (let y = 0; y < SURFACE; y++) {
+        for (let x = 0; x < SURFACE; x++) {
+          const u = x / SURFACE;
+          const v = y / SURFACE;
+          let n = 128;
+          n += (grit(u, v) - 0.5) * 34;
+          n += (patch(u, v) - 0.5) * 16;
+          n += (lane(u, v) - 0.5) * 9;
+          put(data, (y * SURFACE + x) * 4, n);
+        }
+      }
+    }),
+
+    /** Grass, sand, gravel: one mottle, at two scales, for all three. */
+    ground: make((data) => {
+      const broad = noiseField(23, 6);
+      const tuft = noiseField(29, 24);
+      for (let y = 0; y < SURFACE; y++) {
+        for (let x = 0; x < SURFACE; x++) {
+          const u = x / SURFACE;
+          const v = y / SURFACE;
+          let n = 128;
+          n += (broad(u, v) - 0.5) * 30;
+          n += (tuft(u, v) - 0.5) * 22;
+          put(data, (y * SURFACE + x) * 4, n);
+        }
+      }
+    }),
+
+    /**
+     * Concrete: courses, and the streaks down them.
+     *
+     * Horizontal bands, because everything this goes on was poured or laid in
+     * layers, and a vertical streak every so often because everything this goes
+     * on has been rained on.
+     */
+    stone: make((data) => {
+      const grain = noiseField(41, 32);
+      const streak = noiseField(43, 12);
+      for (let y = 0; y < SURFACE; y++) {
+        const course = Math.sin((y / SURFACE) * Math.PI * 2 * 8) * 5;
+        for (let x = 0; x < SURFACE; x++) {
+          const u = x / SURFACE;
+          const v = y / SURFACE;
+          let n = 128 + course;
+          n += (grain(u, v) - 0.5) * 14;
+          n += (streak(u * 0.25, v) - 0.5) * 18;
+          put(data, (y * SURFACE + x) * 4, n);
+        }
+      }
+    }),
+  };
+}
+
 // --- The two programs --------------------------------------------------------
 
 /**
@@ -205,6 +378,28 @@ uniform float uFogFar;
 uniform sampler2D uShadow;
 uniform float uShadowTexel;
 uniform float uShadowOn;
+uniform sampler2D uTarmac;
+uniform sampler2D uGround;
+uniform sampler2D uStone;
+uniform float uTextured;
+
+/**
+ * A surface, sampled from where it is in the world.
+ *
+ * Two projections rather than three. A full triplanar blend costs three samples
+ * and two of them are thrown away on everything in this game that is flat - the
+ * road, the run-off, the sand - so this takes the one the normal points most
+ * along and accepts the stretch on the faces in between. On a wall with a corner
+ * in it that shows as the texture changing direction at the corner, which is
+ * where a change of direction belongs.
+ */
+vec3 surface(sampler2D tex, vec3 world, vec3 n, float scale) {
+  vec2 uv = abs(n.y) > 0.6 ? world.xz
+    : abs(n.x) > abs(n.z) ? world.zy : world.xy;
+  // Grey with a mean of a half, doubled: a modulation around one, so the palette
+  // decides the colour and this decides only the unevenness.
+  return texture2D(tex, uv * scale).rgb * 2.0;
+}
 
 /**
  * How much of the sun reaches this pixel.
@@ -231,25 +426,6 @@ float sunlight(vec3 sc, float slope) {
     lit += texture2D(uShadow, sc.xy + o).r + bias < sc.z ? 0.0 : 1.0;
   }
   return lit * 0.25;
-}
-
-/**
- * Value noise, from a hash, with nothing behind it.
- *
- * Four corners of a grid cell, smoothed between. It is the cheapest noise there
- * is and it is the right one here: what it is standing in for is a surface being
- * slightly uneven, which has no structure to get wrong.
- */
-float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-
-float grain(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
 void main() {
@@ -307,8 +483,24 @@ void main() {
    * is a flat-shaded game and what it is standing in for is the unevenness of a
    * surface, not a pattern on it. At ten per cent the road looks like carpet.
    */
-  if (vColour.a > 0.930 && vColour.a < 0.950) {
-    colour *= 0.96 + 0.08 * (grain(vWorld.xz * 0.22) * 0.65 + grain(vWorld.xz * 1.7) * 0.35);
+  /**
+   * And the three surfaces big enough to need one.
+   *
+   * Which one is in the alpha byte, which the solid pass has no use for because
+   * nothing is blended while it is drawn - the same channel the paint and the
+   * lights ride in, five values apart so a window test cannot confuse them.
+   *
+   * The strength is held down to a third of what the texture says. These are
+   * flat-shaded polygons under one sun and what the texture is standing in for
+   * is a surface being uneven, not a pattern on it; at full strength the road
+   * looks like gravel and the grass looks like a carpet sample.
+   */
+  if (uTextured > 0.5 && vColour.a > 0.905 && vColour.a < 0.950) {
+    vec3 tex = vec3(1.0);
+    if (vColour.a > 0.930) tex = surface(uTarmac, vWorld, n, 0.25);
+    else if (vColour.a > 0.912) tex = surface(uGround, vWorld, n, 0.11);
+    else tex = surface(uStone, vWorld, n, 0.16);
+    colour *= mix(vec3(1.0), tex, 0.34);
   }
 
   /**
@@ -769,6 +961,18 @@ export class Batch {
      * straight to the screen exactly as it was before any of this. A missing
      * glow is a missing glow.
      */
+    /**
+     * The three surfaces, built once, out of arithmetic.
+     *
+     * Wrapped in a try because a card that will not give us these is a card that
+     * should still get a picture: the shader falls back to the flat colour it
+     * had before there were any, which is the game as it was yesterday.
+     */
+    try {
+      this.surfaces = makeSurfaces(gl);
+    } catch {
+      this.surfaces = null;
+    }
     this.hdr = makeSceneBuffer(gl);
     if (this.hdr) {
       this.post = {
@@ -842,10 +1046,11 @@ export class Batch {
      */
     this.emissive = 0;
     /**
-     * Tarmac, grass, sand: the surfaces big enough to need breaking up.
+     * Which surface this is: 1 tarmac, 2 ground, 3 stone. Nought for none.
      *
-     * The third of these material flags and the last. What it buys is a little
-     * unevenness worked out from where the surface is in the world, which is the
+     * The last of the material flags and the one with more than two states. What
+     * it buys is a texture on the three things in this picture large enough to
+     * need one, sampled from where the surface is in the world - which is the
      * only kind of texture available to a renderer whose models have no UV
      * coordinates and are not going to get any.
      */
@@ -1001,7 +1206,11 @@ export class Batch {
     const sink = this.stipple ? this.clear : this.solid;
     if ((sink.count + 3) * STRIDE > sink.data.byteLength) grow(sink);
     const alpha = this.stipple ? 150
-      : this.emissive ? 245 : this.ground ? 240 : this.shine ? 250 : 255;
+      : this.emissive ? 245
+        : this.ground === 1 ? 240
+          : this.ground === 2 ? 235
+            : this.ground === 3 ? 230
+              : this.shine ? 250 : 255;
     // The chequered second colour is now simply the colour in between.
     const c = this.dither ? blend(colour, this.dither) : colour;
     const ux = bx - ax; const uy = by - ay; const uz = bz - az;
@@ -1160,6 +1369,19 @@ export class Batch {
       gl.uniform1f(this.flat.uniforms.uShadowTexel, 1 / SHADOW_SIZE);
     }
     gl.uniform1f(this.flat.uniforms.uShadowOn, this.shadow ? 1 : 0);
+    if (this.surfaces) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.surfaces.tarmac);
+      gl.uniform1i(this.flat.uniforms.uTarmac, 1);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.surfaces.ground);
+      gl.uniform1i(this.flat.uniforms.uGround, 2);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.surfaces.stone);
+      gl.uniform1i(this.flat.uniforms.uStone, 3);
+      gl.activeTexture(gl.TEXTURE0);
+    }
+    gl.uniform1f(this.flat.uniforms.uTextured, this.surfaces ? 1 : 0);
     const u = this.flat.uniforms;
     gl.uniform3fv(u.uSun, this.sun || [0, 1, 0]);
     gl.uniform3fv(u.uCamera, [this.cam.x, this.cam.y, this.cam.z]);

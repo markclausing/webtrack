@@ -132,11 +132,15 @@ function crown(rt, colour, y0, y1, radius, sides = 6, skirt = true) {
  */
 function box(rt, tint, colour, x0, x1, y0, y1, z0, z1) {
   const c = tint(colour);
+  // A box in this game is a building, a wall, a crate or a grandstand, and all
+  // four are poured or laid rather than grown or pressed. They get the concrete.
+  rt.ground = 3;
   put.face(rt, c, [x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0]);
   put.face(rt, c, [x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1]);
   put.face(rt, c, [x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1]);
   put.face(rt, c, [x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0]);
   put.face(rt, c, [x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1]);
+  rt.ground = 0;
 }
 
 // --- Scenery -----------------------------------------------------------------

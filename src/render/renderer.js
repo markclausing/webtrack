@@ -970,11 +970,10 @@ export class Renderer {
           : from;
         if (((i % every) + every) % every !== 0) continue;
         const far = nodeStep(route, i, every);
-        // The near bands are grass, sand and gravel, and they are the other
-        // thing in this picture large enough and flat enough to need breaking
-        // up. Not the far ones: at three hundred metres out a band is a wedge of
-        // colour under the haze and the grain in it would be noise.
-        rt.ground = band < 2 ? 1 : 0;
+        // The near bands are grass, sand and gravel, and they take the ground
+        // surface. Not the far ones: at three hundred metres out a band is a
+        // wedge of colour under the haze and a texture on it is noise.
+        rt.ground = band < 2 ? 2 : 0;
         for (const side of [-1, 1]) {
           const colour = bandColour(local, a, side, kind, i, this.surf);
           rt.quad(
