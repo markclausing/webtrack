@@ -779,7 +779,7 @@ export class Batch {
     this.ui.count = 0;
     this.tris = 0;
 
-    if (this.hdr) gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdr.frame);
+    if (this.hdr) gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdr.draw);
     gl.viewport(0, 0, this.w, this.h);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST);
@@ -1005,7 +1005,7 @@ export class Batch {
       // point picture when there is one and the screen when there is not. Bound
       // to null here, the sky went into the picture and everything after it went
       // to the screen - where the glow pass then painted the picture over it.
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdr ? this.hdr.frame : null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdr ? this.hdr.draw : null);
       gl.viewport(0, 0, this.w, this.h);
     }
 
@@ -1087,6 +1087,18 @@ export class Batch {
   glow() {
     const gl = this.gl;
     if (!this.hdr) return;
+    // The samples down to one picture, colour and depth both, before anything
+    // reads either of them.
+    if (this.hdr.multi) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.hdr.multi.frame);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.hdr.frame);
+      gl.blitFramebuffer(0, 0, this.w, this.h, 0, 0, this.w, this.h,
+        gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      gl.blitFramebuffer(0, 0, this.w, this.h, 0, 0, this.w, this.h,
+        gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
@@ -1219,6 +1231,11 @@ function makeSceneBuffer(gl, width = gl.drawingBufferWidth, height = gl.drawingB
       gl.deleteTexture(part.texture);
       if (part.depth) gl.deleteTexture(part.depth);
     }
+    if (old.multi) {
+      gl.deleteFramebuffer(old.multi.frame);
+      gl.deleteRenderbuffer(old.multi.colour);
+      gl.deleteRenderbuffer(old.multi.depth);
+    }
   }
   const float = gl.webgl2
     ? gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')
@@ -1267,6 +1284,42 @@ function makeSceneBuffer(gl, width = gl.drawingBufferWidth, height = gl.drawingB
   };
 
   const scene = target(width, height, true);
+  /**
+   * And the same picture again, multisampled, which is the one drawn into.
+   *
+   * `antialias: true` on the context buys a multisampled default framebuffer,
+   * and the moment the world started being drawn into one of our own it bought
+   * nothing at all: every edge in the game went hard overnight and the only
+   * reason it was not noticed immediately is that flat shading has a lot of
+   * hard edges in it on purpose.
+   *
+   * So the world goes into multisampled renderbuffers and is resolved into the
+   * texture afterwards, which is one blit and is what the hardware is for. Both
+   * the colour and the depth are resolved, because the occlusion pass reads the
+   * depth and an aliased depth gives an aliased contact shadow.
+   *
+   * WebGL 1 cannot do it at all and gets the picture without, which is what it
+   * would have had anyway.
+   */
+  let multi = null;
+  if (gl.webgl2) {
+    const samples = Math.min(4, gl.getParameter(0x8D57 /* MAX_SAMPLES */) || 1);
+    if (samples > 1) {
+      const colour = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, colour);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, 0x881A /* RGBA16F */, width, height);
+      const depth = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, width, height);
+      const frame = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, frame);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colour);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+        multi = { frame, colour, depth, samples, w: width, h: height };
+      }
+    }
+  }
   // A quarter of the width, which is a sixteenth of the pixels. A glow is the
   // one thing in a picture allowed to be low resolution.
   const hw = Math.max(1, Math.floor(width / 4));
@@ -1279,7 +1332,9 @@ function makeSceneBuffer(gl, width = gl.drawingBufferWidth, height = gl.drawingB
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.bindTexture(gl.TEXTURE_2D, null);
   if (!scene || !half || !spare || !ao) return null;
-  return { ...scene, half, spare, ao };
+  // `draw` is what the world is drawn into and `frame` is what is read back.
+  // They are the same thing when there is no multisampling to resolve.
+  return { ...scene, half, spare, ao, multi, draw: multi ? multi.frame : scene.frame };
 }
 
 /** A growable heap of vertices, with the two views everything is written through. */
