@@ -493,6 +493,88 @@ void main() {
 }`;
 
 /**
+ * How much of the sky a pixel can see, from the depth of what is around it.
+ *
+ * There are no shadows from the ambient light - it arrives from everywhere, and
+ * a shadow map answers one direction - so the places where light cannot in
+ * practice reach are exactly the places this picture had no way of darkening: the
+ * gap under a car, the inside corner where a wall meets the ground, the step down
+ * the outside of a kerb. Flat shading makes that worse rather than better,
+ * because two faces meeting at a right angle are two flat colours with a hard
+ * line between them and nothing to say which way the corner goes.
+ *
+ * Eight taps on a spiral, comparing view depth. A neighbour that is nearer than
+ * this pixel is something between it and the sky. The radius is in metres and
+ * converted to pixels per sample, so a contact shadow is the same size in the
+ * world whether it is under your own car or under one two hundred metres up the
+ * road - which a fixed pixel radius is not, and which is what makes a screen
+ * space effect look like a screen space effect.
+ *
+ * `uFalloff` is what stops the sky occluding the horizon: past this many metres
+ * of depth difference the neighbour is not a corner, it is a different object
+ * altogether, and it is ignored.
+ */
+const AO_FS = `
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D uDepth;
+uniform vec2 uSize;
+uniform float uNear;
+uniform float uFar;
+uniform float uFocal;
+uniform float uRadius;
+uniform float uFalloff;
+
+float viewDepth(vec2 uv) {
+  float z = texture2D(uDepth, uv).r * 2.0 - 1.0;
+  return 2.0 * uFar * uNear / ((uFar + uNear) - z * (uFar - uNear));
+}
+
+void main() {
+  float here = viewDepth(vUV);
+  if (here >= uFar * 0.9) {
+    // The sky. Nothing is in front of it and nothing occludes it.
+    gl_FragColor = vec4(1.0);
+    return;
+  }
+  /**
+   * A world-space radius, in pixels at this depth, with a ceiling on it.
+   *
+   * The radius is in metres so that a contact shadow is the same size in the
+   * world wherever it is - which is right, and which for the car eight metres
+   * from the camera works out at nearly two hundred pixels. At that size it
+   * stops being a contact shadow and becomes a bruise the width of the road. The
+   * cap costs correctness on the nearest metre or two of the picture and buys
+   * back the thing the effect is for.
+   */
+  float px = min(uRadius * uFocal / max(here, 0.5), 14.0);
+  // Not named step: that is a built-in, and shadowing it makes the compiler
+  // reject the call to it four lines down with a message about a function name.
+  vec2 reach = px / uSize;
+  float dark = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float a = float(i) * 0.7853981634;
+    // Two rings rather than one, so the near samples catch a tight corner and
+    // the far ones catch a car sitting over the road.
+    float r = (i == 0 || i == 3 || i == 5 || i == 6) ? 0.45 : 1.0;
+    vec2 at = vUV + vec2(cos(a), sin(a)) * reach * r;
+    float diff = here - viewDepth(at);
+    /**
+     * Near enough to be the same object, and no nearer.
+     *
+     * The second half is the whole difference between an occlusion and a dark
+     * halo round everything. A pixel of distant grass next to a car sees the car
+     * as something between it and the sky, which it is - and it is also two
+     * hundred metres away and has nothing to do with that piece of grass. A
+     * difference bigger than the radius is not a crease, it is a different
+     * object, and it is thrown away rather than counted at full strength.
+     */
+    dark += step(0.03, diff) * (1.0 - smoothstep(uFalloff * 0.5, uFalloff, diff));
+  }
+  gl_FragColor = vec4(vec3(1.0 - dark * 0.0625), 1.0);
+}`;
+
+/**
  * The world and its glow, onto the screen, with the range brought back in.
  *
  * A soft knee rather than a tone curve: below four fifths of white nothing is
@@ -515,10 +597,15 @@ precision highp float;
 varying vec2 vUV;
 uniform sampler2D uScene;
 uniform sampler2D uGlow;
+uniform sampler2D uOcclusion;
 uniform float uBloom;
+uniform float uAo;
 const float KNEE = 0.8;
 void main() {
-  vec3 c = texture2D(uScene, vUV).rgb + texture2D(uGlow, vUV).rgb * uBloom;
+  // The occlusion first, and before the glow: a light bleeding out of a corner
+  // is not dimmed by the corner it is bleeding out of.
+  float ao = mix(1.0, texture2D(uOcclusion, vUV).r, uAo);
+  vec3 c = texture2D(uScene, vUV).rgb * ao + texture2D(uGlow, vUV).rgb * uBloom;
   float lum = dot(c, vec3(0.299, 0.587, 0.114));
   if (lum > KNEE) {
     float over = (lum - KNEE) / (1.0 - KNEE);
@@ -583,12 +670,15 @@ export class Batch {
       this.post = {
         bright: compile(gl, POST_VS, BRIGHT_FS),
         blur: compile(gl, POST_VS, BLUR_FS),
+        ao: compile(gl, POST_VS, AO_FS),
         compose: compile(gl, POST_VS, COMPOSE_FS),
         // One triangle, big enough to cover the screen.
         quad: buffer(gl, gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3])),
       };
     }
     this.bloom = 1;
+    /** How much of the occlusion is used. One is all of it, nought is none. */
+    this.ao = 1;
 
     this.solid = makeSink(START_TRIS);
     this.clear = makeSink(2048);
@@ -1017,6 +1107,32 @@ export class Batch {
 
     const half = this.hdr.half;
     const spare = this.hdr.spare;
+
+    // How much of the sky each pixel can see, from the depth of its neighbours.
+    // Its own pass because it reads depth rather than colour.
+    const ao = this.hdr.ao;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, ao.frame);
+    gl.viewport(0, 0, ao.w, ao.h);
+    gl.useProgram(this.post.ao.program);
+    gl.enableVertexAttribArray(this.post.ao.attribs.aPos);
+    gl.vertexAttribPointer(this.post.ao.attribs.aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.hdr.depth);
+    gl.uniform1i(this.post.ao.uniforms.uDepth, 0);
+    gl.uniform2f(this.post.ao.uniforms.uSize, ao.w, ao.h);
+    gl.uniform1f(this.post.ao.uniforms.uNear, NEAR);
+    gl.uniform1f(this.post.ao.uniforms.uFar, FAR);
+    gl.uniform1f(this.post.ao.uniforms.uFocal, this.focal * (ao.w / this.w));
+    // A metre and a bit: the gap under a car, the step off a kerb, the corner
+    // where a wall meets the ground. Bigger than that and it stops being a
+    // contact shadow and starts being a stain round everything.
+    gl.uniform1f(this.post.ao.uniforms.uRadius, 0.85);
+    // And the depth beyond which a neighbour is a different object rather than
+    // the other side of a corner. A little under the radius: a crease this size
+    // cannot be deeper than it is wide.
+    gl.uniform1f(this.post.ao.uniforms.uFalloff, 0.7);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
     pass(this.post.bright, half, this.hdr.texture, (u) => gl.uniform1f(u.uThreshold, 1.0));
     pass(this.post.blur, spare, half.texture, (u) => gl.uniform2f(u.uStep, 1 / half.w, 0));
     pass(this.post.blur, half, spare.texture, (u) => gl.uniform2f(u.uStep, 0, 1 / half.h));
@@ -1033,7 +1149,11 @@ export class Batch {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, half.texture);
     gl.uniform1i(this.post.compose.uniforms.uGlow, 1);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, ao.texture);
+    gl.uniform1i(this.post.compose.uniforms.uOcclusion, 2);
     gl.uniform1f(this.post.compose.uniforms.uBloom, this.bloom);
+    gl.uniform1f(this.post.compose.uniforms.uAo, this.ao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.activeTexture(gl.TEXTURE0);
     gl.enable(gl.DEPTH_TEST);
@@ -1093,11 +1213,11 @@ const SUN_BRIGHT = 2.5;
  */
 function makeSceneBuffer(gl, width = gl.drawingBufferWidth, height = gl.drawingBufferHeight, old = null) {
   if (old) {
-    for (const part of [old, old.half, old.spare]) {
+    for (const part of [old, old.half, old.spare, old.ao]) {
       if (!part) continue;
       gl.deleteFramebuffer(part.frame);
       gl.deleteTexture(part.texture);
-      if (part.depth) gl.deleteRenderbuffer(part.depth);
+      if (part.depth) gl.deleteTexture(part.depth);
     }
   }
   const float = gl.webgl2
@@ -1124,10 +1244,23 @@ function makeSceneBuffer(gl, width = gl.drawingBufferWidth, height = gl.drawingB
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
     let depth = null;
     if (withDepth) {
-      depth = gl.createRenderbuffer();
-      gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
-      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+      /**
+       * A texture rather than a renderbuffer, because it is read back.
+       *
+       * What reads it is the occlusion pass: how much of the sky a pixel can
+       * see is a question about the depth of its neighbours and about nothing
+       * else, and a renderbuffer is a place to put depth that cannot be asked.
+       */
+      depth = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, depth);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.webgl2 ? gl.DEPTH_COMPONENT24 : gl.DEPTH_COMPONENT,
+        w, h, 0, gl.DEPTH_COMPONENT, gl.webgl2 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depth, 0);
+      gl.bindTexture(gl.TEXTURE_2D, texture);
     }
     const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
     return ok ? { texture, frame, depth, w, h } : null;
@@ -1140,10 +1273,13 @@ function makeSceneBuffer(gl, width = gl.drawingBufferWidth, height = gl.drawingB
   const hh = Math.max(1, Math.floor(height / 4));
   const half = target(hw, hh, false);
   const spare = target(hw, hh, false);
+  // And the occlusion, at half the width rather than a quarter: a glow is
+  // allowed to be soft and a contact shadow is not.
+  const ao = target(Math.max(1, Math.floor(width / 2)), Math.max(1, Math.floor(height / 2)), false);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.bindTexture(gl.TEXTURE_2D, null);
-  if (!scene || !half || !spare) return null;
-  return { ...scene, half, spare };
+  if (!scene || !half || !spare || !ao) return null;
+  return { ...scene, half, spare, ao };
 }
 
 /** A growable heap of vertices, with the two views everything is written through. */

@@ -54,6 +54,9 @@ import { Hud, HUD_BASE_H } from './hud.js';
  */
 const RAIL_FAR = 900;
 
+/** How far out a kerb is drawn with a shape on it rather than flat. */
+const KERB_FLAT = 250;
+
 /** How far up the road the shadow box is pushed, in metres. */
 const SHADOW_AHEAD = 60;
 
@@ -700,19 +703,56 @@ export class Renderer {
       );
       rt.ground = 0;
       rt.dither = 0;
-      // Kerbs. Red and white, one node each, which at three hundred and fifty is
-      // sixteen stripes a second going past at the edge of the screen.
+      /**
+       * Kerbs. Red and white, one node each, which at three hundred and fifty is
+       * sixteen stripes a second going past at the edge of the screen.
+       *
+       * And they stand up, which they did not. A kerb was one flat quad painted
+       * on the road, so the only thing separating it from a stripe of paint was
+       * its colour - and a stripe of paint is exactly what it looked like from
+       * the cockpit, which is where you look at it for three minutes.
+       *
+       * Five centimetres, over three faces: a ramp the car climbs, a flat top,
+       * and a lip down the far side. The ramp and the lip face different ways, so
+       * under a sun they are different brightnesses, and that is what makes the
+       * edge of the road read as an edge. Five rather than the ten a real one is:
+       * the simulation has no kerb to ride, and a car sitting on the road at the
+       * height of the road should not have its wheels buried in something.
+       *
+       * Only where you can see it. Past two hundred and fifty metres it is one
+       * quad again, as it always was, because past there it is two pixels.
+       */
       const kerb = road((i % 2) < 1 ? C.kerbA : C.kerbB);
+      const lip = road(shade((i % 2) < 1 ? C.kerbA : C.kerbB, 0.82));
+      const RISE = 0.05;
+      const RAMP = 0.5;
       for (const side of [-1, 1]) {
         const ea = side * (ha + RUMBLE);
         const eb = side * (hb + RUMBLE);
-        rt.quad(
-          a.x + a.nx * side * ha, roadY(a, side * ha), a.z + a.nz * side * ha,
-          a.x + a.nx * ea, roadY(a, ea), a.z + a.nz * ea,
-          b.x + b.nx * eb, roadY(b, eb), b.z + b.nz * eb,
-          b.x + b.nx * side * hb, roadY(b, side * hb), b.z + b.nz * side * hb,
-          kerb,
-        );
+        if (away > KERB_FLAT) {
+          rt.quad(
+            a.x + a.nx * side * ha, roadY(a, side * ha), a.z + a.nz * side * ha,
+            a.x + a.nx * ea, roadY(a, ea), a.z + a.nz * ea,
+            b.x + b.nx * eb, roadY(b, eb), b.z + b.nz * eb,
+            b.x + b.nx * side * hb, roadY(b, side * hb), b.z + b.nz * side * hb,
+            kerb,
+          );
+          continue;
+        }
+        // Three stations across it: the road edge, the top of the ramp, and the
+        // outer edge. The lip hangs from that last one down to the verge.
+        const ra = side * (ha + RAMP);
+        const rb = side * (hb + RAMP);
+        const at = (n, off, lift) => [
+          n.x + n.nx * off, roadY(n, off) + lift, n.z + n.nz * off,
+        ];
+        const p0 = at(a, side * ha, 0); const q0 = at(b, side * hb, 0);
+        const p1 = at(a, ra, RISE); const q1 = at(b, rb, RISE);
+        const p2 = at(a, ea, RISE); const q2 = at(b, eb, RISE);
+        const p3 = at(a, ea, 0); const q3 = at(b, eb, 0);
+        rt.quad(...p0, ...p1, ...q1, ...q0, kerb);
+        rt.quad(...p1, ...p2, ...q2, ...q1, kerb);
+        rt.quad(...p2, ...p3, ...q3, ...q2, lip);
       }
 
       // A broken line down the middle: three nodes of paint and three of

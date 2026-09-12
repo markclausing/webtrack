@@ -75,6 +75,12 @@ building has a bright side and a dark side and they change over as the afternoon
 goes — and the cars, the trees, the barriers and the grandstands all cast into a
 shadow map that follows the car up the road.
 
+**The kerbs stand up.** Five centimetres over three faces — a ramp the car
+climbs, a flat top and a lip down the far side — so the edge of the road catches
+the light differently from the road itself. And everything sitting on the ground
+is darkened where it meets it, worked out from the depth of what is around each
+pixel: the gap under a car, the inside of a corner, the step off a kerb.
+
 **And some things are brighter than the screen.** The picture is drawn into a
 floating point buffer, so the sun, a floodlight, the rain light on the back of
 the car you are chasing and the highlight running along a wing can all be
