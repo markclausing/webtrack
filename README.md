@@ -75,6 +75,13 @@ building has a bright side and a dark side and they change over as the afternoon
 goes — and the cars, the trees, the barriers and the grandstands all cast into a
 shadow map that follows the car up the road.
 
+**And at three hundred the edges of the picture smear.** Radially, and by the
+square of the distance from the middle — nothing at all where you are looking,
+and most of it where the kerbs are going past. It joins the three things this
+game already did to say *fast*: the lens opening from fifty degrees to seventy,
+the camera dropping two feet and coming in, and the whole thing starting to
+shiver.
+
 **There is weather.** The sky was a gradient, which is a perfectly good sky for a
 game drawn at three hundred and twenty pixels across and is also a third of the
 screen that does not move when you do. There is a cloud deck seven hundred metres

@@ -324,6 +324,21 @@ export class Renderer {
     const route = state.route;
     const rush = Math.max(0, Math.min(1, (p.speed - 24) / (TOP_SPEED - 24)));
     const eased = rush * rush;
+    /**
+     * How much the edges of the picture are smeared, for the pass at the end.
+     *
+     * The square of it, like everything else here that is about speed: at a
+     * hundred and fifty there should be almost none of this, and what is worth
+     * having is the difference between two hundred and eighty and three hundred
+     * and fifty. Kept on the renderer rather than passed down through four calls,
+     * because the post chain runs long after the camera has been worked out.
+     *
+     * A fifth rather than the third it started at. The edges of the screen are
+     * also where the car you are about to pass is, and at a third that car was a
+     * streak - which is what a camera would do and is not what a driver needs to
+     * see.
+     */
+    this.rush = eased * eased * 0.22;
 
     // Laterally the camera all but sits on the car, and looks at a point half
     // way back to the centreline ahead of it. Following loosely across the track
@@ -532,6 +547,7 @@ export class Renderer {
      */
     const roof = state.route.nodes[nodeAt(state.route, p.s).i].tunnel || 0;
     const far = FOG_FAR + roof * 2600;
+    this.rt.rush = this.rush || 0;
     this.rt.light({
       sun: [Math.sin(SUN_BEARING) * flat, Math.sin(high), Math.cos(SUN_BEARING) * flat],
       /**

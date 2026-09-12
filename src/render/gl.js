@@ -671,12 +671,45 @@ uniform sampler2D uGlow;
 uniform sampler2D uOcclusion;
 uniform float uBloom;
 uniform float uAo;
+uniform float uRush;
 const float KNEE = 0.8;
+
+/**
+ * The world, smeared outwards from the middle of the screen by how fast you are
+ * going.
+ *
+ * Everything else in this game that says "fast" is geometry: the lens opens from
+ * fifty degrees to seventy, the camera drops two feet and comes in, and the
+ * whole thing starts to shiver. All three are worth more than the number in the
+ * corner and none of them is about the pixels. This is the one that is - it is
+ * what a camera does at three hundred, and it is the last thing on the list that
+ * a flat-shaded polygon renderer could not do before there was a buffer to read
+ * back.
+ *
+ * Radially, and scaled by the square of the distance from the centre: nothing at
+ * all where you are looking, and most of it at the edges, where the kerbs are
+ * going past. Blurring the middle of the screen would only make the car you are
+ * chasing hard to see, which is the opposite of the point.
+ *
+ * Six taps. Four is a smear with steps in it at the corners of the screen and
+ * eight is not visibly better than six.
+ */
+vec3 rushed(vec2 uv) {
+  vec2 out_ = uv - 0.5;
+  float amount = uRush * dot(out_, out_);
+  if (amount < 0.0001) return texture2D(uScene, uv).rgb;
+  vec3 c = vec3(0.0);
+  for (int i = 0; i < 6; i++) {
+    c += texture2D(uScene, uv - out_ * amount * float(i) * 0.2).rgb;
+  }
+  return c / 6.0;
+}
+
 void main() {
   // The occlusion first, and before the glow: a light bleeding out of a corner
   // is not dimmed by the corner it is bleeding out of.
   float ao = mix(1.0, texture2D(uOcclusion, vUV).r, uAo);
-  vec3 c = texture2D(uScene, vUV).rgb * ao + texture2D(uGlow, vUV).rgb * uBloom;
+  vec3 c = rushed(vUV) * ao + texture2D(uGlow, vUV).rgb * uBloom;
   float lum = dot(c, vec3(0.299, 0.587, 0.114));
   if (lum > KNEE) {
     float over = (lum - KNEE) / (1.0 - KNEE);
@@ -1273,6 +1306,7 @@ export class Batch {
     gl.uniform1i(this.post.compose.uniforms.uOcclusion, 2);
     gl.uniform1f(this.post.compose.uniforms.uBloom, this.bloom);
     gl.uniform1f(this.post.compose.uniforms.uAo, this.ao);
+    gl.uniform1f(this.post.compose.uniforms.uRush, this.rush || 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.activeTexture(gl.TEXTURE0);
     gl.enable(gl.DEPTH_TEST);
