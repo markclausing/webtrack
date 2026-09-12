@@ -75,6 +75,15 @@ building has a bright side and a dark side and they change over as the afternoon
 goes — and the cars, the trees, the barriers and the grandstands all cast into a
 shadow map that follows the car up the road.
 
+**There is weather.** The sky was a gradient, which is a perfectly good sky for a
+game drawn at three hundred and twenty pixels across and is also a third of the
+screen that does not move when you do. There is a cloud deck seven hundred metres
+up now, sampled where the ray through each pixel crosses it — so the clouds sit
+in the world rather than on the screen: they stay put as you go round a corner,
+they come towards you down a straight, and they go orange at dusk along with
+everything else, because they go through the same one-colour-at-a-time transform
+the rest of the game does.
+
 **The kerbs stand up.** Five centimetres over three faces — a ramp the car
 climbs, a flat top and a lip down the far side — so the edge of the road catches
 the light differently from the road itself. And everything sitting on the ground

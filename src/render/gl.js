@@ -339,25 +339,96 @@ precision highp float;
 attribute vec2 aPos;
 attribute vec4 aColour;
 varying vec4 vColour;
+varying vec2 vNdc;
 void main() {
   vColour = aColour;
+  vNdc = aPos;
   gl_Position = vec4(aPos, 0.0, 1.0);
 }`;
 
 /**
- * The sky and the sun, and the one place in this game with a colour over one.
+ * The sky, the sun, and the clouds in between.
  *
  * `uBoost` is how much brighter than the screen a thing is. It is one for the
  * sky and two and a half for the sun, and the difference is what the bloom pass
  * later finds: a disc at exactly white bleeds nothing, because there is nothing
  * over the edge to bleed.
+ *
+ * The clouds are the reason this shader knows where the camera is pointing.
+ *
+ * A gradient is a perfectly good sky for a game that draws one at three hundred
+ * and twenty pixels across, and it was the sky here for as long as that was
+ * true. It is also a third of the screen with nothing in it, and - this is the
+ * part that matters in a driving game - a third of the screen that does not move
+ * when you do. A cloud is the only thing above the horizon that tells you you
+ * have turned.
+ *
+ * So the ray through each pixel is worked out from its device coordinates and
+ * turned into the world with the camera's own basis, and where that ray crosses
+ * a plane a kilometre up is where the cloud is sampled. That makes them sit in
+ * the world rather than on the screen: they stay put as you go round a corner
+ * and they come towards you down a straight, both of which a screen-space cloud
+ * does not do.
+ *
+ * Two octaves, not four. Near the horizon the ray is nearly flat, the crossing
+ * point runs away to the distance and a whole cloud field lands inside one pixel
+ * - so they are faded out down there, which is also what haze does to real ones.
  */
 const SCREEN_FS = `
 precision highp float;
 varying vec4 vColour;
+varying vec2 vNdc;
 uniform float uBoost;
+uniform mat3 uSkyBasis;
+uniform vec2 uRay;
+uniform vec2 uCamXZ;
+uniform vec3 uCloud;
+uniform vec3 uCloudDark;
+uniform float uCover;
+uniform float uDrift;
+
+float skyHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float skyNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(skyHash(i), skyHash(i + vec2(1.0, 0.0)), u.x),
+             mix(skyHash(i + vec2(0.0, 1.0)), skyHash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
 void main() {
-  gl_FragColor = vec4(vColour.rgb * uBoost, vColour.a);
+  vec3 colour = vColour.rgb * uBoost;
+  if (uCover > 0.001) {
+    // The ray through this pixel, in the camera's frame and then in the world.
+    vec3 dir = normalize(uSkyBasis * vec3(vNdc.x * uRay.x, vNdc.y * uRay.y, 1.0));
+    if (dir.y > 0.02) {
+      // Where it crosses the cloud deck. Seven hundred metres rather than a
+      // thousand: lower is bigger on the screen, and the deck a driver notices
+      // is the one that is over the circuit rather than over the county.
+      vec2 at = (uCamXZ + dir.xz * (700.0 / dir.y)) * 0.0009;
+      at.x += uDrift;
+      // Three octaves. Two gave something that drifted between haze and a smear;
+      // what makes a cloud read is the small stuff on the edge of the big stuff.
+      float n = skyNoise(at) * 0.54 + skyNoise(at * 2.3 + 31.4) * 0.30
+        + skyNoise(at * 5.1 + 11.7) * 0.16;
+      /**
+       * Coverage as a threshold with a narrow edge.
+       *
+       * The width of that edge is the entire difference between a cloud and a
+       * stain. Wide, every value of the noise is partly cloud and the sky is
+       * evenly grey; narrow, most of it is nothing and the rest has an outline.
+       */
+      float cloud = smoothstep(1.0 - uCover, 1.0 - uCover + 0.13, n);
+      // Gone by the horizon, where one pixel covers a mile of the deck.
+      cloud *= smoothstep(0.02, 0.22, dir.y);
+      // Lit on top and dark underneath, which from below is mostly the dark.
+      colour = mix(colour, mix(uCloudDark, uCloud, smoothstep(0.1, 0.75, dir.y)), cloud);
+    }
+  }
+  gl_FragColor = vec4(colour, vColour.a);
 }`;
 
 /**
@@ -932,7 +1003,14 @@ export class Batch {
    * time of day it is. `exposure` is worked out from the sun's height so that a
    * surface pointing straight up is left exactly the colour it was given.
    */
-  light({ sun, ambient, fogColour, fogNear, fogFar, ahead = [0, 0, 0] }) {
+  light({
+    sun, ambient, fogColour, fogNear, fogFar, ahead = [0, 0, 0],
+    cloud, cloudDark, cover = 0, drift = 0,
+  }) {
+    this.cloud = cloud;
+    this.cloudDark = cloudDark;
+    this.cover = cover;
+    this.drift = drift;
     this.sun = sun;
     this.ahead = ahead;
     this.ambient = ambient;
@@ -971,12 +1049,41 @@ export class Batch {
       gl.vertexAttribPointer(a.aColour, 4, gl.UNSIGNED_BYTE, true, 12, 8);
       gl.disable(gl.DEPTH_TEST);
       const sky = Math.min(this.skyCount || this.ui.count, this.ui.count);
+      /**
+       * What the sky shader needs to know about where the camera is pointing.
+       *
+       * The basis is the transpose of the view rotation, which for an orthonormal
+       * matrix is its inverse - so it turns a direction in the camera's frame
+       * into one in the world. `uRay` converts device coordinates back into that
+       * frame: the projection multiplied x by two focal lengths over the width,
+       * so this divides it out again.
+       */
+      const c = this.cam;
+      const m = [
+        c.cr * c.cy - c.sr * c.sp * c.sy, -c.sr * c.cp, -c.cr * c.sy - c.sr * c.sp * c.cy,
+        c.sr * c.cy + c.cr * c.sp * c.sy, c.cr * c.cp, -c.sr * c.sy + c.cr * c.sp * c.cy,
+        c.cp * c.sy, -c.sp, c.cp * c.cy,
+      ];
+      // Transposed, and in the column-major order a mat3 uniform is read in.
+      gl.uniformMatrix3fv(this.screen.uniforms.uSkyBasis, false, new Float32Array([
+        m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8],
+      ]));
+      gl.uniform2f(this.screen.uniforms.uRay,
+        this.w / (2 * this.focal), this.h / (2 * this.focal));
+      gl.uniform2f(this.screen.uniforms.uCamXZ, c.x, c.z);
+      gl.uniform3fv(this.screen.uniforms.uCloud, this.cloud || [1, 1, 1]);
+      gl.uniform3fv(this.screen.uniforms.uCloudDark, this.cloudDark || [0.8, 0.8, 0.85]);
+      gl.uniform1f(this.screen.uniforms.uCover, this.cover ?? 0);
+      gl.uniform1f(this.screen.uniforms.uDrift, this.drift || 0);
       gl.uniform1f(this.screen.uniforms.uBoost, 1);
       gl.drawArrays(gl.TRIANGLES, 0, sky);
       if (this.ui.count > sky) {
         // The sun, at two and a half times white. On a card with no floating
         // point buffer this clamps back to white and simply looks like the sun
         // did last week.
+        // The cloud is left on for the sun, so a cloud in front of it is in
+        // front of it. Turned off - which is how this was first written - the
+        // sun is painted over the deck, which is a sun nearer than the weather.
         gl.uniform1f(this.screen.uniforms.uBoost, SUN_BRIGHT);
         gl.drawArrays(gl.TRIANGLES, sky, this.ui.count - sky);
       }

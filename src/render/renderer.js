@@ -549,6 +549,26 @@ export class Renderer {
       fogNear: FOG_NEAR + roof * 600,
       fogFar: far,
       /**
+       * The weather, which is one number and two colours.
+       *
+       * The colours go through the same time-of-day transform every other colour
+       * in this game goes through, which is the whole reason that function
+       * exists: a white cloud handed to `lamp` comes back orange at dusk and a
+       * deep blue-grey at midnight, and nothing here had to know that. The
+       * underside is the same colour at two thirds, because from below a cloud
+       * is mostly its underside.
+       *
+       * Coverage is held down at night. Not for realism - it is for the sky
+       * gradient, which by then is four stops of very dark blue, and a cloud deck
+       * over it is a grey lid.
+       */
+      cloud: rgb(this.lamp(md(252, 250, 248))),
+      cloudDark: rgb(this.lamp(shade(md(252, 250, 248), 0.66))),
+      cover: 0.42 * (1 - 0.55 * (state.light || 0)),
+      // Slowly. A cloud that visibly moves in the three minutes a race lasts is
+      // a cloud going at about two hundred kilometres an hour.
+      drift: state.tick * 0.0000045,
+      /**
        * Where to put the shadow box, relative to the camera.
        *
        * Up the road rather than centred on the camera. The camera sits eight
