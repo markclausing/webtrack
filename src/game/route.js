@@ -1182,6 +1182,83 @@ function cornersOf(nodes) {
  * not on a bridge, where the railing is the barrier; and not where the barrier
  * itself has been dropped because the lap is running over its own tarmac.
  */
+/**
+ * A building where the map has none.
+ *
+ * The eight street circuits get their buildings from OpenStreetMap, which is the
+ * reason they are worth importing this way at all: Monaco with invented
+ * buildings is a road between boxes. But a map has gaps - a car park, a square,
+ * a stretch the survey did not cover - and at those the new hoarding stands
+ * against the sky with nothing behind it, which is worse than the bare ground it
+ * replaced.
+ *
+ * So this walks the lap and, wherever there is no measured building within
+ * reach, puts a generic one behind the boarding. It is the same `tower` the map
+ * uses, at a size and height from a hash, so it is the same building code and
+ * the same three silhouettes.
+ *
+ * Three things it will not do. It will not build where the ground stops, which
+ * is where another part of the lap is - the limit worked out by
+ * narrowWhereItFoldsBack. It will not build over water. And it does not need to
+ * check the road, because `add` does that for everything.
+ */
+function infill(nodes, out, add) {
+  const count = nodes.length;
+
+  // Where the measured buildings already are, in the world.
+  const built = [];
+  for (let j = 0; j < count; j++) {
+    const list = out[j];
+    if (!list) continue;
+    for (const p of list) {
+      if (p.kind !== 'tower' && p.kind !== 'block') continue;
+      const off = p.side * p.off;
+      built.push({
+        x: nodes[j].x + nodes[j].nx * off,
+        z: nodes[j].z + nodes[j].nz * off,
+        r: spreadOf(p),
+      });
+    }
+  }
+
+  // Every thirty metres. Closer than that and a gap the width of one building
+  // gets two of them; further and a square comes out as a square.
+  for (let i = 0; i < count; i += 5) {
+    const a = nodes[i];
+    if (a.open || a.bridge !== undefined || a.deck || (a.tunnel || 0) > 0.05) continue;
+    for (const side of [-1, 1]) {
+      const g = side < 0 ? a.g.l : a.g.r;
+      if (a.g.wet > 0.4 && g[1] < a.y - 2) continue;
+      // A size of its own, from the same hash the models use.
+      const seed = Math.abs(Math.sin(i * 12.9898 + side * 78.233) * 43758.5453) % 1;
+      const w = 9 + seed * 12;
+      const d = 9 + ((seed * 7) % 1) * 8;
+      const h = 7 + ((seed * 13) % 1) * 21;
+      const off = a.wall + 12 + w * 0.5;
+      // Not past where the ground stops: that is another part of the circuit.
+      const reach = (side < 0 ? a.groundL : a.groundR) ?? 1e9;
+      if (off + Math.max(w, d) * 0.5 > reach) continue;
+      // And not where the map already has one.
+      const x = a.x + a.nx * side * off;
+      const z = a.z + a.nz * side * off;
+      let taken = false;
+      for (const b of built) {
+        const dx = x - b.x;
+        const dz = z - b.z;
+        if (dx * dx + dz * dz < (b.r + Math.max(w, d) * 0.5 + 6) ** 2) {
+          taken = true;
+          break;
+        }
+      }
+      if (taken) continue;
+      add(i, {
+        kind: 'tower', side, off, s: 1, r: 0, align: true, fixed: true, w, d, h,
+      });
+      built.push({ x, z, r: Math.max(w, d) * 0.5 });
+    }
+  }
+}
+
 function streetFurniture(nodes, add) {
   const count = nodes.length;
   for (let i = 0; i < count; i += 2) {
@@ -2058,7 +2135,12 @@ function dress(nodes, real, rnd) {
   cornerBoards(nodes, add);
   cranes(nodes, add);
   crowds(nodes, add);
-  if (real.osm) streetFurniture(nodes, add);
+  if (real.osm) {
+    // The infill first, so the hoarding can be dropped where a building of its
+    // own turned out to fit and the boarding would be inside it.
+    infill(nodes, out, add);
+    streetFurniture(nodes, add);
+  }
 
   // The gantry is the checkpoint, on the node the clock actually reads.
   for (const at of checkpointsFor(count)) {

@@ -1313,25 +1313,35 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       const board = TEAM_COLOURS[Math.floor(variant(prop) * TEAM_COLOURS.length)
         % TEAM_COLOURS.length];
       const post = tint(shade(C.metal, 0.7));
+      /**
+       * Built long along z, which is along the track.
+       *
+       * A model in this game is placed with the track's heading, and at that
+       * heading local x runs across the road and local z runs along it - which
+       * is why the grandstand, built long in x, is handed a quarter turn when it
+       * is placed. This was built long in x as well and not turned, so six
+       * thousand runs of advertising hoarding stood at right angles to the
+       * circuit like a row of gates. Built along z it needs no turn at all.
+       */
       const long = 5.6;
       // The boards, front and back, above the height of the barrier.
       put.face(rt, tint(board.body),
-        [-long, 1.15, 0, long, 1.15, 0, long, 2.75, 0, -long, 2.75, 0]);
+        [0, 1.15, -long, 0, 1.15, long, 0, 2.75, long, 0, 2.75, -long]);
       put.face(rt, tint(shade(board.wing, 0.9)),
-        [long, 1.15, 0.14, -long, 1.15, 0.14, -long, 2.75, 0.14, long, 2.75, 0.14]);
+        [0.14, 1.15, long, 0.14, 1.15, -long, 0.14, 2.75, -long, 0.14, 2.75, long]);
       put.face(rt, tint(shade(board.body, 0.8)),
-        [-long, 2.75, 0, long, 2.75, 0, long, 2.75, 0.14, -long, 2.75, 0.14]);
+        [0, 2.75, -long, 0, 2.75, long, 0.14, 2.75, long, 0.14, 2.75, -long]);
       // A post at each end, and the fence standing on them.
       for (const at of [-long, long]) {
-        put.face(rt, post, [at - 0.09, 0, -0.07, at + 0.09, 0, -0.07,
-          at + 0.09, 6.2, -0.07, at - 0.09, 6.2, -0.07]);
-        put.face(rt, post, [at + 0.09, 0, 0.07, at - 0.09, 0, 0.07,
-          at - 0.09, 6.2, 0.07, at + 0.09, 6.2, 0.07]);
+        put.face(rt, post, [-0.07, 0, at - 0.09, -0.07, 0, at + 0.09,
+          -0.07, 6.2, at + 0.09, -0.07, 6.2, at - 0.09]);
+        put.face(rt, post, [0.07, 0, at + 0.09, 0.07, 0, at - 0.09,
+          0.07, 6.2, at - 0.09, 0.07, 6.2, at + 0.09]);
       }
       const wire = tint(shade(C.metal, 0.85));
       for (const y of [4.1, 6.0]) {
-        put.face(rt, wire, [-long, y, -0.04, long, y, -0.04,
-          long, y + 0.09, -0.04, -long, y + 0.09, -0.04]);
+        put.face(rt, wire, [-0.04, y, -long, -0.04, y, long,
+          -0.04, y + 0.09, long, -0.04, y + 0.09, -long]);
       }
       break;
     }
