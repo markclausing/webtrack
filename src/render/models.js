@@ -121,6 +121,91 @@ function crown(rt, colour, y0, y1, radius, sides = 6, skirt = true) {
 }
 
 /**
+ * A building: a plinth, a shaft with floors on it, a cornice and a roof.
+ *
+ * Both kinds of building in this game were a box. `block` was a box with one
+ * band of windows on one side of it; `tower` was a box with bands on two of its
+ * four sides, which from the third side is a slab. On a street circuit that is
+ * most of what there is to look at - Monaco and Baku are buildings the way Spa
+ * is trees - and a slab is what they looked like.
+ *
+ * What makes a building read is not how many polygons are in it, it is that the
+ * wall is not all in one plane. So the windows stand proud of the shaft with a
+ * sill under them, which under one sun gives every floor a bright edge and a
+ * dark one and gives the occlusion pass something to find; the plinth and the
+ * cornice are wider than the shaft, so the top and the bottom have a shadow line
+ * of their own; and there is something on the roof, because there always is.
+ *
+ * About seventy triangles for a low one and two hundred for a tall one, against
+ * ten. That is affordable for the same reason the kerbs have a shape now: the
+ * circuit is built once and kept, so a triangle in it is paid for once rather
+ * than sixty times a second.
+ */
+function building(rt, tint, wall, glassColour, w, d, h, seed) {
+  // Every building on a street is a slightly different colour from the one next
+  // to it, which is most of what stops a row of them reading as one object.
+  const tone = 0.86 + ((seed * 7) % 9) * 0.035;
+  const body = shade(wall, tone);
+  const trim = shade(wall, tone * 0.82);
+
+  // The plinth: a little wider than the shaft, and a storey high at most.
+  const plinth = Math.min(1.4, h * 0.18);
+  box(rt, tint, trim, -w - 0.22, w + 0.22, 0, plinth, -d - 0.22, d + 0.22);
+  box(rt, tint, body, -w, w, 0, h, -d, d);
+
+  /**
+   * The floors.
+   *
+   * Every three metres, on all four sides - it was two sides, which is a
+   * building with a front and a back and nothing else. The glass stands four
+   * centimetres out of the wall and the sill two more under it, which gives each
+   * floor a line of light along the top and a line of shadow along the bottom.
+   */
+  const first = plinth + 1.2;
+  const sill = tint(trim);
+  const glass = tint(glassColour);
+  // Windows are a material rather than a colour: the shader lights them from
+  // inside once the sun has gone, so a building can be part of a world that is
+  // built once and still come on at dusk.
+  rt.glass = 1;
+  const p = new Float64Array(12);
+  const sides = [[0, -1, w * 0.82, 0], [0, 1, w * 0.82, 0],
+    [-1, 0, 0, d * 0.82], [1, 0, 0, d * 0.82]];
+  for (let y = first; y + 2.2 < h - 0.9; y += 3.0) {
+    for (let k = 0; k < sides.length; k++) {
+      const ax = sides[k][0];
+      const az = sides[k][1];
+      const ow = sides[k][2];
+      const od = sides[k][3];
+      const ex = ax * (w + 0.04);
+      const ez = az * (d + 0.04);
+      const sx = ax * (w + 0.10);
+      const sz = az * (d + 0.10);
+      p.set([ex - ow, y, ez - od, ex + ow, y, ez + od,
+        ex + ow, y + 1.8, ez + od, ex - ow, y + 1.8, ez - od]);
+      put.face(rt, glass, p);
+      rt.glass = 0;
+      p.set([sx - ow, y - 0.16, sz - od, sx + ow, y - 0.16, sz + od,
+        ex + ow, y, ez + od, ex - ow, y, ez - od]);
+      put.face(rt, sill, p);
+      rt.glass = 1;
+    }
+  }
+
+  rt.glass = 0;
+
+  // The cornice, and whatever is on the roof. A building with a flat top and
+  // nothing on it is a box however many windows are in the side of it.
+  box(rt, tint, trim, -w - 0.3, w + 0.3, h - 0.55, h, -d - 0.3, d + 0.3);
+  if (h > 6) {
+    const rw = Math.max(0.8, w * 0.34);
+    const rd = Math.max(0.8, d * 0.34);
+    const off = w * (((seed * 3) % 5) / 5 - 0.5);
+    box(rt, tint, body, off - rw, off + rw, h, h + Math.min(2.6, h * 0.14), -rd, rd);
+  }
+}
+
+/**
  * A flat box: four sides and a lid. Five faces is a building, a crate, a stand.
  *
  * One colour, and it used to be three. The sides were written out at sixty-eight
@@ -818,19 +903,11 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       const w = (prop.w || 10) / 2;
       const d = (prop.d || 10) / 2;
       const h = prop.h || 9;
-      // Warmer or cooler by the building, so a street is not one colour.
-      const shift = 0.86 + ((prop.w * 7 + prop.h * 13) % 9) * 0.035;
-      box(rt, tint, shade(theme.ridge, shift), -w, w, 0, h, -d, d);
-      if (h > 7) {
-        const glass = tint(shade(C.glass, night > 0.4 ? 1.5 : 0.95));
-        for (let floor = 1; floor * 6 < h - 3; floor++) {
-          const y = floor * 6;
-          put.face(rt, glass, [-w * 0.86, y, -d - 0.05, w * 0.86, y, -d - 0.05,
-            w * 0.86, y + 2.2, -d - 0.05, -w * 0.86, y + 2.2, -d - 0.05]);
-          put.face(rt, glass, [w * 0.86, y, d + 0.05, -w * 0.86, y, d + 0.05,
-            -w * 0.86, y + 2.2, d + 0.05, w * 0.86, y + 2.2, d + 0.05]);
-        }
-      }
+      // The glass takes the light: pale and reflecting the sky by day, lit from
+      // inside after dark, which is the one thing that says a building is a
+      // building rather than a shape once the sun has gone.
+      building(rt, tint, theme.ridge, shade(C.glass, 1.1), w, d, h,
+        (prop.w || 10) + (prop.h || 9));
       break;
     }
     case 'rock':
@@ -860,12 +937,14 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       // Lit, the head is a light rather than a thing the light falls on: it is
       // drawn above white and it bleeds, which is what a floodlight against a
       // dark sky does and what a pale rectangle never did.
-      rt.emissive = lit ? 1 : 0;
-      put.face(rt, lamp, [-4.1, 10.9, -0.5, -2.9, 10.9, -0.5, -2.9, 11.5, -0.5, -4.1, 11.5, -0.5]);
-      put.face(rt, lamp, [-2.9, 10.9, 0.5, -4.1, 10.9, 0.5, -4.1, 11.5, 0.5, -2.9, 11.5, 0.5]);
-      put.face(rt, lit ? C.lamp : tint(C.chrome),
-        [-4.1, 10.85, -0.5, -2.9, 10.85, -0.5, -2.9, 10.85, 0.5, -4.1, 10.85, 0.5]);
-      rt.emissive = 0;
+      void lit;
+      rt.nightlight = 1;
+      put.face(rt, C.lamp, [-4.1, 10.9, -0.5, -2.9, 10.9, -0.5, -2.9, 11.5, -0.5, -4.1, 11.5, -0.5]);
+      put.face(rt, C.lamp, [-2.9, 10.9, 0.5, -4.1, 10.9, 0.5, -4.1, 11.5, 0.5, -2.9, 11.5, 0.5]);
+      put.face(rt, C.lamp, [-4.1, 10.85, -0.5, -2.9, 10.85, -0.5,
+        -2.9, 10.85, 0.5, -4.1, 10.85, 0.5]);
+      rt.nightlight = 0;
+      void lamp;
       break;
     }
     case 'post':
@@ -960,9 +1039,8 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       break;
     }
     case 'block':
-      box(rt, tint, theme.ridge, -3.4, 3.4, 0, 5.5, -3.4, 3.4);
-      put.face(rt, tint(C.glass), [-3.0, 2.0, -3.45, 3.0, 2.0, -3.45,
-        3.0, 3.2, -3.45, -3.0, 3.2, -3.45]);
+      // The low one, and the same building as the tall one at a different size.
+      building(rt, tint, theme.ridge, C.glass, 3.4, 3.4, 5.5, (prop.i || 0) + 3);
       break;
     case 'boat': {
       const hull = tint(C.kerbB);

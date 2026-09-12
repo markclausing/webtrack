@@ -49,14 +49,17 @@ import { Hud, HUD_BASE_H } from './hud.js';
  * The props that are not part of a world built once.
  *
  * Five of them move - a flag flaps, a wheel and a turbine and a chopper turn, a
- * fountain plays - and three change with the light: a floodlight comes on at
- * dusk, a screen lights up with it, and the glass on a tower stops reflecting
- * the sky and starts reflecting the town. Eight kinds out of forty, about a
- * hundred of them in view at a time, and they are drawn every frame like the
- * cars.
+ * fountain plays - and one changes with the light in a way the shader cannot do
+ * for it. Six kinds out of forty and a few dozen in view at a time.
+ *
+ * There were eight. A floodlight head and the glass in a building also change at
+ * dusk, and they were drawn every frame for it - which at Baku, where there are
+ * a great many of both, was two and a half milliseconds once the buildings had
+ * windows in them. They are materials now: the shader knows a light that only
+ * lights up after dark, and a window that takes the sky by day and is lit from
+ * inside by night, so both can be part of a world that is built once.
  */
-const LIVE_PROPS = new Set(['flag', 'fountain', 'turbine', 'chopper', 'wheel',
-  'screen', 'tower', 'mast']);
+const LIVE_PROPS = new Set(['flag', 'fountain', 'turbine', 'chopper', 'wheel', 'screen']);
 
 /** How far up the road the shadow box is pushed, in metres. */
 const SHADOW_AHEAD = 60;

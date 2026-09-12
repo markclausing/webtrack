@@ -433,6 +433,29 @@ float sunlight(vec3 sc, float slope) {
   return lit * 0.25;
 }
 
+/**
+ * What a face is made of, in the alpha byte.
+ *
+ * The solid pass has no use for alpha - nothing is blended while it is drawn -
+ * so the channel carries the material instead. Seven of them, five apart in the
+ * byte, which is four times the distance a value can drift by on the way through
+ * a normalised unsigned byte. They were written as bare numbers at first and the
+ * concrete came out at 0.902 against a test for 0.905, which meant that every
+ * building in the game quietly had no texture on it.
+ */
+const float MATTE = 1.0;          // 255: a colour and nothing else
+const float PAINT = 0.98039;      // 250: bodywork, which takes a highlight
+const float EMISSIVE = 0.96078;   // 245: a light, at any hour
+const float TARMAC = 0.94118;     // 240: the road
+const float GROUND = 0.92157;     // 235: grass, sand, gravel
+const float STONE = 0.90196;      // 230: concrete
+const float NIGHTLIGHT = 0.88235; // 225: a light only after dark
+const float GLASS = 0.86275;      // 220: windows, lit from inside at night
+
+bool isMaterial(float m) {
+  return vColour.a > m - 0.0098 && vColour.a < m + 0.0098;
+}
+
 void main() {
   /**
    * The time of day, which used to be done a colour at a time on the processor.
@@ -538,7 +561,9 @@ void main() {
    * normalises it anyway, so what it was scaled by on the way in survives the
    * trip and costs no extra bytes a vertex.
    */
-  if (uNight > 0.0 && vColour.a > 0.930 && vColour.a < 0.950) {
+  if (isMaterial(GLASS)) colour *= 1.0 + uNight * 1.1;
+
+  if (uNight > 0.0 && isMaterial(TARMAC)) {
     float pool = clamp(length(vNormal) - 1.0, 0.0, 1.0);
     float lamps = pow(max(0.0, 1.0 - away / 85.0), 1.4);
     /**
@@ -554,12 +579,12 @@ void main() {
     colour *= 1.0 + uNight * max(lamps, pool) * 0.85;
   }
 
-  if (uTextured > 0.5 && vColour.a > 0.905 && vColour.a < 0.950) {
-    vec3 tex = vec3(1.0);
-    if (vColour.a > 0.930) tex = surface(uTarmac, vWorld, n, 0.25);
-    else if (vColour.a > 0.912) tex = surface(uGround, vWorld, n, 0.11);
-    else tex = surface(uStone, vWorld, n, 0.16);
-    colour *= mix(vec3(1.0), tex, 0.34);
+  if (uTextured > 0.5) {
+    vec3 tex = vec3(0.0);
+    if (isMaterial(TARMAC)) tex = surface(uTarmac, vWorld, n, 0.25);
+    else if (isMaterial(GROUND)) tex = surface(uGround, vWorld, n, 0.11);
+    else if (isMaterial(STONE)) tex = surface(uStone, vWorld, n, 0.16);
+    if (tex.r > 0.0) colour *= mix(vec3(1.0), tex, 0.34);
   }
 
   /**
@@ -569,12 +594,31 @@ void main() {
    * does not light a lamp, and a floodlight on the shadow side of its own post
    * is still on.
    */
-  if (vColour.a > 0.950 && vColour.a < 0.970) {
+  if (isMaterial(EMISSIVE)) {
     // A light is not dimmed by the evening. That is what makes it a light.
     gl_FragColor = vec4(vColour.rgb * 2.1, 1.0);
     return;
   }
-  float gloss = step(0.970, vColour.a) * step(vColour.a, 0.995);
+
+  /**
+   * And a light that is only a light after dark.
+   *
+   * A floodlight head is a pale grey thing on a pole at four in the afternoon
+   * and the brightest object on the circuit at ten at night. It used to be drawn
+   * one way or the other by the processor, which meant that every floodlight on
+   * every circuit had to be rebuilt every frame in case the sun went down - and
+   * at Baku, where there are a great many, that was most of a millisecond.
+   *
+   * Here it is one material and the evening decides. The same goes for the glass
+   * in a building: by day it takes the sky, by night it is lit from inside, and
+   * either way the building it is in is part of a world that is built once.
+   */
+  if (isMaterial(NIGHTLIGHT)) {
+    vec3 byDay = base.rgb * light;
+    gl_FragColor = vec4(mix(byDay, vColour.rgb * 2.0, uNight), 1.0);
+    return;
+  }
+  float gloss = isMaterial(PAINT) ? 1.0 : 0.0;
   if (gloss > 0.0) {
     vec3 eye = normalize(uCamera - vWorld);
     float spec = pow(max(dot(reflect(-uSun, n), eye), 0.0), 22.0);
@@ -1121,6 +1165,10 @@ export class Batch {
      * rides in the length of the face normal rather than in a channel of its own.
      */
     this.pool = 0;
+    /** A light that only lights up after dark: a floodlight head, a big screen. */
+    this.nightlight = 0;
+    /** A window, which takes the sky by day and is lit from inside by night. */
+    this.glass = 0;
     this.recording = false;
     this.normalise = false;
     this.kept = null;
@@ -1355,12 +1403,16 @@ export class Batch {
   push(ax, ay, az, bx, by, bz, cx, cy, cz, colour) {
     const sink = this.recording ? this.kept : this.stipple ? this.clear : this.solid;
     if ((sink.count + 3) * STRIDE > sink.data.byteLength) grow(sink);
+    // See the material constants in the fragment shader: the alpha byte of a
+    // solid face is what it is made of, not how transparent it is.
     const alpha = this.stipple ? 150
       : this.emissive ? 245
-        : this.ground === 1 ? 240
-          : this.ground === 2 ? 235
-            : this.ground === 3 ? 230
-              : this.shine ? 250 : 255;
+        : this.nightlight ? 225
+          : this.glass ? 220
+            : this.ground === 1 ? 240
+              : this.ground === 2 ? 235
+                : this.ground === 3 ? 230
+                  : this.shine ? 250 : 255;
     // The chequered second colour is now simply the colour in between.
     const c = this.dither ? blend(colour, this.dither) : colour;
     const ux = bx - ax; const uy = by - ay; const uz = bz - az;
