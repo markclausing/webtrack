@@ -278,7 +278,10 @@ function ringGaps(route) {
       }
     }
 
-    const edgeHere = a.half + RUMBLE;
+    // The painted width, not the driven one: at the handful of nodes where a lap
+    // runs over its own tarmac the road is drawn narrower than it is, and the
+    // grass is supposed to start at the edge of what is drawn.
+    const edgeHere = (a.paint ?? a.half) + RUMBLE;
     const startsHere = bandInner(a, BANDS[0][0]);
     if (Math.abs(startsHere - edgeHere) > 0.01) {
       out.push({ at: i, kind: 'sliver', from: edgeHere, to: startsHere });

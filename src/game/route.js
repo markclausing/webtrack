@@ -1026,6 +1026,7 @@ export function buildRoute(key) {
   }
 
   narrowWhereItFoldsBack(nodes);
+  narrowWhereTarmacOverlaps(nodes);
 
   return {
     key,
@@ -1229,32 +1230,48 @@ function infill(nodes, out, add) {
     for (const side of [-1, 1]) {
       const g = side < 0 ? a.g.l : a.g.r;
       if (a.g.wet > 0.4 && g[1] < a.y - 2) continue;
-      // A size of its own, from the same hash the models use.
-      const seed = Math.abs(Math.sin(i * 12.9898 + side * 78.233) * 43758.5453) % 1;
-      const w = 9 + seed * 12;
-      const d = 9 + ((seed * 7) % 1) * 8;
-      const h = 7 + ((seed * 13) % 1) * 21;
-      const off = a.wall + 12 + w * 0.5;
-      // Nothing here about another part of the circuit: `add` asks that of every
-      // prop against every node, with the building's own footprint, and drops it
-      // if it does not fit.
-      // And not where the map already has one.
-      const x = a.x + a.nx * side * off;
-      const z = a.z + a.nz * side * off;
-      let taken = false;
-      for (const b of built) {
-        const dx = x - b.x;
-        const dz = z - b.z;
-        if (dx * dx + dz * dz < (b.r + Math.max(w, d) * 0.5 + 6) ** 2) {
-          taken = true;
-          break;
+      /**
+       * Three ranks of it, not one.
+       *
+       * A single row of frontage against the barrier leaves everything behind it
+       * empty, and on a street circuit what is behind the first row is the rest
+       * of the town. At Monaco the ground falls ten metres from the road to a
+       * flat plain and then runs out to the horizon with nothing on it, which is
+       * the gap that was reported: you are looking across a square the size of
+       * the harbour at two buildings in the distance.
+       *
+       * Twenty metres, fifty and ninety. Each rank is taller than the one in
+       * front - which is what a town on a hillside does, and is also the only way
+       * the ones at the back are visible over the ones at the front.
+       */
+      for (let rank = 0; rank < 3; rank++) {
+        const seed = Math.abs(
+          Math.sin(i * 12.9898 + side * 78.233 + rank * 31.71) * 43758.5453,
+        ) % 1;
+        const w = 9 + seed * 12;
+        const d = 9 + ((seed * 7) % 1) * 8;
+        const h = (7 + ((seed * 13) % 1) * 21) * (1 + rank * 0.5);
+        const off = a.wall + [12, 42, 82][rank] + w * 0.5;
+        // Nothing here about another part of the circuit: `add` asks that of
+        // every prop against every node, with the building's own footprint, and
+        // drops it if it does not fit.
+        const x = a.x + a.nx * side * off;
+        const z = a.z + a.nz * side * off;
+        let taken = false;
+        for (const b of built) {
+          const dx = x - b.x;
+          const dz = z - b.z;
+          if (dx * dx + dz * dz < (b.r + Math.max(w, d) * 0.5 + 6) ** 2) {
+            taken = true;
+            break;
+          }
         }
+        if (taken) continue;
+        add(i, {
+          kind: 'tower', side, off, s: 1, r: 0, align: true, fixed: true, w, d, h,
+        });
+        built.push({ x, z, r: Math.max(w, d) * 0.5 });
       }
-      if (taken) continue;
-      add(i, {
-        kind: 'tower', side, off, s: 1, r: 0, align: true, fixed: true, w, d, h,
-      });
-      built.push({ x, z, r: Math.max(w, d) * 0.5 });
     }
   }
 }
@@ -1395,6 +1412,63 @@ function crowds(nodes, add) {
  * never inside its own kerb: a barrier on your own kerb is a worse answer than a
  * barrier on somebody else's.
  */
+/**
+ * Where two pieces of tarmac are drawn on top of each other.
+ *
+ * Measured across all twenty-seven circuits there is exactly one place: Miami,
+ * twenty-nine nodes in two stretches, where the lap runs alongside itself with
+ * between two and eleven metres between the centre lines and twelve metres of
+ * road on each. The tarmac, the kerbs and the white lines of both are drawn in
+ * the same space, which from the car is another road crossing yours and a corner
+ * that does not make sense.
+ *
+ * (Every other hit is four nodes apart, which is not two parts of a lap - it is
+ * one corner tight enough that a road as wide as Austin's folds over its own
+ * inner edge. That is inherent to a ribbon and is left alone.)
+ *
+ * The nodes cannot be moved apart: they are six metres apart all the way round
+ * by construction and simtest checks it to five centimetres, which is the
+ * property that keeps the track from having a bump in it. So what narrows is
+ * what is *drawn* - `paint` is the half width the renderer uses for the road,
+ * the kerb, the line and the barrier, and `half` is left alone, so the
+ * simulation is not touched at all. The car drives exactly where it did; it is
+ * the second of the two roads that stops being painted over the first.
+ */
+function narrowWhereTarmacOverlaps(nodes) {
+  const count = nodes.length;
+  const CELL = 24;
+  const ELSEWHERE = 20;
+  let minX = Infinity;
+  let minZ = Infinity;
+  for (const a of nodes) { minX = Math.min(minX, a.x); minZ = Math.min(minZ, a.z); }
+  const grid = new Map();
+  for (const a of nodes) {
+    const k = `${Math.floor((a.x - minX) / CELL)},${Math.floor((a.z - minZ) / CELL)}`;
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(a);
+  }
+  for (const a of nodes) {
+    a.paint = a.half;
+    const cx = Math.floor((a.x - minX) / CELL);
+    const cz = Math.floor((a.z - minZ) / CELL);
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oz = -1; oz <= 1; oz++) {
+        for (const b of grid.get(`${cx + ox},${cz + oz}`) || []) {
+          // The later of the two gives way, so one of them keeps its full width
+          // and the pair is not narrowed twice over.
+          if (b.i >= a.i) continue;
+          const apart = Math.min(Math.abs(a.i - b.i), count - Math.abs(a.i - b.i));
+          if (apart < ELSEWHERE) continue;
+          if (Math.abs(a.y - b.y) > 2.5) continue;
+          const d = Math.hypot(a.x - b.x, a.z - b.z);
+          if (d > a.half + b.half) continue;
+          a.paint = Math.min(a.paint, Math.max(0, d - b.half));
+        }
+      }
+    }
+  }
+}
+
 function narrowWhereItFoldsBack(nodes) {
   const count = nodes.length;
   // Only nodes at the same height are in each other's way. A flyover passes over

@@ -881,8 +881,17 @@ export class Renderer {
       // circuit changes width along it: a road drawn to the near node's width at
       // both ends steps in and out every six metres, which reads as a ragged
       // edge rather than as a road that narrows.
-      const ha = a.half;
-      const hb = b.half;
+      /**
+       * How wide the road is painted, which is not always how wide it is.
+       *
+       * `paint` is `half` everywhere except the fourteen nodes at Miami where
+       * the lap runs alongside itself close enough that both roads were being
+       * drawn in the same space - see narrowWhereTarmacOverlaps in route.js. The
+       * simulation keeps `half`, so the car drives exactly where it did and it is
+       * only the second of the two roads that stops being painted over the first.
+       */
+      const ha = a.paint ?? a.half;
+      const hb = b.paint ?? b.half;
       rt.dither = (i % 6) < 3 ? 0 : road(C.roadAlt);
       // Tarmac is the largest single surface in the picture and the flattest.
       // The grain is worked out from where it is in the world - see gl.js - and
@@ -2084,7 +2093,8 @@ function rgb(colour) {
  * renderer asks - the bug it is there to catch is the two of them disagreeing.
  */
 export function bandInner(node, nominal) {
-  return Math.max(node.half + RUMBLE, nominal - (ROAD_HALF - node.half));
+  const half = node.paint ?? node.half;
+  return Math.max(half + RUMBLE, nominal - (ROAD_HALF - half));
 }
 
 /** The tarmac's height at an offset, including the camber into the corner. */
