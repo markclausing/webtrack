@@ -20,6 +20,7 @@
 // against, inside your own footprint?
 
 import { buildRoute, spreadOf } from '../src/game/route.js';
+import { SEG } from '../src/constants.js';
 import { BANDS, bandInner, FLAT_DROP, groundY, levelWith, roadY } from '../src/render/renderer.js';
 import { ROUTES } from '../src/game/state.js';
 import { RUMBLE } from '../src/constants.js';
@@ -85,6 +86,111 @@ export function floating(route) {
 
 /** Things that cross the road on purpose and are not trespassing when they do. */
 const SPANS = new Set(['flyover', 'gantry', 'arch', 'bridge', 'span', 'chopper', 'balloon']);
+
+/**
+ * Where a thing that spans the road comes back down to the ground.
+ *
+ * A gantry, a flyover and a footbridge are all exempt from the question every
+ * other prop is asked - is any of you over a road - because being over the road
+ * is what they are for. That exemption covered the legs as well, and the legs
+ * are not exempt from anything: they stand on something, and what they stand on
+ * had better not be a circuit.
+ *
+ * It matters because the reach is fixed and the road is not. A gantry's legs are
+ * sixteen metres out whatever the road is doing; Austin's is nearly seventeen
+ * metres wide from the middle. And where a lap folds back, a leg sixteen metres
+ * from one carriageway can be in the middle of another.
+ *
+ * Half the width of each foot, in metres from the prop's own centre line. Taken
+ * from the models: read them together or this drifts.
+ */
+const FEET = {
+  arch: [{ at: 'span', wide: 0.8 }],
+  bridge: [{ at: 20.5, wide: 2.6 }],
+  flyover: [{ at: 26, wide: 3 }],
+};
+
+/**
+ * Every span whose feet are standing on a piece of road.
+ *
+ * Mirrors what `trespassers` does for ordinary props, and for the same reason:
+ * the ways a circuit can fold back on itself are not worth enumerating, so the
+ * question is asked of every node rather than of the one the prop belongs to.
+ */
+export function standing(route) {
+  const nodes = route.nodes;
+  const count = nodes.length;
+  const CELL = 20;
+  let minX = Infinity;
+  let minZ = Infinity;
+  for (const n of nodes) {
+    minX = Math.min(minX, n.x);
+    minZ = Math.min(minZ, n.z);
+  }
+  const grid = new Map();
+  for (const n of nodes) {
+    const key = `${Math.floor((n.x - minX) / CELL)},${Math.floor((n.z - minZ) / CELL)}`;
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(n);
+  }
+
+  const found = [];
+  for (let i = 0; i < count; i++) {
+    const props = route.props[i];
+    if (!props) continue;
+    const a = nodes[i];
+    for (const prop of props) {
+      const feet = FEET[prop.kind];
+      if (!feet) continue;
+      const mid = prop.side * (prop.off || 0);
+      for (const foot of feet) {
+        for (const way of [-1, 1]) {
+          const reach = foot.at === 'span'
+            ? (way < 0 ? (prop.spanL || 16.3) : (prop.spanR || 16.3))
+            : foot.at;
+          const off = mid + way * reach;
+          const x = a.x + a.nx * off;
+          const z = a.z + a.nz * off;
+          const cx = Math.floor((x - minX) / CELL);
+          const cz = Math.floor((z - minZ) / CELL);
+          let worst = 0;
+          let over = null;
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oz = -1; oz <= 1; oz++) {
+              for (const b of grid.get(`${cx + ox},${cz + oz}`) || []) {
+                /**
+                 * Not the road it is standing over.
+                 *
+                 * A gantry straddles its own road and the legs are outside its
+                 * own kerb by construction - but a road bends, so the node a
+                 * dozen back can be nearer to a leg than the node it belongs to.
+                 * Madrid's start gantry is two nodes from the last node of the
+                 * lap and was reported against it. Eight nodes is fifty metres,
+                 * which is well past anything a gantry straddles and well short
+                 * of the seventeen that separate the two sides of the corner at
+                 * Monaco, which is the case this exists to catch.
+                 */
+                const apart = Math.min(Math.abs(i - b.i), count - Math.abs(i - b.i));
+                if (apart < 8) continue;
+                if (Math.abs(b.y - a.y) > 4) continue;
+                const dx = x - b.x;
+                const dz = z - b.z;
+                if (Math.abs(dx * b.dx + dz * b.dz) > SEG) continue;
+                const into = (b.paint ?? b.half) + foot.wide - Math.abs(dx * b.nx + dz * b.nz);
+                if (into > worst) {
+                  worst = into;
+                  over = b.i;
+                }
+              }
+            }
+          }
+          if (worst > 0.4) found.push({ at: i, kind: prop.kind, into: worst, node: over });
+        }
+      }
+    }
+  }
+  return found;
+}
 
 
 /**
@@ -323,6 +429,8 @@ if (process.argv[1] && process.argv[1].endsWith('clearance.js')) {
     total += air.length;
     const gaps = ringGaps(route);
     total += gaps.length;
+    const feet = standing(route);
+    total += feet.length;
     console.log(`${key.padEnd(12)} ${String(bad.length).padStart(4)} on the road, `
       + `${String(air.length).padStart(4)} off the ground`
       + (bad.length ? `, worst ${deep.toFixed(1)} m in` : '')
@@ -330,7 +438,14 @@ if (process.argv[1] && process.argv[1].endsWith('clearance.js')) {
         + `${Object.entries(airKinds).sort((x, y) => y[1] - x[1])
           .map(([k, n]) => `${n} ${k}`).join(', ')})` : '')
       + (gaps.length ? `, ${gaps.length} nodes with a hole in the ground` : '')
+      + (feet.length ? `, ${feet.length} spans standing on a road` : '')
       + `  [${count} props]`);
+    if (asked && feet.length) {
+      for (const f of feet.slice(0, 6)) {
+        console.log(`    a ${f.kind} at node ${f.at} has a foot ${f.into.toFixed(1)} m `
+          + `into the road at node ${f.node}`);
+      }
+    }
     if (asked && gaps.length) {
       for (const g of gaps.slice(0, 10)) {
         if (g.kind === 'step') {

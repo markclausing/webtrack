@@ -1324,6 +1324,37 @@ function streetFurniture(nodes, add) {
   }
 }
 
+/**
+ * How far apart a gantry's legs have to be to stand on nothing.
+ *
+ * A gantry straddles the road it marks, and the legs are outside its kerb by
+ * construction. Where a lap folds back that is not enough: at Monaco the gantry
+ * on the node the clock reads has a leg four and a half metres inside the road
+ * of a corner seventeen nodes away, because the two are within sixteen metres of
+ * each other. Madrid has one of its own.
+ *
+ * It cannot be moved - a gate you go under half a second before the seconds
+ * arrive is a gate that is lying to you - so the span comes in instead, half a
+ * metre at a time from the sixteen it would like, until the foot is clear. The
+ * floor is its own kerb and a metre, because a gantry leg on the road it is
+ * marking is the one thing worse than a gantry leg on the road next door.
+ *
+ * Each leg asked separately, which is what left Madrid's last one standing when
+ * they were asked together: there the road that is in the way is on one side
+ * only, and pulling both legs in to suit it either narrows the gantry to nothing
+ * or leaves the offending one where it was. A gantry reaching further one way
+ * than the other is a gantry cantilevered off the side with room, which is what
+ * a circuit with a wall down one side actually has.
+ */
+function gantrySpan(nodes, at, onRoad, side) {
+  const a = nodes[at];
+  const floor = (a.half || ROAD_HALF) + RUMBLE + 1;
+  for (let span = 16.3; span > floor; span -= 0.5) {
+    if (!onRoad(a.x + a.nx * side * span, a.z + a.nz * side * span, 0.8, at)) return span;
+  }
+  return floor;
+}
+
 function crowds(nodes, add) {
   const count = nodes.length;
   const corners = cornersOf(nodes)
@@ -1906,7 +1937,11 @@ function scatter(nodes, rnd) {
   // reading, not near it, because a gate you go under half a second before the
   // seconds arrive is a gate that is lying to you.
   for (const at of checkpointsFor(count)) {
-    add(at, { kind: 'arch', side: 0, off: 0, s: 1, r: 0, align: true });
+    add(at, {
+      kind: 'arch', side: 0, off: 0, s: 1, r: 0, align: true,
+      spanL: gantrySpan(nodes, at, onRoad, -1),
+      spanR: gantrySpan(nodes, at, onRoad, 1),
+    });
   }
   return out;
 }
@@ -2231,7 +2266,11 @@ function dress(nodes, real, rnd) {
 
   // The gantry is the checkpoint, on the node the clock actually reads.
   for (const at of checkpointsFor(count)) {
-    add(at, { kind: 'arch', side: 0, off: 0, s: 1, r: 0, align: true });
+    add(at, {
+      kind: 'arch', side: 0, off: 0, s: 1, r: 0, align: true,
+      spanL: gantrySpan(nodes, at, onRoad, -1),
+      spanR: gantrySpan(nodes, at, onRoad, 1),
+    });
   }
   return out;
 }

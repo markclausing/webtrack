@@ -1401,11 +1401,24 @@ export function drawProp(rt, prop, x, y, z, tint, theme, facing = 0, time = 0, n
       break;
     }
     case 'arch': {
-      box(rt, tint, C.metal, -17, -15.6, 0, 7.6, -0.4, 0.4);
-      box(rt, tint, C.metal, 15.6, 17, 0, 7.6, -0.4, 0.4);
-      put.face(rt, tint(C.kerbA), [-17, 7.6, 0, 17, 7.6, 0, 17, 9.8, 0, -17, 9.8, 0]);
-      put.face(rt, tint(C.metal), [-17, 7.4, 0.05, 17, 7.4, 0.05,
-        17, 7.6, 0.05, -17, 7.6, 0.05]);
+      /**
+       * The span is asked for rather than assumed.
+       *
+       * Sixteen metres either side is what a gantry wants, and it is not always
+       * what there is: where a lap folds back, a leg sixteen metres from one
+       * carriageway is in the middle of another. The placement works out how far
+       * it can reach before the legs stand on something - see gantrySpan in
+       * route.js - and hands it over.
+       */
+      const armL = prop.spanL || prop.span || 16.3;
+      const armR = prop.spanR || prop.span || 16.3;
+      const footL = armL + 0.7;
+      const footR = armR + 0.7;
+      box(rt, tint, C.metal, -footL, -armL, 0, 7.6, -0.4, 0.4);
+      box(rt, tint, C.metal, armR, footR, 0, 7.6, -0.4, 0.4);
+      put.face(rt, tint(C.kerbA), [-footL, 7.6, 0, footR, 7.6, 0, footR, 9.8, 0, -footL, 9.8, 0]);
+      put.face(rt, tint(C.metal), [-footL, 7.4, 0.05, footR, 7.4, 0.05,
+        footR, 7.6, 0.05, -footL, 7.6, 0.05]);
       break;
     }
     default:
