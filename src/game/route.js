@@ -1250,8 +1250,25 @@ function infill(nodes, out, add) {
         ) % 1;
         const w = 9 + seed * 12;
         const d = 9 + ((seed * 7) % 1) * 8;
-        const h = (7 + ((seed * 13) % 1) * 21) * (1 + rank * 0.5);
         const off = a.wall + [12, 42, 82][rank] + w * 0.5;
+        /**
+         * Tall enough to still be a building from the road.
+         *
+         * Each rank stands on the ground where it is, and on a circuit cut into
+         * a hillside that ground is a long way below the road: at Monaco it
+         * falls ten metres by the second rank and thirty by the third. A block
+         * of the same height down there has its roof below the barrier, so the
+         * row behind the front one is not a row of buildings, it is a gap - and
+         * the gap is what gets looked at, because it is the only thing between
+         * the hoarding and the sky.
+         *
+         * So whatever the ground has dropped is added back. A town on a hillside
+         * does the same thing: the buildings at the bottom are taller, and their
+         * roofs make one line with the ones above.
+         */
+        const g = side < 0 ? a.g.l : a.g.r;
+        const drop = Math.max(0, a.y - g[Math.min(2, rank)]);
+        const h = (7 + ((seed * 13) % 1) * 21) * (1 + rank * 0.35) + drop;
         // Nothing here about another part of the circuit: `add` asks that of
         // every prop against every node, with the building's own footprint, and
         // drops it if it does not fit.
